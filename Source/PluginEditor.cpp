@@ -384,7 +384,10 @@ DrawnCurveEditor::DrawnCurveEditor (DrawnCurveProcessor& p)
     apvts.addParameterListener ("maxOutput", this);
 
     // ── Message-type radio buttons (4: CC / Ch Prs / Pitch / Note) ───────────
-    static const std::array<const char*, 4> kMsgLabels { "CC", "Aft", "PB", "♪" };
+    // ♪ = U+266A → UTF-8: E2 99 AA
+    static const std::array<const char*, 4> kMsgLabels {
+        "CC", "Aft", "PB", "\xe2\x99\xaa"
+    };
     for (int i = 0; i < 4; ++i)
     {
         msgTypeBtns[i].setButtonText (kMsgLabels[i]);
@@ -398,7 +401,12 @@ DrawnCurveEditor::DrawnCurveEditor (DrawnCurveProcessor& p)
     }
 
     // ── Direction radio buttons (row 2) ───────────────────────────────────────
-    static const std::array<const char*, 3> kDirLabels { "→ Fwd", "← Rev", "↔ P-P" };
+    // → = U+2192 (E2 86 92), ← = U+2190 (E2 86 90), ↔ = U+2194 (E2 86 94)
+    static const std::array<const char*, 3> kDirLabels {
+        "\xe2\x86\x92 Fwd",
+        "\xe2\x86\x90 Rev",
+        "\xe2\x86\x94 P-P"
+    };
     for (int i = 0; i < 3; ++i)
     {
         dirBtns[i].setButtonText (kDirLabels[i]);
@@ -663,7 +671,7 @@ void DrawnCurveEditor::resized()
     }
     area.removeFromTop (pad);
 
-    // ── Button row 2 (→ Fwd · ← Rev · ↔ P-P) ────────────────────────────────
+    // ── Button row 2 (-> Fwd / <- Rev / <-> P-P) ─────────────────────────────
     {
         auto row = area.removeFromTop (buttonRow2H);
         const int dirBtnW = (row.getWidth() - pad * 2) / 3;
