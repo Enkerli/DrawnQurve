@@ -1,7 +1,19 @@
+/**
+ * @file PluginEditor.cpp
+ *
+ * Implementation of CurveDisplay and DrawnCurveEditor.
+ * See PluginEditor.h for the layout and design decision overview.
+ */
+
 #include "PluginEditor.h"
 
 //==============================================================================
 // Colour palettes
+//
+// Two pre-built themes: dark (default) and light.
+// Colours match iOS Human Interface Guidelines (system colours for light mode;
+// a custom dark scheme for dark mode).  The active Theme is selected in every
+// paint() call via a pointer reference — no heap allocation per repaint.
 
 struct Theme
 {
@@ -41,6 +53,107 @@ static const Theme kLight
     juce::Colour { 0x28000000 },   // border
     juce::Colour { 0xffffffff },   // panelBg
 };
+
+//==============================================================================
+// HelpOverlay
+//==============================================================================
+
+HelpOverlay::HelpOverlay()
+{
+    // Intercept all mouse clicks so they don't fall through to controls below.
+    setInterceptsMouseClicks (true, false);
+    setVisible (false);
+}
+
+void HelpOverlay::paint (juce::Graphics& g)
+{
+    // Semi-transparent background — dark overlay in dark mode, slightly lighter in light mode.
+    g.fillAll (_lightMode ? juce::Colour (0xd0000000) : juce::Colour (0xd4000000));
+
+    // ── Content area ──────────────────────────────────────────────────────────
+    const auto bounds = getLocalBounds().toFloat().reduced (24.0f, 20.0f);
+
+    g.setColour (juce::Colours::white);
+    g.setFont (juce::Font (15.0f, juce::Font::bold));
+    g.drawText ("DrawnCurve  Quick Reference",
+                bounds.withHeight (22.0f).toNearestInt(),
+                juce::Justification::centred, false);
+
+    // ── Help text ─────────────────────────────────────────────────────────────
+    // Sections are laid out as two columns of labelled entries.
+    // All strings use basic ASCII so the built-in JUCE font renders them.
+
+    struct Entry { const char* label; const char* desc; };
+
+    static const Entry kEntries[] =
+    {
+        { "CURVE AREA",  "Draw a curve with your finger. Left to right = time (sets loop length)."
+                         " Top to bottom = MIDI value (top is highest)." },
+        { "Play / Pause","Start and stop looping the drawn curve." },
+        { "Clear",       "Erase the curve and stop playback." },
+        { "CC / Aft / PB / Note",
+                         "Output type: Control Change, Channel Pressure (Aftertouch),"
+                         " Pitch Bend (14-bit), or Note On/Off." },
+        { "Sync",        "Follow host transport. On play: engine starts; on stop: engine stops."
+                         " Speed slider becomes Beats -- set loop length in beats." },
+        { "Fwd / Rev / P-P",
+                         "Loop direction: Forward, Reverse, or Ping-Pong (back and forth)." },
+        { "CC# / Vel",   "CC number (0-127) in CC mode, or Note velocity (1-127) in Note mode."
+                         " Greyed out when unused." },
+        { "Channel",     "MIDI output channel (1-16)." },
+        { "Smooth",      "Smoothing amount: 0 = instant response; higher = gentler transitions." },
+        { "Range",       "Output range. Left thumb = minimum value, right thumb = maximum value." },
+        { "Speed / Beats",
+                         "Playback speed (0.25x-4x) in manual mode, or loop length in beats"
+                         " when Sync is active." },
+        { "Y- / Y+",     "Decrease or increase horizontal grid lines (visual reference only)." },
+        { "X- / X+",     "Decrease or increase vertical grid lines (visual reference only)." },
+    };
+
+    const float lineH   = 14.0f;
+    const float labelW  = 112.0f;
+    const float gap     = 6.0f;
+    const float startY  = bounds.getY() + 28.0f;
+    const float descW   = bounds.getWidth() - labelW - gap;
+
+    float y = startY;
+    for (const auto& e : kEntries)
+    {
+        // Bold label
+        g.setFont (juce::Font (11.5f, juce::Font::bold));
+        g.setColour (juce::Colour (0xff80d8ff));
+        g.drawText (e.label,
+                    juce::roundToInt (bounds.getX()),
+                    juce::roundToInt (y),
+                    juce::roundToInt (labelW),
+                    juce::roundToInt (lineH * 2),
+                    juce::Justification::topRight, false);
+
+        // Description (word-wrapped to 2 lines)
+        g.setFont (juce::Font (11.5f));
+        g.setColour (juce::Colours::white);
+        g.drawMultiLineText (e.desc,
+                             juce::roundToInt (bounds.getX() + labelW + gap),
+                             juce::roundToInt (y + 11.5f),
+                             juce::roundToInt (descW));
+
+        y += lineH * 2 + 2.0f;
+        if (y + lineH * 2 > bounds.getBottom() - 18.0f)
+            break;   // safety: don't draw past the bottom
+    }
+
+    // ── Dismiss hint ──────────────────────────────────────────────────────────
+    g.setFont (juce::Font (11.0f, juce::Font::italic));
+    g.setColour (juce::Colours::white.withAlpha (0.6f));
+    g.drawText ("Tap anywhere to close",
+                getLocalBounds().withTop (getHeight() - 22),
+                juce::Justification::centred, false);
+}
+
+void HelpOverlay::mouseDown (const juce::MouseEvent&)
+{
+    setVisible (false);
+}
 
 //==============================================================================
 // CurveDisplay
@@ -326,6 +439,7 @@ DrawnCurveEditor::DrawnCurveEditor (DrawnCurveProcessor& p)
         _lightMode = !_lightMode;
         themeButton.setButtonText (_lightMode ? "Dark" : "Light");
         curveDisplay.setLightMode (_lightMode);
+        helpOverlay.setLightMode (_lightMode);
         applyTheme();
     };
 
@@ -338,6 +452,16 @@ DrawnCurveEditor::DrawnCurveEditor (DrawnCurveProcessor& p)
                               proc.apvts.getParameter ("syncEnabled")))
             *param = !wasSyncing;
         onSyncToggled (!wasSyncing);
+    };
+
+    addAndMakeVisible (helpButton);
+    helpButton.onClick = [this]
+    {
+        helpOverlay.setLightMode (_lightMode);
+        helpOverlay.setVisible (! helpOverlay.isVisible());
+        // Bring overlay to front of the Z-order each time it's shown.
+        if (helpOverlay.isVisible())
+            helpOverlay.toFront (false);
     };
 
     // ── Sliders ───────────────────────────────────────────────────────────────
@@ -426,6 +550,9 @@ DrawnCurveEditor::DrawnCurveEditor (DrawnCurveProcessor& p)
 
     // ── Curve display ─────────────────────────────────────────────────────────
     addAndMakeVisible (curveDisplay);
+
+    // ── Help overlay — added last so it sits above all other children ────────
+    addAndMakeVisible (helpOverlay);
 
     // Stay in sync with external parameter changes (automation, state restore).
     proc.apvts.addParameterListener ("messageType",       this);
@@ -592,6 +719,7 @@ void DrawnCurveEditor::onSyncToggled (bool isSync)
     playButton.setEnabled (!isSync);
     playButton.setAlpha   (isSync ? 0.4f : 1.0f);
 
+    helpOverlay.setLightMode (_lightMode);
     applyTheme();
 }
 
@@ -631,6 +759,7 @@ void DrawnCurveEditor::applyTheme()
 
     // ── Utility buttons ───────────────────────────────────────────────────────
     for (auto* b : { &playButton, &clearButton, &themeButton, &syncButton,
+                     &helpButton,
                      &tickYMinusBtn, &tickYPlusBtn, &tickXMinusBtn, &tickXPlusBtn })
     {
         b->setColour (juce::TextButton::buttonColourId,  btnBg);
@@ -656,12 +785,14 @@ void DrawnCurveEditor::resized()
     using namespace Layout;
     auto area = getLocalBounds().reduced (pad);
 
-    // ── Button row 1 (Play · Clear · [CC][ChPrs][Pitch][Note] · [Sync] · [Dark/Light]) ──
+    // ── Button row 1 (Play · Clear · [CC][Aft][PB][Note] · [Sync] · [?] · [Dark/Light]) ──
     {
         auto row = area.removeFromTop (buttonRowH);
 
-        // Right side first.
+        // Right side first (remove in reverse display order).
         themeButton.setBounds (row.removeFromRight (68));
+        row.removeFromRight (pad);
+        helpButton .setBounds (row.removeFromRight (30));
         row.removeFromRight (pad);
         syncButton .setBounds (row.removeFromRight (62));
         row.removeFromRight (pad);
@@ -748,4 +879,7 @@ void DrawnCurveEditor::resized()
 
     // ── Curve display (fills all remaining vertical space) ────────────────────
     curveDisplay.setBounds (area);
+
+    // ── Help overlay (covers the entire editor) ───────────────────────────────
+    helpOverlay.setBounds (getLocalBounds());
 }

@@ -1,6 +1,18 @@
+/**
+ * @file PluginProcessor.cpp
+ *
+ * Implementation of DrawnCurveProcessor.
+ * See PluginProcessor.h for the architecture overview.
+ */
+
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
 
+// ---------------------------------------------------------------------------
+// ParamID — stable string identifiers for all APVTS parameters.
+// These are the keys written into the preset XML; changing them will break
+// existing presets, so treat them as part of the ABI.
+// ---------------------------------------------------------------------------
 namespace ParamID
 {
     static const juce::String ccNumber          { "ccNumber"          };
