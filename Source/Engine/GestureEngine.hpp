@@ -30,7 +30,8 @@ public:
     // Called from render thread.
     // speedRatio > 1 = faster (shorter loop); < 1 = slower (longer loop).
     void processBlock(uint32_t frameCount, double sampleRate, const MIDIOut& midiOut,
-                      float speedRatio = 1.0f);
+                      float speedRatio = 1.0f,
+                      PlaybackDirection direction = PlaybackDirection::Forward);
 
 private:
     std::atomic<const LaneSnapshot*> _snapshot{nullptr};

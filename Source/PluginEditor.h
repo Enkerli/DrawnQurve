@@ -57,6 +57,10 @@ private:
     juce::TextButton playButton  { "Play"  };
     juce::TextButton clearButton { "Clear" };
     juce::TextButton themeButton { "Light" };   // toggles dark ↔ light
+    juce::TextButton syncButton  { "Sync"  };   // toggles host transport + tempo sync
+
+    // Playback-direction radio buttons: [0]=Forward  [1]=Reverse  [2]=Ping-Pong
+    std::array<juce::TextButton, 3> dirBtns;
 
     // Parameter sliders + labels
     juce::Slider ccSlider, channelSlider, smoothingSlider,
@@ -80,9 +84,13 @@ private:
     // Re-colours all child components to match _lightMode.
     void applyTheme();
 
+    // Swaps speed slider attachment and dims Play button based on sync state.
+    void onSyncToggled (bool isSync);
+
     // Called on UI thread to highlight the active button and dim CC# if needed.
     void updateMsgTypeButtons();
     void updateCCVisibility();
+    void updateDirButtons();
 
     // AudioProcessorValueTreeState::Listener — keeps buttons in sync with
     // parameter changes that arrive from outside (automation, state restore).

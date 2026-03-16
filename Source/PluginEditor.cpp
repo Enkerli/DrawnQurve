@@ -148,11 +148,11 @@ void CurveDisplay::paint (juce::Graphics& g)
             static_cast<int> (proc.apvts.getRawParameterValue ("messageType")->load()));
         const float minOut  = proc.apvts.getRawParameterValue ("minOutput")->load();
         const float maxOut  = proc.apvts.getRawParameterValue ("maxOutput")->load();
-        const float speed   = proc.apvts.getRawParameterValue ("playbackSpeed")->load();
 
-        // Effective loop duration (accounts for speed multiplier).
-        const float recDur = proc.curveDuration();
-        const float dur    = (recDur > 0.0f) ? recDur / std::max (speed, 0.001f) : 0.0f;
+        // Effective loop duration (uses host-synced ratio when applicable).
+        const float recDur  = proc.curveDuration();
+        const float speed   = proc.getEffectiveSpeedRatio();
+        const float dur     = (recDur > 0.0f) ? recDur / std::max (speed, 0.001f) : 0.0f;
 
         // Convert a normalised output (0=bottom of plot, 1=top) to a display string.
         auto yLabel = [&] (float norm) -> juce::String
@@ -279,13 +279,14 @@ void CurveDisplay::timerCallback()
 namespace Layout
 {
     static constexpr int editorW      = 640;
-    static constexpr int editorH      = 520;
+    static constexpr int editorH      = 560;   // +40 for direction row
     static constexpr int pad          = 6;
     static constexpr int buttonRowH   = 40;
+    static constexpr int buttonRow2H  = 34;    // direction buttons
     static constexpr int paramLabelH  = 14;
     static constexpr int paramSliderH = 30;
     static constexpr int paramRowH    = paramLabelH + paramSliderH;  // 44
-    // curveH is not a constant — it fills whatever space remains after controls.
+    // curveH fills whatever space remains after controls.
 }
 
 DrawnCurveEditor::DrawnCurveEditor (DrawnCurveProcessor& p)
@@ -295,7 +296,7 @@ DrawnCurveEditor::DrawnCurveEditor (DrawnCurveProcessor& p)
 {
     setSize (Layout::editorW, Layout::editorH);
 
-    // ── Buttons ───────────────────────────────────────────────────────────────
+    // ── Buttons (row 1) ───────────────────────────────────────────────────────
     addAndMakeVisible (playButton);
     playButton.onClick = [this]
     {
@@ -323,6 +324,17 @@ DrawnCurveEditor::DrawnCurveEditor (DrawnCurveProcessor& p)
         applyTheme();   // re-colours sliders, labels, buttons
     };
 
+    addAndMakeVisible (syncButton);
+    syncButton.onClick = [this]
+    {
+        const bool wasSyncing =
+            proc.apvts.getRawParameterValue ("syncEnabled")->load() > 0.5f;
+        if (auto* param = dynamic_cast<juce::AudioParameterBool*> (
+                              proc.apvts.getParameter ("syncEnabled")))
+            *param = !wasSyncing;
+        onSyncToggled (!wasSyncing);
+    };
+
     // ── Sliders ───────────────────────────────────────────────────────────────
     setupSlider (ccSlider,        ccLabel,        "CC#");
     setupSlider (channelSlider,   channelLabel,   "Channel");
@@ -345,16 +357,30 @@ DrawnCurveEditor::DrawnCurveEditor (DrawnCurveProcessor& p)
     // ── Message-type radio buttons ────────────────────────────────────────────
     // ComboBox popups fail silently in AUv3 on iOS (no TopLevelWindow), so we
     // use three TextButtons as a popup-free radio group instead.
-    static const std::array<const char*, 3> kLabels { "CC", "Ch Press", "Pitch Bend" };
+    static const std::array<const char*, 3> kMsgLabels { "CC", "Ch Press", "Pitch Bend" };
     for (int i = 0; i < 3; ++i)
     {
-        msgTypeBtns[i].setButtonText (kLabels[i]);
+        msgTypeBtns[i].setButtonText (kMsgLabels[i]);
         addAndMakeVisible (msgTypeBtns[i]);
         msgTypeBtns[i].onClick = [this, i]
         {
-            if (auto* p = dynamic_cast<juce::AudioParameterChoice*> (
-                              proc.apvts.getParameter ("messageType")))
-                *p = i;   // operator=(int) sets index and notifies host
+            if (auto* param = dynamic_cast<juce::AudioParameterChoice*> (
+                                  proc.apvts.getParameter ("messageType")))
+                *param = i;
+        };
+    }
+
+    // ── Direction radio buttons (row 2) ───────────────────────────────────────
+    static const std::array<const char*, 3> kDirLabels { "-> Fwd", "<- Rev", "<> P-P" };
+    for (int i = 0; i < 3; ++i)
+    {
+        dirBtns[i].setButtonText (kDirLabels[i]);
+        addAndMakeVisible (dirBtns[i]);
+        dirBtns[i].onClick = [this, i]
+        {
+            if (auto* param = dynamic_cast<juce::AudioParameterChoice*> (
+                                  proc.apvts.getParameter ("playbackDirection")))
+                *param = i;
         };
     }
 
@@ -362,15 +388,20 @@ DrawnCurveEditor::DrawnCurveEditor (DrawnCurveProcessor& p)
     addAndMakeVisible (curveDisplay);
 
     // Stay in sync with external parameter changes (automation, state restore).
-    proc.apvts.addParameterListener ("messageType", this);
+    proc.apvts.addParameterListener ("messageType",       this);
+    proc.apvts.addParameterListener ("playbackDirection", this);
 
     // Apply correct colours for the initial (dark) theme.
     applyTheme();
+
+    // Restore sync UI state (e.g. after state load with syncEnabled=true).
+    onSyncToggled (proc.apvts.getRawParameterValue ("syncEnabled")->load() > 0.5f);
 }
 
 DrawnCurveEditor::~DrawnCurveEditor()
 {
-    proc.apvts.removeParameterListener ("messageType", this);
+    proc.apvts.removeParameterListener ("messageType",       this);
+    proc.apvts.removeParameterListener ("playbackDirection", this);
 }
 
 void DrawnCurveEditor::setupSlider (juce::Slider&       s,
@@ -391,6 +422,8 @@ void DrawnCurveEditor::parameterChanged (const juce::String& paramID, float)
 {
     if (paramID == "messageType")
         juce::MessageManager::callAsync ([this] { updateMsgTypeButtons(); });
+    else if (paramID == "playbackDirection")
+        juce::MessageManager::callAsync ([this] { updateDirButtons(); });
 }
 
 void DrawnCurveEditor::updateMsgTypeButtons()
@@ -427,6 +460,55 @@ void DrawnCurveEditor::updateCCVisibility()
     ccLabel .setAlpha   (isCC ? 1.0f : 0.4f);
 }
 
+void DrawnCurveEditor::updateDirButtons()
+{
+    const int sel = static_cast<int> (
+        proc.apvts.getRawParameterValue ("playbackDirection")->load());
+
+    const juce::Colour inactiveBg   = _lightMode ? juce::Colour (0xffe0e0e8) : juce::Colour (0xff333355);
+    const juce::Colour inactiveText = _lightMode ? juce::Colour (0xff3a3a3c) : juce::Colours::lightgrey;
+
+    for (int i = 0; i < 3; ++i)
+    {
+        const bool active = (i == sel);
+        dirBtns[i].setColour (juce::TextButton::buttonColourId,
+            active ? juce::Colour (0xff2979ff) : inactiveBg);
+        dirBtns[i].setColour (juce::TextButton::buttonOnColourId,
+            juce::Colour (0xff2979ff));
+        dirBtns[i].setColour (juce::TextButton::textColourOffId,
+            active ? juce::Colours::white : inactiveText);
+    }
+}
+
+//==============================================================================
+void DrawnCurveEditor::onSyncToggled (bool isSync)
+{
+    syncButton.setButtonText (isSync ? "Sync ON" : "Sync");
+
+    // Swap speed-slider attachment: playbackSpeed (manual) <-> syncBeats (sync).
+    speedAttach.reset();
+    if (isSync)
+    {
+        speedAttach = std::make_unique<Attach> (proc.apvts, "syncBeats", speedSlider);
+        speedLabel.setText ("Beats", juce::dontSendNotification);
+        speedSlider.setTextValueSuffix ("");
+        speedSlider.setNumDecimalPlacesToDisplay (0);
+    }
+    else
+    {
+        speedAttach = std::make_unique<Attach> (proc.apvts, "playbackSpeed", speedSlider);
+        speedLabel.setText ("Speed", juce::dontSendNotification);
+        speedSlider.setTextValueSuffix ("x");
+        speedSlider.setNumDecimalPlacesToDisplay (2);
+    }
+
+    // Dim the Play button — host transport controls play when sync is on.
+    playButton.setEnabled (!isSync);
+    playButton.setAlpha   (isSync ? 0.4f : 1.0f);
+
+    applyTheme();
+}
+
 //==============================================================================
 void DrawnCurveEditor::applyTheme()
 {
@@ -459,7 +541,7 @@ void DrawnCurveEditor::applyTheme()
         l->setColour (juce::Label::textColourId, dimText);
 
     // ── Utility buttons ───────────────────────────────────────────────────────
-    for (auto* b : { &playButton, &clearButton, &themeButton })
+    for (auto* b : { &playButton, &clearButton, &themeButton, &syncButton })
     {
         b->setColour (juce::TextButton::buttonColourId,  btnBg);
         b->setColour (juce::TextButton::textColourOffId, btnText);
@@ -467,6 +549,9 @@ void DrawnCurveEditor::applyTheme()
 
     // ── Message-type radio buttons (active button stays blue) ─────────────────
     updateMsgTypeButtons();
+
+    // ── Direction radio buttons ────────────────────────────────────────────────
+    updateDirButtons();
 
     repaint();
 }
@@ -483,24 +568,38 @@ void DrawnCurveEditor::resized()
     using namespace Layout;
     auto area = getLocalBounds().reduced (pad);
 
-    // ── Button row (Play · Clear · [CC][Ch Press][Pitch Bend] · [Light/Dark]) ──
+    // ── Button row 1 (Play · Clear · [CC][Ch Press][Pitch Bend] · [Sync] · [Light/Dark]) ──
     {
         auto row = area.removeFromTop (buttonRowH);
 
-        // Right side first so removeFromRight works before removeFromLeft shrinks it.
-        themeButton .setBounds (row.removeFromRight (68));
+        // Right side first so removeFromRight doesn't shrink the left portion.
+        themeButton.setBounds (row.removeFromRight (68));
+        row.removeFromRight (pad);
+        syncButton .setBounds (row.removeFromRight (62));
         row.removeFromRight (pad);
 
         playButton .setBounds (row.removeFromLeft (100));
         row.removeFromLeft (pad);
         clearButton.setBounds (row.removeFromLeft (80));
 
-        // Message-type radio buttons centred in remaining space.
+        // Message-type radio buttons in remaining space.
         row.removeFromLeft (pad * 3);
-        static constexpr std::array<int, 3> kBtnW { 55, 100, 110 };
+        static constexpr std::array<int, 3> kMsgW { 55, 100, 110 };
         for (int i = 0; i < 3; ++i)
         {
-            msgTypeBtns[i].setBounds (row.removeFromLeft (kBtnW[i]));
+            msgTypeBtns[i].setBounds (row.removeFromLeft (kMsgW[i]));
+            if (i < 2) row.removeFromLeft (pad);
+        }
+    }
+    area.removeFromTop (pad);
+
+    // ── Button row 2 (Direction: Fwd · Rev · Ping-Pong) ───────────────────────
+    {
+        auto row = area.removeFromTop (buttonRow2H);
+        const int dirBtnW = (row.getWidth() - pad * 2) / 3;
+        for (int i = 0; i < 3; ++i)
+        {
+            dirBtns[i].setBounds (row.removeFromLeft (dirBtnW));
             if (i < 2) row.removeFromLeft (pad);
         }
     }
@@ -530,7 +629,7 @@ void DrawnCurveEditor::resized()
     placeRow3 (ccLabel, ccSlider, channelLabel, channelSlider, smoothingLabel, smoothingSlider);
     area.removeFromTop (pad);
 
-    // ── Param row 2: Min Out, Max Out, Speed ──────────────────────────────────
+    // ── Param row 2: Min Out, Max Out, Speed/Beats ────────────────────────────
     placeRow3 (minOutLabel, minOutSlider, maxOutLabel, maxOutSlider, speedLabel, speedSlider);
     area.removeFromTop (pad);
 

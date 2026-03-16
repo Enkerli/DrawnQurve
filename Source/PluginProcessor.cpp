@@ -3,13 +3,16 @@
 
 namespace ParamID
 {
-    static const juce::String ccNumber      { "ccNumber"      };
-    static const juce::String midiChannel   { "midiChannel"   };
-    static const juce::String smoothing     { "smoothing"     };
-    static const juce::String minOutput     { "minOutput"     };
-    static const juce::String maxOutput     { "maxOutput"     };
-    static const juce::String messageType   { "messageType"   };
-    static const juce::String playbackSpeed { "playbackSpeed" };
+    static const juce::String ccNumber          { "ccNumber"          };
+    static const juce::String midiChannel       { "midiChannel"       };
+    static const juce::String smoothing         { "smoothing"         };
+    static const juce::String minOutput         { "minOutput"         };
+    static const juce::String maxOutput         { "maxOutput"         };
+    static const juce::String messageType       { "messageType"       };
+    static const juce::String playbackSpeed     { "playbackSpeed"     };
+    static const juce::String syncEnabled       { "syncEnabled"       };
+    static const juce::String syncBeats         { "syncBeats"         };
+    static const juce::String playbackDirection { "playbackDirection" };
 }
 
 // Helper: channel pressure is a 2-byte MIDI message; everything else is 3-byte.
@@ -52,6 +55,20 @@ juce::AudioProcessorValueTreeState::ParameterLayout DrawnCurveProcessor::createP
         juce::ParameterID { ParamID::playbackSpeed, 1 }, "Playback Speed",
         juce::NormalisableRange<float> (0.25f, 4.0f, 0.01f, 0.5f), 1.0f));
 
+    // Sync to host transport + tempo.
+    layout.add (std::make_unique<juce::AudioParameterBool>(
+        juce::ParameterID { ParamID::syncEnabled, 1 }, "Sync to Host", false));
+
+    // Loop length in beats (used when sync is enabled).
+    layout.add (std::make_unique<juce::AudioParameterFloat>(
+        juce::ParameterID { ParamID::syncBeats, 1 }, "Sync Beats",
+        juce::NormalisableRange<float> (1.0f, 32.0f, 1.0f), 4.0f));
+
+    // Playback direction: Forward / Reverse / Ping-Pong.
+    layout.add (std::make_unique<juce::AudioParameterChoice>(
+        juce::ParameterID { ParamID::playbackDirection, 1 }, "Playback Direction",
+        juce::StringArray { "Forward", "Reverse", "Ping-Pong" }, 0));
+
     return layout;
 }
 
@@ -72,6 +89,7 @@ void DrawnCurveProcessor::prepareToPlay (double sampleRate, int /*samplesPerBloc
 {
     _timerSampleRate = sampleRate;
     _engine.reset();
+    _hostWasPlaying.store (false, std::memory_order_relaxed);
 }
 
 void DrawnCurveProcessor::releaseResources()
@@ -100,9 +118,57 @@ void DrawnCurveProcessor::processBlock (juce::AudioBuffer<float>& buffer,
         }
     }
 
-    // Advance engine on the audio thread.
+    // ── Compute effective speed + handle host transport sync ──────────────────
+    const bool syncOn = apvts.getRawParameterValue (ParamID::syncEnabled)->load() > 0.5f;
+    float effectiveSpeed = apvts.getRawParameterValue (ParamID::playbackSpeed)->load();
+
+    if (syncOn)
     {
-        const float speed = apvts.getRawParameterValue (ParamID::playbackSpeed)->load();
+        if (auto* ph = getPlayHead())
+        {
+            if (auto pos = ph->getPosition())
+            {
+                // Transport sync: edge-detect host play / stop.
+                const bool hostNowPlaying = pos->getIsPlaying();
+                const bool wasPlaying     = _hostWasPlaying.exchange (hostNowPlaying,
+                                                                       std::memory_order_acq_rel);
+                if (hostNowPlaying && ! wasPlaying)
+                {
+                    // Rising edge — reset phase to 0 and start.
+                    juce::SpinLock::ScopedLockType lock (_engineLock);
+                    _engine.reset();
+                    _engine.setPlaying (true);
+                }
+                else if (! hostNowPlaying && wasPlaying)
+                {
+                    // Falling edge — stop.
+                    _engine.setPlaying (false);
+                }
+
+                // Tempo sync: compute speed ratio from BPM and beat count.
+                if (auto bpmOpt = pos->getBpm())
+                {
+                    const float bpm        = static_cast<float> (*bpmOpt);
+                    const float syncBeats  = apvts.getRawParameterValue (ParamID::syncBeats)->load();
+                    const float recordedDur = curveDuration();
+                    if (bpm > 0.0f && syncBeats > 0.0f && recordedDur > 0.0f)
+                    {
+                        const float targetDur = syncBeats * 60.0f / bpm;
+                        effectiveSpeed = recordedDur / targetDur;
+                    }
+                }
+            }
+        }
+    }
+
+    // Cache for fallback timer thread.
+    _effectiveSpeedRatio.store (effectiveSpeed, std::memory_order_relaxed);
+
+    // ── Advance engine on the audio thread ────────────────────────────────────
+    const auto dir = static_cast<PlaybackDirection> (
+        static_cast<int> (apvts.getRawParameterValue (ParamID::playbackDirection)->load()));
+
+    {
         juce::SpinLock::ScopedLockType lock (_engineLock);
         _engine.processBlock (
             static_cast<uint32_t> (buffer.getNumSamples()),
@@ -111,7 +177,8 @@ void DrawnCurveProcessor::processBlock (juce::AudioBuffer<float>& buffer,
             {
                 midiMessages.addEvent (makeMidiMessage (status, d1, d2), 0);
             },
-            speed);
+            effectiveSpeed,
+            dir);
     }
 }
 
@@ -127,12 +194,16 @@ void DrawnCurveProcessor::hiResTimerCallback()
     const auto nominalFrames =
         static_cast<uint32_t> (_timerSampleRate * kTimerIntervalMs / 1000.0);
 
+    // Use cached values so the timer stays consistent with the audio thread.
+    const float speed = _effectiveSpeedRatio.load (std::memory_order_relaxed);
+    const auto  dir   = static_cast<PlaybackDirection> (
+        static_cast<int> (apvts.getRawParameterValue (ParamID::playbackDirection)->load()));
+
     juce::MidiBuffer localBuf;
     {
         juce::SpinLock::ScopedTryLockType tryLock (_engineLock);
         if (! tryLock.isLocked()) return;
 
-        const float speed = apvts.getRawParameterValue (ParamID::playbackSpeed)->load();
         _engine.processBlock (
             nominalFrames,
             _timerSampleRate,
@@ -140,7 +211,8 @@ void DrawnCurveProcessor::hiResTimerCallback()
             {
                 localBuf.addEvent (makeMidiMessage (status, d1, d2), 0);
             },
-            speed);
+            speed,
+            dir);
     }
 
     if (! localBuf.isEmpty())
@@ -215,7 +287,7 @@ float DrawnCurveProcessor::curveDuration() const noexcept
 //==============================================================================
 void DrawnCurveProcessor::getStateInformation (juce::MemoryBlock& destData)
 {
-    auto state = apvts.copyState();   // includes messageType automatically
+    auto state = apvts.copyState();   // includes all APVTS params automatically
 
     if (_currentSnap && _currentSnap->valid)
     {
@@ -240,7 +312,7 @@ void DrawnCurveProcessor::setStateInformation (const void* data, int sizeInBytes
     if (! xml) return;
 
     auto state = juce::ValueTree::fromXml (*xml);
-    apvts.replaceState (state);   // restores messageType choice automatically
+    apvts.replaceState (state);   // restores all params automatically
 
     juce::String tableB64 = state.getProperty ("tableData", juce::String());
     if (tableB64.isNotEmpty())

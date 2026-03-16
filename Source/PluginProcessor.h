@@ -62,7 +62,11 @@ public:
     std::array<float, 256> getCurveTable()    const noexcept;
 
     // Duration of the currently loaded curve (0 if none).
-    float                  curveDuration()    const noexcept;
+    float                  curveDuration()       const noexcept;
+
+    // Last computed speed ratio (manual or host-synced). Used by the UI's duration overlay.
+    float                  getEffectiveSpeedRatio() const noexcept
+    { return _effectiveSpeedRatio.load (std::memory_order_relaxed); }
 
 private:
     // ── Engine ────────────────────────────────────────────────────────────────
@@ -87,6 +91,10 @@ private:
     juce::SpinLock           _pendingMidiLock;
     std::atomic<int64_t>     _lastProcessBlockMs  { 0 };
     double                   _timerSampleRate     { 44100.0 };  // set in prepareToPlay
+
+    // Host-sync state (updated from processBlock, consumed by timer fallback)
+    std::atomic<bool>        _hostWasPlaying      { false };
+    std::atomic<float>       _effectiveSpeedRatio { 1.0f };
 
     void hiResTimerCallback() override;
 

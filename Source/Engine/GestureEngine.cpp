@@ -38,7 +38,7 @@ float GestureEngine::sampleCurve(const LaneSnapshot& snap, float phase) const {
 }
 
 void GestureEngine::processBlock(uint32_t frameCount, double sampleRate, const MIDIOut& midiOut,
-                                  float speedRatio) {
+                                  float speedRatio, PlaybackDirection direction) {
     const auto* snap = _snapshot.load(std::memory_order_acquire);
     if (!snap || !snap->valid || !_isPlaying.load(std::memory_order_acquire))
         return;
@@ -49,10 +49,31 @@ void GestureEngine::processBlock(uint32_t frameCount, double sampleRate, const M
 
     // ── Advance playhead ──────────────────────────────────────────────────────
     _runtime.playheadSeconds += (double)frameCount / sampleRate;
-    if (_runtime.playheadSeconds >= effectiveDur)
-        _runtime.playheadSeconds = std::fmod(_runtime.playheadSeconds, effectiveDur);
 
-    const float phase  = (float)(_runtime.playheadSeconds / effectiveDur);
+    // ── Direction-dependent phase ─────────────────────────────────────────────
+    float phase;
+    if (direction == PlaybackDirection::Reverse)
+    {
+        if (_runtime.playheadSeconds >= effectiveDur)
+            _runtime.playheadSeconds = std::fmod(_runtime.playheadSeconds, effectiveDur);
+        phase = 1.0f - (float)(_runtime.playheadSeconds / effectiveDur);
+    }
+    else if (direction == PlaybackDirection::PingPong)
+    {
+        // Double-length window: 0→dur = forward half, dur→2*dur = reverse half.
+        const double ppDur = 2.0 * effectiveDur;
+        if (_runtime.playheadSeconds >= ppDur)
+            _runtime.playheadSeconds = std::fmod(_runtime.playheadSeconds, ppDur);
+        const double frac = _runtime.playheadSeconds / effectiveDur;  // 0..2
+        phase = (frac <= 1.0) ? (float)frac : (float)(2.0 - frac);
+    }
+    else  // Forward (default)
+    {
+        if (_runtime.playheadSeconds >= effectiveDur)
+            _runtime.playheadSeconds = std::fmod(_runtime.playheadSeconds, effectiveDur);
+        phase = (float)(_runtime.playheadSeconds / effectiveDur);
+    }
+
     const float target = sampleCurve(*snap, phase);
     _currentPhase.store(phase, std::memory_order_relaxed);
 

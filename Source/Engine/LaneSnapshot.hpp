@@ -9,6 +9,13 @@ enum class MessageType : uint8_t {
     PitchBend       = 2,   // Pitch Bend       (0xE0) — 14-bit value, centre=8192
 };
 
+// Playback direction for the curve loop.
+enum class PlaybackDirection : int {
+    Forward  = 0,   // 0→1  (default)
+    Reverse  = 1,   // 1→0
+    PingPong = 2,   // 0→1→0→1…  (seamless turnaround)
+};
+
 // Immutable, render-thread-safe snapshot of one recorded curve.
 // 256-sample lookup table, normalised 0..1.
 struct LaneSnapshot {
