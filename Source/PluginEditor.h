@@ -64,13 +64,15 @@ private:
 
     // Parameter sliders + labels
     juce::Slider ccSlider, channelSlider, smoothingSlider,
-                 minOutSlider, maxOutSlider, speedSlider;
+                 rangeSlider, speedSlider;   // rangeSlider = TwoValueHorizontal for min/max out
     juce::Label  ccLabel, channelLabel, smoothingLabel,
-                 minOutLabel, maxOutLabel, speedLabel;
+                 rangeLabel, speedLabel;
 
     using Attach = juce::AudioProcessorValueTreeState::SliderAttachment;
     std::unique_ptr<Attach> ccAttach, channelAttach, smoothingAttach,
-                             minAttach, maxAttach, speedAttach;
+                             speedAttach;
+    // rangeSlider has no SliderAttachment — JUCE doesn't support TwoValue sliders
+    // in APVTS; instead it uses onValueChange write-back + APVTS listeners.
 
     // Message-type radio buttons: [0]=CC  [1]=Channel Pressure  [2]=Pitch Bend  [3]=Note
     std::array<juce::TextButton, 4> msgTypeBtns;
@@ -89,8 +91,10 @@ private:
 
     // Called on UI thread to highlight the active button and update the CC#/Vel slot.
     void updateMsgTypeButtons();
-    void updateCCSlot();   // swaps CC# ↔ Velocity attachment depending on message type
+    void updateCCSlot();      // swaps CC# ↔ Velocity attachment depending on message type
     void updateDirButtons();
+    void updateRangeSlider(); // syncs rangeSlider thumbs from APVTS (external param changes)
+    void updateRangeLabel();  // refreshes rangeLabel text with current min/max values
 
     // AudioProcessorValueTreeState::Listener — keeps buttons in sync with
     // parameter changes that arrive from outside (automation, state restore).

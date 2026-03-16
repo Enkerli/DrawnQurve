@@ -177,15 +177,18 @@ void CurveDisplay::paint (juce::Graphics& g)
         g.setFont (juce::Font (10.0f));
         g.setColour (T.hint);
 
-        // ── Y axis (left margin) ─────────────────────────────────────────────
+        // ── Y axis (left margin) — 5 ticks at 0%, 25%, 50%, 75%, 100% ─────────
         const int lblW = juce::roundToInt (kAxisMarginL) - 2;
         const int lblH = 12;
-        g.drawText (yLabel (1.0f), 0, 1,
-                    lblW, lblH, juce::Justification::centredRight, false);
-        g.drawText (yLabel (0.5f), 0, juce::roundToInt (plotH * 0.5f - 6),
-                    lblW, lblH, juce::Justification::centredRight, false);
-        g.drawText (yLabel (0.0f), 0, juce::roundToInt (plotH - 13),
-                    lblW, lblH, juce::Justification::centredRight, false);
+        for (int i = 0; i <= 4; ++i)
+        {
+            const float norm   = i / 4.0f;                                   // 0.00 … 1.00
+            const int   yPx    = juce::roundToInt ((1.0f - norm) * plotH);   // plotY = 0
+            const int   labelY = juce::jlimit (1, juce::roundToInt (plotH) - lblH - 1,
+                                               yPx - lblH / 2);
+            g.drawText (yLabel (norm), 0, labelY, lblW, lblH,
+                        juce::Justification::centredRight, false);
+        }
 
         // ── X axis (bottom margin) — percentage marks ────────────────────────
         static const std::array<const char*, 5> kPct { "0%", "25%", "50%", "75%", "100%" };
@@ -343,9 +346,30 @@ DrawnCurveEditor::DrawnCurveEditor (DrawnCurveProcessor& p)
 
     setupSlider (channelSlider,   channelLabel,   "Channel");
     setupSlider (smoothingSlider, smoothingLabel, "Smooth");
-    setupSlider (minOutSlider,    minOutLabel,    "Min Out");
-    setupSlider (maxOutSlider,    maxOutLabel,    "Max Out");
     setupSlider (speedSlider,     speedLabel,     "Speed");
+
+    // ── Range slider (TwoValueHorizontal: left thumb = Min Out, right = Max Out) ──
+    rangeSlider.setSliderStyle (juce::Slider::TwoValueHorizontal);
+    rangeSlider.setTextBoxStyle (juce::Slider::NoTextBox, true, 0, 0);
+    rangeSlider.setRange (0.0, 1.0, 0.001);
+    rangeSlider.setMinValue (proc.apvts.getRawParameterValue ("minOutput")->load(),
+                             juce::dontSendNotification);
+    rangeSlider.setMaxValue (proc.apvts.getRawParameterValue ("maxOutput")->load(),
+                             juce::dontSendNotification);
+    rangeSlider.onValueChange = [this]
+    {
+        if (auto* p = dynamic_cast<juce::AudioParameterFloat*> (
+                          proc.apvts.getParameter ("minOutput")))
+            *p = static_cast<float> (rangeSlider.getMinValue());
+        if (auto* p = dynamic_cast<juce::AudioParameterFloat*> (
+                          proc.apvts.getParameter ("maxOutput")))
+            *p = static_cast<float> (rangeSlider.getMaxValue());
+        updateRangeLabel();
+    };
+    addAndMakeVisible (rangeSlider);
+    rangeLabel.setFont (juce::Font (11.0f));
+    addAndMakeVisible (rangeLabel);
+    updateRangeLabel();
     speedSlider.setTextValueSuffix ("x");
     speedSlider.setNumDecimalPlacesToDisplay (2);
 
@@ -354,12 +378,13 @@ DrawnCurveEditor::DrawnCurveEditor (DrawnCurveProcessor& p)
     ccAttach        = std::make_unique<Attach> (apvts, "ccNumber",       ccSlider);
     channelAttach   = std::make_unique<Attach> (apvts, "midiChannel",    channelSlider);
     smoothingAttach = std::make_unique<Attach> (apvts, "smoothing",      smoothingSlider);
-    minAttach       = std::make_unique<Attach> (apvts, "minOutput",      minOutSlider);
-    maxAttach       = std::make_unique<Attach> (apvts, "maxOutput",      maxOutSlider);
     speedAttach     = std::make_unique<Attach> (apvts, "playbackSpeed",  speedSlider);
+    // rangeSlider has no SliderAttachment; external changes come via APVTS listeners.
+    apvts.addParameterListener ("minOutput", this);
+    apvts.addParameterListener ("maxOutput", this);
 
     // ── Message-type radio buttons (4: CC / Ch Prs / Pitch / Note) ───────────
-    static const std::array<const char*, 4> kMsgLabels { "CC", "Ch Prs", "Pitch", "Note" };
+    static const std::array<const char*, 4> kMsgLabels { "CC", "Aft", "PB", "♪" };
     for (int i = 0; i < 4; ++i)
     {
         msgTypeBtns[i].setButtonText (kMsgLabels[i]);
@@ -373,7 +398,7 @@ DrawnCurveEditor::DrawnCurveEditor (DrawnCurveProcessor& p)
     }
 
     // ── Direction radio buttons (row 2) ───────────────────────────────────────
-    static const std::array<const char*, 3> kDirLabels { "-> Fwd", "<- Rev", "<> P-P" };
+    static const std::array<const char*, 3> kDirLabels { "→ Fwd", "← Rev", "↔ P-P" };
     for (int i = 0; i < 3; ++i)
     {
         dirBtns[i].setButtonText (kDirLabels[i]);
@@ -392,6 +417,7 @@ DrawnCurveEditor::DrawnCurveEditor (DrawnCurveProcessor& p)
     // Stay in sync with external parameter changes (automation, state restore).
     proc.apvts.addParameterListener ("messageType",       this);
     proc.apvts.addParameterListener ("playbackDirection", this);
+    // minOutput/maxOutput are already registered above (range slider listeners).
 
     // Apply correct colours and CC-slot state for the initial theme.
     applyTheme();
@@ -404,6 +430,8 @@ DrawnCurveEditor::~DrawnCurveEditor()
 {
     proc.apvts.removeParameterListener ("messageType",       this);
     proc.apvts.removeParameterListener ("playbackDirection", this);
+    proc.apvts.removeParameterListener ("minOutput",         this);
+    proc.apvts.removeParameterListener ("maxOutput",         this);
 }
 
 void DrawnCurveEditor::setupSlider (juce::Slider&       s,
@@ -426,6 +454,8 @@ void DrawnCurveEditor::parameterChanged (const juce::String& paramID, float)
         juce::MessageManager::callAsync ([this] { updateMsgTypeButtons(); });
     else if (paramID == "playbackDirection")
         juce::MessageManager::callAsync ([this] { updateDirButtons(); });
+    else if (paramID == "minOutput" || paramID == "maxOutput")
+        juce::MessageManager::callAsync ([this] { updateRangeSlider(); });
 }
 
 void DrawnCurveEditor::updateMsgTypeButtons()
@@ -499,6 +529,26 @@ void DrawnCurveEditor::updateDirButtons()
     }
 }
 
+void DrawnCurveEditor::updateRangeSlider()
+{
+    // Called on the UI thread when minOutput or maxOutput changes externally
+    // (automation, state restore).  Uses dontSendNotification to avoid
+    // recursively triggering onValueChange / writing back to the parameter.
+    rangeSlider.setMinValue (proc.apvts.getRawParameterValue ("minOutput")->load(),
+                             juce::dontSendNotification);
+    rangeSlider.setMaxValue (proc.apvts.getRawParameterValue ("maxOutput")->load(),
+                             juce::dontSendNotification);
+    updateRangeLabel();
+}
+
+void DrawnCurveEditor::updateRangeLabel()
+{
+    const float mn = static_cast<float> (rangeSlider.getMinValue());
+    const float mx = static_cast<float> (rangeSlider.getMaxValue());
+    rangeLabel.setText (juce::String (mn, 2) + " \xe2\x80\x93 " + juce::String (mx, 2),
+                        juce::dontSendNotification);   // "0.00 – 1.00" (en-dash)
+}
+
 //==============================================================================
 void DrawnCurveEditor::onSyncToggled (bool isSync)
 {
@@ -541,9 +591,8 @@ void DrawnCurveEditor::applyTheme()
     const juce::Colour btnBg    = light ? juce::Colour (0xffe0e0e8)  : juce::Colour (0xff333355);
     const juce::Colour btnText  = light ? juce::Colour (0xff1c1c1e)  : juce::Colours::white;
 
-    // ── Sliders ───────────────────────────────────────────────────────────────
-    for (auto* s : { &ccSlider, &channelSlider, &smoothingSlider,
-                     &minOutSlider, &maxOutSlider, &speedSlider })
+    // ── Sliders (single-value) ────────────────────────────────────────────────
+    for (auto* s : { &ccSlider, &channelSlider, &smoothingSlider, &speedSlider })
     {
         s->setColour (juce::Slider::textBoxTextColourId,       textCol);
         s->setColour (juce::Slider::textBoxBackgroundColourId, tbBg);
@@ -553,9 +602,14 @@ void DrawnCurveEditor::applyTheme()
         s->setColour (juce::Slider::backgroundColourId,        tbBg);
     }
 
+    // ── Range slider (TwoValueHorizontal — no text box) ────────────────────────
+    rangeSlider.setColour (juce::Slider::thumbColourId,      accent);
+    rangeSlider.setColour (juce::Slider::trackColourId,      accent.withAlpha (0.45f));
+    rangeSlider.setColour (juce::Slider::backgroundColourId, tbBg);
+
     // ── Param labels ──────────────────────────────────────────────────────────
     for (auto* l : { &ccLabel, &channelLabel, &smoothingLabel,
-                     &minOutLabel, &maxOutLabel, &speedLabel })
+                     &rangeLabel, &speedLabel })
         l->setColour (juce::Label::textColourId, dimText);
 
     // ── Utility buttons ───────────────────────────────────────────────────────
@@ -609,7 +663,7 @@ void DrawnCurveEditor::resized()
     }
     area.removeFromTop (pad);
 
-    // ── Button row 2 (-> Fwd · <- Rev · <> P-P) ──────────────────────────────
+    // ── Button row 2 (→ Fwd · ← Rev · ↔ P-P) ────────────────────────────────
     {
         auto row = area.removeFromTop (buttonRow2H);
         const int dirBtnW = (row.getWidth() - pad * 2) / 3;
@@ -645,8 +699,20 @@ void DrawnCurveEditor::resized()
     placeRow3 (ccLabel, ccSlider, channelLabel, channelSlider, smoothingLabel, smoothingSlider);
     area.removeFromTop (pad);
 
-    // ── Param row 2: Min Out, Max Out, Speed/Beats ────────────────────────────
-    placeRow3 (minOutLabel, minOutSlider, maxOutLabel, maxOutSlider, speedLabel, speedSlider);
+    // ── Param row 2: Range (min/max out, spans 2/3) + Speed/Beats (1/3) ────────
+    {
+        auto row = area.removeFromTop (paramRowH);
+        const int thirdW = (row.getWidth() - pad * 2) / 3;
+        const int rangeW = thirdW * 2 + pad;   // two thirds + the gap between them
+
+        auto rangeSlot = row.removeFromLeft (rangeW);
+        row.removeFromLeft (pad);
+        rangeLabel .setBounds (rangeSlot.removeFromTop (paramLabelH));
+        rangeSlider.setBounds (rangeSlot);
+
+        speedLabel .setBounds (row.removeFromTop (paramLabelH));
+        speedSlider.setBounds (row);
+    }
     area.removeFromTop (pad);
 
     // ── Curve display (fills all remaining vertical space) ────────────────────
