@@ -79,14 +79,14 @@ void CurveDisplay::paint (juce::Graphics& g)
     // ── Background ────────────────────────────────────────────────────────────
     g.fillAll (T.background);
 
-    // ── Subtle grid — one line per division interior ──────────────────────────
+    // ── Subtle grid — X and Y divisions are independent ──────────────────────
     g.setColour (T.gridLine);
-    for (int i = 1; i < _gridDivisions; ++i)
-    {
-        const float frac = static_cast<float> (i) / static_cast<float> (_gridDivisions);
-        g.drawVerticalLine   (juce::roundToInt (plotX + plotW * frac), plotY, plotY + plotH);
-        g.drawHorizontalLine (juce::roundToInt (plotY + plotH * frac), plotX, plotX + plotW);
-    }
+    for (int i = 1; i < _xDivisions; ++i)
+        g.drawVerticalLine (juce::roundToInt (plotX + plotW * (float)i / (float)_xDivisions),
+                            plotY, plotY + plotH);
+    for (int i = 1; i < _yDivisions; ++i)
+        g.drawHorizontalLine (juce::roundToInt (plotY + plotH * (float)i / (float)_yDivisions),
+                              plotX, plotX + plotW);
 
     // ── Recorded curve ────────────────────────────────────────────────────────
     if (proc.hasCurve())
@@ -178,25 +178,25 @@ void CurveDisplay::paint (juce::Graphics& g)
         g.setFont (juce::Font (10.0f));
         g.setColour (T.hint);
 
-        // ── Y axis (left margin) — one label per tick ────────────────────────
+        // ── Y axis (left margin) ─────────────────────────────────────────────
         const int lblW = juce::roundToInt (kAxisMarginL) - 2;
         const int lblH = 12;
-        for (int i = 0; i <= _gridDivisions; ++i)
+        for (int i = 0; i <= _yDivisions; ++i)
         {
-            const float norm   = static_cast<float> (i) / static_cast<float> (_gridDivisions);
-            const int   yPx    = juce::roundToInt ((1.0f - norm) * plotH);   // plotY = 0
+            const float norm   = (float)i / (float)_yDivisions;
+            const int   yPx    = juce::roundToInt ((1.0f - norm) * plotH);
             const int   labelY = juce::jlimit (1, juce::roundToInt (plotH) - lblH - 1,
                                                yPx - lblH / 2);
             g.drawText (yLabel (norm), 0, labelY, lblW, lblH,
                         juce::Justification::centredRight, false);
         }
 
-        // ── X axis (bottom margin) — percentage marks ────────────────────────
+        // ── X axis (bottom margin) ────────────────────────────────────────────
         const int xLblY = juce::roundToInt (h - kAxisMarginB + 2);
         const int xLblH = juce::roundToInt (kAxisMarginB - 3);
-        for (int i = 0; i <= _gridDivisions; ++i)
+        for (int i = 0; i <= _xDivisions; ++i)
         {
-            const float frac = static_cast<float> (i) / static_cast<float> (_gridDivisions);
+            const float frac = (float)i / (float)_xDivisions;
             const float xPx  = plotX + frac * plotW;
             g.drawText (juce::String (juce::roundToInt (frac * 100.0f)) + "%",
                         juce::roundToInt (xPx - 18), xLblY, 36, xLblH,
@@ -384,10 +384,7 @@ DrawnCurveEditor::DrawnCurveEditor (DrawnCurveProcessor& p)
     apvts.addParameterListener ("maxOutput", this);
 
     // ── Message-type radio buttons (4: CC / Aft / PB / Note) ────────────────
-    // ♪ = U+266A → UTF-8: E2 99 AA   (system font via _symbolLF handles it)
-    static const std::array<const char*, 4> kMsgLabels {
-        "CC", "Aft", "PB", "\xe2\x99\xaa"
-    };
+    static const std::array<const char*, 4> kMsgLabels { "CC", "Aft", "PB", "Note" };
     for (int i = 0; i < 4; ++i)
     {
         msgTypeBtns[i].setButtonText (kMsgLabels[i]);
@@ -402,12 +399,8 @@ DrawnCurveEditor::DrawnCurveEditor (DrawnCurveProcessor& p)
     }
 
     // ── Direction radio buttons (row 2) ───────────────────────────────────────
-    // → U+2192 (E2 86 92), ← U+2190 (E2 86 90), ↔ U+2194 (E2 86 94)
-    static const std::array<const char*, 3> kDirLabels {
-        "\xe2\x86\x92 Fwd",
-        "\xe2\x86\x90 Rev",
-        "\xe2\x86\x94 P-P"
-    };
+    // SymbolLF::drawButtonText matches "Fwd"/"Rev"/"P-P" and draws path arrows.
+    static const std::array<const char*, 3> kDirLabels { "Fwd", "Rev", "P-P" };
     for (int i = 0; i < 3; ++i)
     {
         dirBtns[i].setButtonText (kDirLabels[i]);
@@ -421,11 +414,15 @@ DrawnCurveEditor::DrawnCurveEditor (DrawnCurveProcessor& p)
         };
     }
 
-    // ── Grid tick [-] / [+] buttons ──────────────────────────────────────────
-    addAndMakeVisible (tickMinusBtn);
-    addAndMakeVisible (tickPlusBtn);
-    tickMinusBtn.onClick = [this] { curveDisplay.setGridDivisions (curveDisplay.getGridDivisions() - 1); };
-    tickPlusBtn .onClick = [this] { curveDisplay.setGridDivisions (curveDisplay.getGridDivisions() + 1); };
+    // ── Grid tick buttons: separate Y and X controls ─────────────────────────
+    addAndMakeVisible (tickYMinusBtn);
+    addAndMakeVisible (tickYPlusBtn);
+    addAndMakeVisible (tickXMinusBtn);
+    addAndMakeVisible (tickXPlusBtn);
+    tickYMinusBtn.onClick = [this] { curveDisplay.setYDivisions (curveDisplay.getYDivisions() - 1); };
+    tickYPlusBtn .onClick = [this] { curveDisplay.setYDivisions (curveDisplay.getYDivisions() + 1); };
+    tickXMinusBtn.onClick = [this] { curveDisplay.setXDivisions (curveDisplay.getXDivisions() - 1); };
+    tickXPlusBtn .onClick = [this] { curveDisplay.setXDivisions (curveDisplay.getXDivisions() + 1); };
 
     // ── Curve display ─────────────────────────────────────────────────────────
     addAndMakeVisible (curveDisplay);
@@ -634,7 +631,7 @@ void DrawnCurveEditor::applyTheme()
 
     // ── Utility buttons ───────────────────────────────────────────────────────
     for (auto* b : { &playButton, &clearButton, &themeButton, &syncButton,
-                     &tickMinusBtn, &tickPlusBtn })
+                     &tickYMinusBtn, &tickYPlusBtn, &tickXMinusBtn, &tickXPlusBtn })
     {
         b->setColour (juce::TextButton::buttonColourId,  btnBg);
         b->setColour (juce::TextButton::textColourOffId, btnText);
@@ -684,14 +681,19 @@ void DrawnCurveEditor::resized()
     }
     area.removeFromTop (pad);
 
-    // ── Button row 2 (-> Fwd / <- Rev / <-> P-P  |  [-] [+] grid ticks) ─────
+    // ── Button row 2 (Fwd/Rev/P-P  |  Y- Y+  X- X+) ─────────────────────────
     {
         auto row = area.removeFromTop (buttonRow2H);
 
-        // Tick [-] [+] on the right (each 28 px).
-        tickPlusBtn .setBounds (row.removeFromRight (28));
-        row.removeFromRight (pad / 2);
-        tickMinusBtn.setBounds (row.removeFromRight (28));
+        // Tick pairs on the right: [X-][X+] then gap then [Y-][Y+].
+        // 4 buttons × 28 px + 3 inner gaps × 3 px + 1 group gap × pad.
+        tickXPlusBtn .setBounds (row.removeFromRight (28));
+        row.removeFromRight (3);
+        tickXMinusBtn.setBounds (row.removeFromRight (28));
+        row.removeFromRight (pad);
+        tickYPlusBtn .setBounds (row.removeFromRight (28));
+        row.removeFromRight (3);
+        tickYMinusBtn.setBounds (row.removeFromRight (28));
         row.removeFromRight (pad);
 
         // Direction buttons fill the rest.

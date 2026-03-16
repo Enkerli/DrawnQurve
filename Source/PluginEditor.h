@@ -26,18 +26,19 @@ public:
 
     void setLightMode (bool light);
 
-    // Grid divisions control how many equal sections divide both axes.
-    // Range: 2 (coarse) to 8 (fine); default 4.  Each step adds/removes
-    // one tick mark and one grid line on both axes.
-    void setGridDivisions (int n) { _gridDivisions = juce::jlimit (2, 8, n); repaint(); }
-    int  getGridDivisions() const { return _gridDivisions; }
+    // Separate division counts for each axis (range 2-8, default 4).
+    void setXDivisions (int n) { _xDivisions = juce::jlimit (2, 8, n); repaint(); }
+    void setYDivisions (int n) { _yDivisions = juce::jlimit (2, 8, n); repaint(); }
+    int  getXDivisions() const { return _xDivisions; }
+    int  getYDivisions() const { return _yDivisions; }
 
 private:
     DrawnCurveProcessor& proc;
     double captureStartTime { 0.0 };
     bool   isCapturing      { false };
     bool   _lightMode       { false };
-    int    _gridDivisions   { 4 };    // updated by [-]/[+] buttons in the editor
+    int    _xDivisions      { 4 };    // horizontal grid / X-axis tick count
+    int    _yDivisions      { 4 };    // vertical grid   / Y-axis tick count
     juce::Path capturePath;   // live visual trail while drawing
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (CurveDisplay)
@@ -57,14 +58,75 @@ public:
     void resized ()                override;
 
 private:
-    // Custom LookAndFeel that substitutes the platform system font so that
-    // Unicode arrows/symbols render correctly (JUCE's built-in font omits them).
+    // Custom LookAndFeel for direction buttons: draws filled-triangle arrows as
+    // paths so no Unicode / font-coverage dependency is needed.
+    // Button texts "Fwd", "Rev", "P-P" are used as identifiers; the matching
+    // buttons get a drawn arrow prepended to their label text.
     struct SymbolLF : public juce::LookAndFeel_V4
     {
-        juce::Font getTextButtonFont (juce::TextButton&, int /*height*/) override
+        void drawButtonText (juce::Graphics& g, juce::TextButton& btn,
+                             bool /*highlighted*/, bool /*down*/) override
         {
-            return juce::Font (juce::Font::getDefaultSansSerifFontName(),
-                               13.0f, juce::Font::plain);
+            const auto b    = btn.getLocalBounds().toFloat().reduced (3.0f, 2.0f);
+            const auto col  = btn.findColour (juce::TextButton::textColourOffId);
+            const auto text = btn.getButtonText();
+
+            g.setColour (col);
+
+            const float h  = b.getHeight() * 0.50f;   // arrow height
+            const float w  = h * 0.65f;               // arrow width (depth)
+            const float cy = b.getCentreY();
+
+            // Helper: filled triangle.  pointRight=true  →  ▶   (tip at tipX)
+            //                           pointRight=false →  ◀   (tip at tipX)
+            auto fillTri = [&] (float tipX, bool pointRight)
+            {
+                juce::Path p;
+                if (pointRight)
+                    p.addTriangle (tipX,     cy,
+                                   tipX - w, cy - h / 2.0f,
+                                   tipX - w, cy + h / 2.0f);
+                else
+                    p.addTriangle (tipX,     cy,
+                                   tipX + w, cy - h / 2.0f,
+                                   tipX + w, cy + h / 2.0f);
+                g.fillPath (p);
+            };
+
+            g.setFont (juce::Font (12.0f));
+
+            if (text == "Fwd")
+            {
+                // ▶ Fwd
+                fillTri (b.getX() + w + 4.0f, true);
+                g.drawFittedText ("Fwd",
+                                  b.withLeft (b.getX() + w + 10.0f).toNearestInt(),
+                                  juce::Justification::centredLeft, 1);
+            }
+            else if (text == "Rev")
+            {
+                // ◀ Rev
+                fillTri (b.getX() + 4.0f, false);
+                g.drawFittedText ("Rev",
+                                  b.withLeft (b.getX() + w + 10.0f).toNearestInt(),
+                                  juce::Justification::centredLeft, 1);
+            }
+            else if (text == "P-P")
+            {
+                // ◀ P-P ▶  (outward-facing arrows on each end)
+                fillTri (b.getX()    + 4.0f, false);   // ◀ left
+                fillTri (b.getRight() - 4.0f, true);   // ▶ right
+                const auto mid = b.withLeft  (b.getX()    + w + 8.0f)
+                                  .withRight (b.getRight() - w - 8.0f);
+                g.drawFittedText ("P-P", mid.toNearestInt(),
+                                  juce::Justification::centred, 1);
+            }
+            else
+            {
+                // All other buttons (CC, Aft, PB, Note, Y-, Y+, …): plain text.
+                g.drawFittedText (text, b.toNearestInt(),
+                                  juce::Justification::centred, 1);
+            }
         }
     };
     SymbolLF _symbolLF;
@@ -81,9 +143,11 @@ private:
     // Playback-direction radio buttons: [0]=Forward  [1]=Reverse  [2]=Ping-Pong
     std::array<juce::TextButton, 3> dirBtns;
 
-    // Grid tick [-] / [+] buttons — live on the right of the direction row.
-    juce::TextButton tickMinusBtn { "-" };
-    juce::TextButton tickPlusBtn  { "+" };
+    // Separate Y/X tick [-]/[+] buttons on the right of the direction row.
+    juce::TextButton tickYMinusBtn { "Y-" };
+    juce::TextButton tickYPlusBtn  { "Y+" };
+    juce::TextButton tickXMinusBtn { "X-" };
+    juce::TextButton tickXPlusBtn  { "X+" };
 
     // Parameter sliders + labels
     juce::Slider ccSlider, channelSlider, smoothingSlider,
