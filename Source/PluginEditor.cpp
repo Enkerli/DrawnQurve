@@ -17,11 +17,15 @@ namespace Colours
 
 //==============================================================================
 // CurveDisplay
+//
+// Margins reserved for axis labels (pixels inside the component bounds):
+static constexpr float kAxisMarginL = 27.0f;   // left  — Y-axis MIDI-value labels
+static constexpr float kAxisMarginB = 14.0f;   // bottom — X-axis time labels
 
 CurveDisplay::CurveDisplay (DrawnCurveProcessor& p)
     : proc (p)
 {
-    startTimerHz (30);   // repaint at ~30 fps while playing
+    startTimerHz (30);   // repaint at 30 fps (axis labels update with params too)
 }
 
 CurveDisplay::~CurveDisplay() { stopTimer(); }
@@ -34,15 +38,22 @@ void CurveDisplay::paint (juce::Graphics& g)
     const float w = bounds.getWidth();
     const float h = bounds.getHeight();
 
+    // ── Plot area (inset for axis labels) ─────────────────────────────────────
+    const float plotX = kAxisMarginL;
+    const float plotY = 0.0f;
+    const float plotW = w - kAxisMarginL;
+    const float plotH = h - kAxisMarginB;
+    const auto  plot  = juce::Rectangle<float> (plotX, plotY, plotW, plotH);
+
     // ── Background ────────────────────────────────────────────────────────────
     g.fillAll (Colours::background);
 
-    // ── Subtle grid ───────────────────────────────────────────────────────────
+    // ── Subtle grid (confined to the plot area) ────────────────────────────────
     g.setColour (Colours::gridLine);
     for (int i = 1; i < 4; ++i)
     {
-        g.drawVerticalLine   (juce::roundToInt (w * 0.25f * i),  0.0f, h);
-        g.drawHorizontalLine (juce::roundToInt (h * 0.25f * i),  0.0f, w);
+        g.drawVerticalLine   (juce::roundToInt (plotX + plotW * 0.25f * i), plotY, plotY + plotH);
+        g.drawHorizontalLine (juce::roundToInt (plotY + plotH * 0.25f * i), plotX, plotX + plotW);
     }
 
     // ── Recorded curve ────────────────────────────────────────────────────────
@@ -53,10 +64,10 @@ void CurveDisplay::paint (juce::Graphics& g)
         bool first = true;
         for (int i = 0; i < 256; ++i)
         {
-            float x = static_cast<float> (i) / 255.0f * w;
-            float y = (1.0f - table[static_cast<size_t> (i)]) * h;  // y=0 top → high CC high
-            if (first) { curvePath.startNewSubPath (x, y); first = false; }
-            else          curvePath.lineTo (x, y);
+            float cx = plotX + static_cast<float> (i) / 255.0f * plotW;
+            float cy = plotY + (1.0f - table[static_cast<size_t> (i)]) * plotH;
+            if (first) { curvePath.startNewSubPath (cx, cy); first = false; }
+            else          curvePath.lineTo (cx, cy);
         }
         g.setColour (Colours::curve);
         g.strokePath (curvePath, juce::PathStrokeType (2.5f,
@@ -64,29 +75,32 @@ void CurveDisplay::paint (juce::Graphics& g)
                                                        juce::PathStrokeType::rounded));
     }
 
-    // ── Live capture trail ────────────────────────────────────────────────────
+    // ── Live capture trail (clipped to plot area) ─────────────────────────────
     if (isCapturing && !capturePath.isEmpty())
     {
+        g.saveState();
+        g.reduceClipRegion (plot.toNearestInt());
         g.setColour (Colours::capture);
         g.strokePath (capturePath, juce::PathStrokeType (2.0f,
                                                          juce::PathStrokeType::curved,
                                                          juce::PathStrokeType::rounded));
+        g.restoreState();
     }
 
     // ── Playhead ──────────────────────────────────────────────────────────────
     if (proc.isPlaying() && proc.hasCurve())
     {
-        const float  phase = proc.currentPhase();
-        const float  px    = phase * w;
-        const auto   table = proc.getCurveTable();
-        const int    idx   = juce::jlimit (0, 255, static_cast<int> (phase * 255.0f));
-        const float  py    = (1.0f - table[static_cast<size_t> (idx)]) * h;
+        const float  phase  = proc.currentPhase();
+        const float  headX  = plotX + phase * plotW;
+        const auto   table  = proc.getCurveTable();
+        const int    idx    = juce::jlimit (0, 255, static_cast<int> (phase * 255.0f));
+        const float  headY  = plotY + (1.0f - table[static_cast<size_t> (idx)]) * plotH;
 
         g.setColour (Colours::playhead.withAlpha (0.75f));
-        g.drawVerticalLine (juce::roundToInt (px), 0.0f, h);
+        g.drawVerticalLine (juce::roundToInt (headX), plotY, plotY + plotH);
 
         g.setColour (Colours::playheadDot);
-        g.fillEllipse (px - 5.0f, py - 5.0f, 10.0f, 10.0f);
+        g.fillEllipse (headX - 5.0f, headY - 5.0f, 10.0f, 10.0f);
     }
 
     // ── "Draw a curve" hint ────────────────────────────────────────────────────
@@ -94,10 +108,65 @@ void CurveDisplay::paint (juce::Graphics& g)
     {
         g.setColour (Colours::hint);
         g.setFont (juce::Font (16.0f));
-        g.drawText ("Draw a curve here", bounds, juce::Justification::centred, false);
+        g.drawText ("Draw a curve here", plot, juce::Justification::centred, false);
     }
 
-    // ── Border ────────────────────────────────────────────────────────────────
+    // ── Axis labels ────────────────────────────────────────────────────────────
+    {
+        const auto msgType = static_cast<MessageType> (
+            static_cast<int> (proc.apvts.getRawParameterValue ("messageType")->load()));
+        const float minOut = proc.apvts.getRawParameterValue ("minOutput")->load();
+        const float maxOut = proc.apvts.getRawParameterValue ("maxOutput")->load();
+
+        // Convert a normalised curve output (0=bottom, 1=top) to a display string.
+        auto yLabel = [&] (float norm) -> juce::String
+        {
+            const float ranged = minOut + norm * (maxOut - minOut);
+            switch (msgType)
+            {
+                case MessageType::CC:
+                case MessageType::ChannelPressure:
+                    return juce::String (juce::roundToInt (ranged * 127.0f));
+                case MessageType::PitchBend:
+                {
+                    const int pb = juce::roundToInt (ranged * 16383.0f) - 8192;
+                    return (pb >= 0 ? "+" : "") + juce::String (pb);
+                }
+            }
+            return {};
+        };
+
+        g.setFont (juce::Font (10.0f));
+        g.setColour (Colours::hint);
+
+        // Y axis — three ticks matching the 25 / 50 / 75 % grid lines
+        const int lblW  = juce::roundToInt (kAxisMarginL) - 2;
+        const int lblH  = 12;
+        g.drawText (yLabel (1.0f), 0, 1,
+                    lblW, lblH, juce::Justification::centredRight, false);
+        g.drawText (yLabel (0.5f), 0, juce::roundToInt (plotH * 0.5f - 6),
+                    lblW, lblH, juce::Justification::centredRight, false);
+        g.drawText (yLabel (0.0f), 0, juce::roundToInt (plotH - 13),
+                    lblW, lblH, juce::Justification::centredRight, false);
+
+        // X axis — left edge "0" and right edge "X.Xs"
+        const float dur = proc.curveDuration();
+        if (dur > 0.0f)
+        {
+            const int xLblY = juce::roundToInt (h - kAxisMarginB + 1);
+            const int xLblH = juce::roundToInt (kAxisMarginB - 1);
+            g.drawText ("0",
+                        juce::roundToInt (plotX), xLblY,
+                        32, xLblH,
+                        juce::Justification::centredLeft, false);
+            g.drawText (juce::String (dur, 2) + "s",
+                        juce::roundToInt (plotX + plotW - 40), xLblY,
+                        40, xLblH,
+                        juce::Justification::centredRight, false);
+        }
+    }
+
+    // ── Border (full component) ────────────────────────────────────────────────
     g.setColour (Colours::border);
     g.drawRect (bounds, 1.0f);
 }
@@ -105,18 +174,27 @@ void CurveDisplay::paint (juce::Graphics& g)
 //==============================================================================
 // Touch / mouse
 
+// Normalise a raw touch position to [0,1] relative to the plot area.
+static float normX (float rawX, float componentW) noexcept
+{
+    return juce::jlimit (0.0f, 1.0f, (rawX - kAxisMarginL) / (componentW - kAxisMarginL));
+}
+static float normY (float rawY, float componentH) noexcept
+{
+    return juce::jlimit (0.0f, 1.0f, rawY / (componentH - kAxisMarginB));
+}
+
 void CurveDisplay::mouseDown (const juce::MouseEvent& e)
 {
     captureStartTime = juce::Time::getMillisecondCounterHiRes();
     isCapturing      = true;
     capturePath.clear();
-    capturePath.startNewSubPath (static_cast<float> (e.x),
-                                  static_cast<float> (e.y));
+    capturePath.startNewSubPath (static_cast<float> (e.x), static_cast<float> (e.y));
 
     proc.beginCapture();
     proc.addCapturePoint (0.0,
-                          juce::jlimit (0.0f, 1.0f, static_cast<float> (e.x) / static_cast<float> (getWidth())),
-                          juce::jlimit (0.0f, 1.0f, static_cast<float> (e.y) / static_cast<float> (getHeight())));
+                          normX (static_cast<float> (e.x), static_cast<float> (getWidth())),
+                          normY (static_cast<float> (e.y), static_cast<float> (getHeight())));
     repaint();
 }
 
@@ -124,13 +202,12 @@ void CurveDisplay::mouseDrag (const juce::MouseEvent& e)
 {
     if (!isCapturing) return;
 
-    capturePath.lineTo (static_cast<float> (e.x),
-                         static_cast<float> (e.y));
+    capturePath.lineTo (static_cast<float> (e.x), static_cast<float> (e.y));
 
     const double t = (juce::Time::getMillisecondCounterHiRes() - captureStartTime) / 1000.0;
     proc.addCapturePoint (t,
-                          juce::jlimit (0.0f, 1.0f, static_cast<float> (e.x) / static_cast<float> (getWidth())),
-                          juce::jlimit (0.0f, 1.0f, static_cast<float> (e.y) / static_cast<float> (getHeight())));
+                          normX (static_cast<float> (e.x), static_cast<float> (getWidth())),
+                          normY (static_cast<float> (e.y), static_cast<float> (getHeight())));
     repaint();
 }
 
@@ -140,8 +217,8 @@ void CurveDisplay::mouseUp (const juce::MouseEvent& e)
 
     const double t = (juce::Time::getMillisecondCounterHiRes() - captureStartTime) / 1000.0;
     proc.addCapturePoint (t,
-                          juce::jlimit (0.0f, 1.0f, static_cast<float> (e.x) / static_cast<float> (getWidth())),
-                          juce::jlimit (0.0f, 1.0f, static_cast<float> (e.y) / static_cast<float> (getHeight())));
+                          normX (static_cast<float> (e.x), static_cast<float> (getWidth())),
+                          normY (static_cast<float> (e.y), static_cast<float> (getHeight())));
     proc.finalizeCapture();
 
     isCapturing = false;
@@ -151,8 +228,7 @@ void CurveDisplay::mouseUp (const juce::MouseEvent& e)
 
 void CurveDisplay::timerCallback()
 {
-    if (proc.isPlaying())
-        repaint();
+    repaint();   // always repaint: playhead + axis labels track live param changes
 }
 
 //==============================================================================

@@ -59,7 +59,10 @@ public:
     float currentPhase() const noexcept;
 
     // Returns a copy of the 256-sample lookup table, or zero-filled if no curve.
-    std::array<float, 256> getCurveTable() const noexcept;
+    std::array<float, 256> getCurveTable()    const noexcept;
+
+    // Duration of the currently loaded curve (0 if none).
+    float                  curveDuration()    const noexcept;
 
 private:
     // ── Engine ────────────────────────────────────────────────────────────────

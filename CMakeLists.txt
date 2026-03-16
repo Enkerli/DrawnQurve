@@ -44,6 +44,7 @@ juce_add_plugin(DrawnCurve
     PLUGIN_CODE                 Dcau
     FORMATS                     AUv3 Standalone
     PRODUCT_NAME                "DrawnCurve"
+    ICON_BIG                    "${CMAKE_SOURCE_DIR}/Assets/icon_1024.png"
     DESCRIPTION                 "Drawn-curve MIDI CC looper"
     IS_SYNTH                    FALSE
     NEEDS_MIDI_INPUT            FALSE

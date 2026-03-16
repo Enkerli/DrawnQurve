@@ -197,6 +197,11 @@ std::array<float, 256> DrawnCurveProcessor::getCurveTable() const noexcept
     return {};
 }
 
+float DrawnCurveProcessor::curveDuration() const noexcept
+{
+    return (_currentSnap && _currentSnap->valid) ? _currentSnap->durationSeconds : 0.0f;
+}
+
 //==============================================================================
 void DrawnCurveProcessor::getStateInformation (juce::MemoryBlock& destData)
 {
