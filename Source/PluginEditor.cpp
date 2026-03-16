@@ -214,26 +214,31 @@ DrawnCurveEditor::DrawnCurveEditor (DrawnCurveProcessor& p)
     minAttach       = std::make_unique<Attach> (apvts, "minOutput",   minOutSlider);
     maxAttach       = std::make_unique<Attach> (apvts, "maxOutput",   maxOutSlider);
 
-    // ── Message type combo ────────────────────────────────────────────────────
-    msgTypeLabel.setText ("Msg Type:", juce::dontSendNotification);
-    msgTypeLabel.setFont (juce::Font (12.0f));
-    msgTypeLabel.setColour (juce::Label::textColourId, juce::Colours::lightgrey);
-    msgTypeLabel.setJustificationType (juce::Justification::centredRight);
-    addAndMakeVisible (msgTypeLabel);
+    // ── Message-type radio buttons ────────────────────────────────────────────
+    // ComboBox popups fail silently in AUv3 on iOS (no TopLevelWindow), so we
+    // use three TextButtons as a popup-free radio group instead.
+    static const std::array<const char*, 3> kLabels { "CC", "Ch Press", "Pitch Bend" };
+    for (int i = 0; i < 3; ++i)
+    {
+        msgTypeBtns[i].setButtonText (kLabels[i]);
+        addAndMakeVisible (msgTypeBtns[i]);
+        msgTypeBtns[i].onClick = [this, i]
+        {
+            if (auto* p = dynamic_cast<juce::AudioParameterChoice*> (
+                              proc.apvts.getParameter ("messageType")))
+                *p = i;   // operator=(int) sets index and notifies host
+        };
+    }
 
-    msgTypeCombo.addItem ("CC",               1);
-    msgTypeCombo.addItem ("Channel Pressure", 2);
-    msgTypeCombo.addItem ("Pitch Bend",       3);
-    addAndMakeVisible (msgTypeCombo);
-
-    // Attachment sets the initial selection from the saved parameter value.
-    msgTypeAttach = std::make_unique<ComboAttach> (apvts, "messageType", msgTypeCombo);
-
-    msgTypeCombo.onChange = [this] { updateCCVisibility(); };
-    updateCCVisibility();   // apply initial enabled state
+    // Stay in sync with external parameter changes (automation, state restore).
+    proc.apvts.addParameterListener ("messageType", this);
+    updateMsgTypeButtons();   // reflect current (possibly restored) value
 }
 
-DrawnCurveEditor::~DrawnCurveEditor() {}
+DrawnCurveEditor::~DrawnCurveEditor()
+{
+    proc.apvts.removeParameterListener ("messageType", this);
+}
 
 void DrawnCurveEditor::setupSlider (juce::Slider&       s,
                                      juce::Label&         l,
@@ -250,10 +255,37 @@ void DrawnCurveEditor::setupSlider (juce::Slider&       s,
     addAndMakeVisible (l);
 }
 
+void DrawnCurveEditor::parameterChanged (const juce::String& paramID, float)
+{
+    if (paramID == "messageType")
+        juce::MessageManager::callAsync ([this] { updateMsgTypeButtons(); });
+}
+
+void DrawnCurveEditor::updateMsgTypeButtons()
+{
+    const int sel = static_cast<int> (
+        proc.apvts.getRawParameterValue ("messageType")->load());
+
+    for (int i = 0; i < 3; ++i)
+    {
+        const bool active = (i == sel);
+        msgTypeBtns[i].setColour (juce::TextButton::buttonColourId,
+            active ? juce::Colour (0xff2979ff) : juce::Colour (0xff333355));
+        msgTypeBtns[i].setColour (juce::TextButton::buttonOnColourId,
+            juce::Colour (0xff2979ff));
+        msgTypeBtns[i].setColour (juce::TextButton::textColourOffId,
+            active ? juce::Colours::white : juce::Colours::lightgrey);
+    }
+
+    updateCCVisibility();
+}
+
 void DrawnCurveEditor::updateCCVisibility()
 {
     // CC# slider is only meaningful for CC messages; dim it for other types.
-    const bool isCC = (msgTypeCombo.getSelectedItemIndex() == 0);
+    const int  sel  = static_cast<int> (
+        proc.apvts.getRawParameterValue ("messageType")->load());
+    const bool isCC = (sel == 0);
     ccSlider.setEnabled (isCC);
     ccLabel .setEnabled (isCC);
     ccSlider.setAlpha   (isCC ? 1.0f : 0.4f);
@@ -275,20 +307,21 @@ void DrawnCurveEditor::resized()
     curveDisplay.setBounds (area.removeFromTop (curveH));
     area.removeFromTop (pad);
 
-    // ── Button row (Play · Clear ················ Msg Type: [combo]) ──────────
+    // ── Button row (Play · Clear ·········· [CC] [Ch Press] [Pitch Bend]) ─────
     {
         auto row = area.removeFromTop (buttonRowH);
         playButton .setBounds (row.removeFromLeft (160));
         row.removeFromLeft (pad);
         clearButton.setBounds (row.removeFromLeft (120));
 
-        // Message-type combo sits on the right of the same row.
+        // Message-type radio buttons on the right — no popup needed.
         row.removeFromLeft (pad * 4);
-        auto labelSlot = row.removeFromLeft (80);
-        row.removeFromLeft (pad);
-        auto comboSlot = row.removeFromLeft (juce::jmin (180, row.getWidth()));
-        msgTypeLabel.setBounds (labelSlot.withSizeKeepingCentre (80, 20));
-        msgTypeCombo.setBounds (comboSlot.withSizeKeepingCentre (comboSlot.getWidth(), 28));
+        static constexpr std::array<int, 3> kBtnW { 55, 100, 110 };
+        for (int i = 0; i < 3; ++i)
+        {
+            msgTypeBtns[i].setBounds (row.removeFromLeft (kBtnW[i]));
+            if (i < 2) row.removeFromLeft (pad);
+        }
     }
     area.removeFromTop (pad);
 

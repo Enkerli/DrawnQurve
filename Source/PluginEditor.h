@@ -29,7 +29,10 @@ private:
 };
 
 //==============================================================================
-class DrawnCurveEditor : public juce::AudioProcessorEditor
+// ComboBox popups don't work inside an AUv3 XPC process on iOS (no TopLevelWindow).
+// Instead we use three TextButtons as a radio group for the message type.
+class DrawnCurveEditor : public juce::AudioProcessorEditor,
+                         private juce::AudioProcessorValueTreeState::Listener
 {
 public:
     explicit DrawnCurveEditor (DrawnCurveProcessor&);
@@ -54,17 +57,20 @@ private:
     std::unique_ptr<Attach> ccAttach, channelAttach, smoothingAttach,
                              minAttach, maxAttach;
 
-    // Message-type combo
-    juce::ComboBox msgTypeCombo;
-    juce::Label    msgTypeLabel;
-
-    using ComboAttach = juce::AudioProcessorValueTreeState::ComboBoxAttachment;
-    std::unique_ptr<ComboAttach> msgTypeAttach;
+    // Message-type radio buttons: [0]=CC  [1]=Channel Pressure  [2]=Pitch Bend
+    std::array<juce::TextButton, 3> msgTypeBtns;
 
     void setupSlider (juce::Slider& s, juce::Label& l,
                       const juce::String& labelText,
                       juce::Slider::SliderStyle style = juce::Slider::LinearHorizontal);
+
+    // Called on UI thread to highlight the active button and dim CC# if needed.
+    void updateMsgTypeButtons();
     void updateCCVisibility();
+
+    // AudioProcessorValueTreeState::Listener — keeps buttons in sync with
+    // parameter changes that arrive from outside (automation, state restore).
+    void parameterChanged (const juce::String& paramID, float newValue) override;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (DrawnCurveEditor)
 };
