@@ -3,6 +3,11 @@
 #include <juce_audio_utils/juce_audio_utils.h>
 #include "PluginProcessor.h"
 
+// Colour palette struct — defined in PluginEditor.cpp.
+// Forward-declared here so CurveDisplay can hold a pointer without
+// pulling in the full definition.
+struct Theme;
+
 //==============================================================================
 /// Displays the recorded curve and handles gesture capture via touch / mouse.
 class CurveDisplay : public juce::Component,
@@ -19,10 +24,13 @@ public:
     void mouseUp   (const juce::MouseEvent&)  override;
     void timerCallback()                      override;
 
+    void setLightMode (bool light);
+
 private:
     DrawnCurveProcessor& proc;
     double captureStartTime { 0.0 };
     bool   isCapturing      { false };
+    bool   _lightMode       { false };
     juce::Path capturePath;   // live visual trail while drawing
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (CurveDisplay)
@@ -48,17 +56,22 @@ private:
 
     juce::TextButton playButton  { "Play"  };
     juce::TextButton clearButton { "Clear" };
+    juce::TextButton themeButton { "Light" };   // toggles dark ↔ light
 
     // Parameter sliders + labels
-    juce::Slider ccSlider, channelSlider, smoothingSlider, minOutSlider, maxOutSlider;
-    juce::Label  ccLabel, channelLabel, smoothingLabel, minOutLabel, maxOutLabel;
+    juce::Slider ccSlider, channelSlider, smoothingSlider,
+                 minOutSlider, maxOutSlider, speedSlider;
+    juce::Label  ccLabel, channelLabel, smoothingLabel,
+                 minOutLabel, maxOutLabel, speedLabel;
 
     using Attach = juce::AudioProcessorValueTreeState::SliderAttachment;
     std::unique_ptr<Attach> ccAttach, channelAttach, smoothingAttach,
-                             minAttach, maxAttach;
+                             minAttach, maxAttach, speedAttach;
 
     // Message-type radio buttons: [0]=CC  [1]=Channel Pressure  [2]=Pitch Bend
     std::array<juce::TextButton, 3> msgTypeBtns;
+
+    bool _lightMode { false };
 
     void setupSlider (juce::Slider& s, juce::Label& l,
                       const juce::String& labelText,

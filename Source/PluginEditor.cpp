@@ -1,39 +1,70 @@
 #include "PluginEditor.h"
 
 //==============================================================================
-// Colour palette
-namespace Colours
+// Colour palettes
+
+struct Theme
 {
-    static const juce::Colour background  { 0xff12121f };
-    static const juce::Colour gridLine    { 0x18ffffff };
-    static const juce::Colour curve       { 0xff00e5ff };   // cyan
-    static const juce::Colour capture     { 0xffff6b35 };   // orange (live draw)
-    static const juce::Colour playhead    { 0xffffffff };
-    static const juce::Colour playheadDot { 0xff00e5ff };
-    static const juce::Colour hint        { 0x55ffffff };
-    static const juce::Colour border      { 0x33ffffff };
-    static const juce::Colour panelBg     { 0xff1c1c2e };
-}
+    juce::Colour background;
+    juce::Colour gridLine;
+    juce::Colour curve;
+    juce::Colour capture;
+    juce::Colour playhead;
+    juce::Colour playheadDot;
+    juce::Colour hint;       // axis labels + "draw a curve" text
+    juce::Colour border;
+    juce::Colour panelBg;
+};
+
+static const Theme kDark
+{
+    juce::Colour { 0xff12121f },   // background
+    juce::Colour { 0x18ffffff },   // gridLine
+    juce::Colour { 0xff00e5ff },   // curve (cyan)
+    juce::Colour { 0xffff6b35 },   // capture (orange)
+    juce::Colour { 0xffffffff },   // playhead
+    juce::Colour { 0xff00e5ff },   // playheadDot
+    juce::Colour { 0x66ffffff },   // hint
+    juce::Colour { 0x33ffffff },   // border
+    juce::Colour { 0xff1c1c2e },   // panelBg
+};
+
+static const Theme kLight
+{
+    juce::Colour { 0xfff2f2f7 },   // background (iOS system grey 6)
+    juce::Colour { 0x16000000 },   // gridLine
+    juce::Colour { 0xff007aff },   // curve (iOS blue)
+    juce::Colour { 0xffff3b30 },   // capture (iOS red)
+    juce::Colour { 0xff1c1c1e },   // playhead
+    juce::Colour { 0xff007aff },   // playheadDot
+    juce::Colour { 0x88000000 },   // hint
+    juce::Colour { 0x28000000 },   // border
+    juce::Colour { 0xffffffff },   // panelBg
+};
 
 //==============================================================================
 // CurveDisplay
 //
 // Margins reserved for axis labels (pixels inside the component bounds):
 static constexpr float kAxisMarginL = 27.0f;   // left  — Y-axis MIDI-value labels
-static constexpr float kAxisMarginB = 14.0f;   // bottom — X-axis time labels
+static constexpr float kAxisMarginB = 16.0f;   // bottom — X-axis % + time labels
 
 CurveDisplay::CurveDisplay (DrawnCurveProcessor& p)
     : proc (p)
 {
-    startTimerHz (30);   // repaint at 30 fps (axis labels update with params too)
+    startTimerHz (30);   // repaint at 30 fps — axis labels track live param changes
 }
 
 CurveDisplay::~CurveDisplay() { stopTimer(); }
 
 void CurveDisplay::resized() {}
 
+void CurveDisplay::setLightMode (bool light) { _lightMode = light; repaint(); }
+
 void CurveDisplay::paint (juce::Graphics& g)
 {
+    const Theme& T = _lightMode ? kLight : kDark;
+
     auto bounds = getLocalBounds().toFloat();
     const float w = bounds.getWidth();
     const float h = bounds.getHeight();
@@ -46,10 +77,10 @@ void CurveDisplay::paint (juce::Graphics& g)
     const auto  plot  = juce::Rectangle<float> (plotX, plotY, plotW, plotH);
 
     // ── Background ────────────────────────────────────────────────────────────
-    g.fillAll (Colours::background);
+    g.fillAll (T.background);
 
     // ── Subtle grid (confined to the plot area) ────────────────────────────────
-    g.setColour (Colours::gridLine);
+    g.setColour (T.gridLine);
     for (int i = 1; i < 4; ++i)
     {
         g.drawVerticalLine   (juce::roundToInt (plotX + plotW * 0.25f * i), plotY, plotY + plotH);
@@ -69,7 +100,7 @@ void CurveDisplay::paint (juce::Graphics& g)
             if (first) { curvePath.startNewSubPath (cx, cy); first = false; }
             else          curvePath.lineTo (cx, cy);
         }
-        g.setColour (Colours::curve);
+        g.setColour (T.curve);
         g.strokePath (curvePath, juce::PathStrokeType (2.5f,
                                                        juce::PathStrokeType::curved,
                                                        juce::PathStrokeType::rounded));
@@ -80,7 +111,7 @@ void CurveDisplay::paint (juce::Graphics& g)
     {
         g.saveState();
         g.reduceClipRegion (plot.toNearestInt());
-        g.setColour (Colours::capture);
+        g.setColour (T.capture);
         g.strokePath (capturePath, juce::PathStrokeType (2.0f,
                                                          juce::PathStrokeType::curved,
                                                          juce::PathStrokeType::rounded));
@@ -96,29 +127,34 @@ void CurveDisplay::paint (juce::Graphics& g)
         const int    idx    = juce::jlimit (0, 255, static_cast<int> (phase * 255.0f));
         const float  headY  = plotY + (1.0f - table[static_cast<size_t> (idx)]) * plotH;
 
-        g.setColour (Colours::playhead.withAlpha (0.75f));
+        g.setColour (T.playhead.withAlpha (0.75f));
         g.drawVerticalLine (juce::roundToInt (headX), plotY, plotY + plotH);
 
-        g.setColour (Colours::playheadDot);
+        g.setColour (T.playheadDot);
         g.fillEllipse (headX - 5.0f, headY - 5.0f, 10.0f, 10.0f);
     }
 
     // ── "Draw a curve" hint ────────────────────────────────────────────────────
     if (!proc.hasCurve() && !isCapturing)
     {
-        g.setColour (Colours::hint);
+        g.setColour (T.hint);
         g.setFont (juce::Font (16.0f));
         g.drawText ("Draw a curve here", plot, juce::Justification::centred, false);
     }
 
     // ── Axis labels ────────────────────────────────────────────────────────────
     {
-        const auto msgType = static_cast<MessageType> (
+        const auto  msgType = static_cast<MessageType> (
             static_cast<int> (proc.apvts.getRawParameterValue ("messageType")->load()));
-        const float minOut = proc.apvts.getRawParameterValue ("minOutput")->load();
-        const float maxOut = proc.apvts.getRawParameterValue ("maxOutput")->load();
+        const float minOut  = proc.apvts.getRawParameterValue ("minOutput")->load();
+        const float maxOut  = proc.apvts.getRawParameterValue ("maxOutput")->load();
+        const float speed   = proc.apvts.getRawParameterValue ("playbackSpeed")->load();
 
-        // Convert a normalised curve output (0=bottom, 1=top) to a display string.
+        // Effective loop duration (accounts for speed multiplier).
+        const float recDur = proc.curveDuration();
+        const float dur    = (recDur > 0.0f) ? recDur / std::max (speed, 0.001f) : 0.0f;
+
+        // Convert a normalised output (0=bottom of plot, 1=top) to a display string.
         auto yLabel = [&] (float norm) -> juce::String
         {
             const float ranged = minOut + norm * (maxOut - minOut);
@@ -137,11 +173,11 @@ void CurveDisplay::paint (juce::Graphics& g)
         };
 
         g.setFont (juce::Font (10.0f));
-        g.setColour (Colours::hint);
+        g.setColour (T.hint);
 
-        // Y axis — three ticks matching the 25 / 50 / 75 % grid lines
-        const int lblW  = juce::roundToInt (kAxisMarginL) - 2;
-        const int lblH  = 12;
+        // ── Y axis (left margin) ─────────────────────────────────────────────
+        const int lblW = juce::roundToInt (kAxisMarginL) - 2;
+        const int lblH = 12;
         g.drawText (yLabel (1.0f), 0, 1,
                     lblW, lblH, juce::Justification::centredRight, false);
         g.drawText (yLabel (0.5f), 0, juce::roundToInt (plotH * 0.5f - 6),
@@ -149,25 +185,31 @@ void CurveDisplay::paint (juce::Graphics& g)
         g.drawText (yLabel (0.0f), 0, juce::roundToInt (plotH - 13),
                     lblW, lblH, juce::Justification::centredRight, false);
 
-        // X axis — left edge "0" and right edge "X.Xs"
-        const float dur = proc.curveDuration();
+        // ── X axis (bottom margin) — percentage marks ────────────────────────
+        static const std::array<const char*, 5> kPct { "0%", "25%", "50%", "75%", "100%" };
+        const int xLblY = juce::roundToInt (h - kAxisMarginB + 2);
+        const int xLblH = juce::roundToInt (kAxisMarginB - 3);
+        for (int i = 0; i <= 4; ++i)
+        {
+            const float xPx = plotX + (i / 4.0f) * plotW;
+            g.drawText (kPct[static_cast<size_t> (i)],
+                        juce::roundToInt (xPx - 18), xLblY,
+                        36, xLblH,
+                        juce::Justification::centred, false);
+        }
+
+        // ── Duration overlay (top-right of plot) ────────────────────────────
         if (dur > 0.0f)
         {
-            const int xLblY = juce::roundToInt (h - kAxisMarginB + 1);
-            const int xLblH = juce::roundToInt (kAxisMarginB - 1);
-            g.drawText ("0",
-                        juce::roundToInt (plotX), xLblY,
-                        32, xLblH,
-                        juce::Justification::centredLeft, false);
             g.drawText (juce::String (dur, 2) + "s",
-                        juce::roundToInt (plotX + plotW - 40), xLblY,
-                        40, xLblH,
+                        juce::roundToInt (plotX + plotW - 46), 2,
+                        46, 12,
                         juce::Justification::centredRight, false);
         }
     }
 
     // ── Border (full component) ────────────────────────────────────────────────
-    g.setColour (Colours::border);
+    g.setColour (T.border);
     g.drawRect (bounds, 1.0f);
 }
 
@@ -236,14 +278,14 @@ void CurveDisplay::timerCallback()
 
 namespace Layout
 {
-    static constexpr int editorW       = 640;
-    static constexpr int editorH       = 420;
-    static constexpr int curveH        = 240;
-    static constexpr int pad           = 6;
-    static constexpr int buttonRowH    = 44;
-    static constexpr int paramLabelH   = 16;
-    static constexpr int paramSliderH  = 36;
-    static constexpr int paramRowH     = paramLabelH + paramSliderH;  // 52
+    static constexpr int editorW      = 640;
+    static constexpr int editorH      = 520;
+    static constexpr int pad          = 6;
+    static constexpr int buttonRowH   = 40;
+    static constexpr int paramLabelH  = 14;
+    static constexpr int paramSliderH = 30;
+    static constexpr int paramRowH    = paramLabelH + paramSliderH;  // 44
+    // curveH is not a constant — it fills whatever space remains after controls.
 }
 
 DrawnCurveEditor::DrawnCurveEditor (DrawnCurveProcessor& p)
@@ -252,9 +294,6 @@ DrawnCurveEditor::DrawnCurveEditor (DrawnCurveProcessor& p)
       curveDisplay (p)
 {
     setSize (Layout::editorW, Layout::editorH);
-
-    // ── Curve display ─────────────────────────────────────────────────────────
-    addAndMakeVisible (curveDisplay);
 
     // ── Buttons ───────────────────────────────────────────────────────────────
     addAndMakeVisible (playButton);
@@ -275,20 +314,33 @@ DrawnCurveEditor::DrawnCurveEditor (DrawnCurveProcessor& p)
         curveDisplay.repaint();
     };
 
+    addAndMakeVisible (themeButton);
+    themeButton.onClick = [this]
+    {
+        _lightMode = !_lightMode;
+        themeButton.setButtonText (_lightMode ? "Dark" : "Light");
+        curveDisplay.setLightMode (_lightMode);
+        repaint();
+    };
+
     // ── Sliders ───────────────────────────────────────────────────────────────
     setupSlider (ccSlider,        ccLabel,        "CC#");
     setupSlider (channelSlider,   channelLabel,   "Channel");
     setupSlider (smoothingSlider, smoothingLabel, "Smooth");
     setupSlider (minOutSlider,    minOutLabel,    "Min Out");
     setupSlider (maxOutSlider,    maxOutLabel,    "Max Out");
+    setupSlider (speedSlider,     speedLabel,     "Speed ×");
+    speedSlider.setTextValueSuffix (" x");
+    speedSlider.setNumDecimalPlacesToDisplay (2);
 
     // ── APVTS attachments ─────────────────────────────────────────────────────
     auto& apvts = proc.apvts;
-    ccAttach        = std::make_unique<Attach> (apvts, "ccNumber",    ccSlider);
-    channelAttach   = std::make_unique<Attach> (apvts, "midiChannel", channelSlider);
-    smoothingAttach = std::make_unique<Attach> (apvts, "smoothing",   smoothingSlider);
-    minAttach       = std::make_unique<Attach> (apvts, "minOutput",   minOutSlider);
-    maxAttach       = std::make_unique<Attach> (apvts, "maxOutput",   maxOutSlider);
+    ccAttach        = std::make_unique<Attach> (apvts, "ccNumber",       ccSlider);
+    channelAttach   = std::make_unique<Attach> (apvts, "midiChannel",    channelSlider);
+    smoothingAttach = std::make_unique<Attach> (apvts, "smoothing",      smoothingSlider);
+    minAttach       = std::make_unique<Attach> (apvts, "minOutput",      minOutSlider);
+    maxAttach       = std::make_unique<Attach> (apvts, "maxOutput",      maxOutSlider);
+    speedAttach     = std::make_unique<Attach> (apvts, "playbackSpeed",  speedSlider);
 
     // ── Message-type radio buttons ────────────────────────────────────────────
     // ComboBox popups fail silently in AUv3 on iOS (no TopLevelWindow), so we
@@ -306,6 +358,9 @@ DrawnCurveEditor::DrawnCurveEditor (DrawnCurveProcessor& p)
         };
     }
 
+    // ── Curve display ─────────────────────────────────────────────────────────
+    addAndMakeVisible (curveDisplay);
+
     // Stay in sync with external parameter changes (automation, state restore).
     proc.apvts.addParameterListener ("messageType", this);
     updateMsgTypeButtons();   // reflect current (possibly restored) value
@@ -322,11 +377,11 @@ void DrawnCurveEditor::setupSlider (juce::Slider&       s,
                                      juce::Slider::SliderStyle style)
 {
     s.setSliderStyle (style);
-    s.setTextBoxStyle (juce::Slider::TextBoxRight, false, 48, 20);
+    s.setTextBoxStyle (juce::Slider::TextBoxRight, false, 52, 18);
     addAndMakeVisible (s);
 
     l.setText (labelText, juce::dontSendNotification);
-    l.setFont (juce::Font (12.0f));
+    l.setFont (juce::Font (11.0f));
     l.setColour (juce::Label::textColourId, juce::Colours::lightgrey);
     addAndMakeVisible (l);
 }
@@ -371,7 +426,8 @@ void DrawnCurveEditor::updateCCVisibility()
 //==============================================================================
 void DrawnCurveEditor::paint (juce::Graphics& g)
 {
-    g.fillAll (Colours::panelBg);
+    const Theme& T = _lightMode ? kLight : kDark;
+    g.fillAll (T.panelBg);
 }
 
 void DrawnCurveEditor::resized()
@@ -379,19 +435,20 @@ void DrawnCurveEditor::resized()
     using namespace Layout;
     auto area = getLocalBounds().reduced (pad);
 
-    // ── Curve display ─────────────────────────────────────────────────────────
-    curveDisplay.setBounds (area.removeFromTop (curveH));
-    area.removeFromTop (pad);
-
-    // ── Button row (Play · Clear ·········· [CC] [Ch Press] [Pitch Bend]) ─────
+    // ── Button row (Play · Clear · [CC][Ch Press][Pitch Bend] · [Light/Dark]) ──
     {
         auto row = area.removeFromTop (buttonRowH);
-        playButton .setBounds (row.removeFromLeft (160));
-        row.removeFromLeft (pad);
-        clearButton.setBounds (row.removeFromLeft (120));
 
-        // Message-type radio buttons on the right — no popup needed.
-        row.removeFromLeft (pad * 4);
+        // Right side first so removeFromRight works before removeFromLeft shrinks it.
+        themeButton .setBounds (row.removeFromRight (68));
+        row.removeFromRight (pad);
+
+        playButton .setBounds (row.removeFromLeft (100));
+        row.removeFromLeft (pad);
+        clearButton.setBounds (row.removeFromLeft (80));
+
+        // Message-type radio buttons centred in remaining space.
+        row.removeFromLeft (pad * 3);
         static constexpr std::array<int, 3> kBtnW { 55, 100, 110 };
         for (int i = 0; i < 3; ++i)
         {
@@ -401,39 +458,34 @@ void DrawnCurveEditor::resized()
     }
     area.removeFromTop (pad);
 
-    // ── Param row 1: CC#, Channel, Smooth ─────────────────────────────────────
+    // Helper: place label above slider using three equal slots.
+    auto placeRow3 = [&] (auto& lbl1, auto& sl1,
+                          auto& lbl2, auto& sl2,
+                          auto& lbl3, auto& sl3)
     {
         auto row = area.removeFromTop (paramRowH);
-        const int slotW = (area.getWidth() + pad * 2) / 3;  // three equal slots
-
-        auto placeParam = [&] (juce::Label& lbl, juce::Slider& sl)
+        const int slotW = (area.getWidth() - pad * 2) / 3;
+        auto placeOne = [&] (juce::Label& lbl, juce::Slider& sl)
         {
-            auto slot = row.removeFromLeft (slotW - pad);
+            auto slot = row.removeFromLeft (slotW);
             row.removeFromLeft (pad);
             lbl.setBounds (slot.removeFromTop (paramLabelH));
             sl .setBounds (slot);
         };
+        placeOne (lbl1, sl1);
+        placeOne (lbl2, sl2);
+        lbl3.setBounds (row.removeFromTop (paramLabelH));
+        sl3 .setBounds (row);
+    };
 
-        placeParam (ccLabel,      ccSlider);
-        placeParam (channelLabel, channelSlider);
-        // Remaining width goes to smoothing
-        smoothingLabel.setBounds (row.removeFromTop (paramLabelH));
-        smoothingSlider.setBounds (row);
-    }
+    // ── Param row 1: CC#, Channel, Smooth ─────────────────────────────────────
+    placeRow3 (ccLabel, ccSlider, channelLabel, channelSlider, smoothingLabel, smoothingSlider);
     area.removeFromTop (pad);
 
-    // ── Param row 2: Min Out, Max Out ─────────────────────────────────────────
-    {
-        auto row  = area.removeFromTop (paramRowH);
-        int  half = (area.getWidth() + pad) / 2;
+    // ── Param row 2: Min Out, Max Out, Speed ──────────────────────────────────
+    placeRow3 (minOutLabel, minOutSlider, maxOutLabel, maxOutSlider, speedLabel, speedSlider);
+    area.removeFromTop (pad);
 
-        auto minSlot = row.removeFromLeft (half - pad);
-        row.removeFromLeft (pad);
-
-        minOutLabel .setBounds (minSlot.removeFromTop (paramLabelH));
-        minOutSlider.setBounds (minSlot);
-
-        maxOutLabel .setBounds (row.removeFromTop (paramLabelH));
-        maxOutSlider.setBounds (row);
-    }
+    // ── Curve display (fills all remaining vertical space) ────────────────────
+    curveDisplay.setBounds (area);
 }

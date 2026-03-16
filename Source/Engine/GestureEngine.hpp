@@ -28,7 +28,9 @@ public:
     float getCurrentPhase() const;     // approximate, for UI display only
 
     // Called from render thread.
-    void processBlock(uint32_t frameCount, double sampleRate, const MIDIOut& midiOut);
+    // speedRatio > 1 = faster (shorter loop); < 1 = slower (longer loop).
+    void processBlock(uint32_t frameCount, double sampleRate, const MIDIOut& midiOut,
+                      float speedRatio = 1.0f);
 
 private:
     std::atomic<const LaneSnapshot*> _snapshot{nullptr};

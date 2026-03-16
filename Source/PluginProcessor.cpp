@@ -3,12 +3,13 @@
 
 namespace ParamID
 {
-    static const juce::String ccNumber    { "ccNumber"    };
-    static const juce::String midiChannel { "midiChannel" };
-    static const juce::String smoothing   { "smoothing"   };
-    static const juce::String minOutput   { "minOutput"   };
-    static const juce::String maxOutput   { "maxOutput"   };
-    static const juce::String messageType { "messageType" };
+    static const juce::String ccNumber      { "ccNumber"      };
+    static const juce::String midiChannel   { "midiChannel"   };
+    static const juce::String smoothing     { "smoothing"     };
+    static const juce::String minOutput     { "minOutput"     };
+    static const juce::String maxOutput     { "maxOutput"     };
+    static const juce::String messageType   { "messageType"   };
+    static const juce::String playbackSpeed { "playbackSpeed" };
 }
 
 // Helper: channel pressure is a 2-byte MIDI message; everything else is 3-byte.
@@ -45,6 +46,11 @@ juce::AudioProcessorValueTreeState::ParameterLayout DrawnCurveProcessor::createP
     layout.add (std::make_unique<juce::AudioParameterChoice>(
         juce::ParameterID { ParamID::messageType, 1 }, "Message Type",
         juce::StringArray { "CC", "Channel Pressure", "Pitch Bend" }, 0));
+
+    // Speed: 0.25× to 4×, log-centred at 1× (skew=0.5 → midpoint = sqrt(0.25*4) = 1.0)
+    layout.add (std::make_unique<juce::AudioParameterFloat>(
+        juce::ParameterID { ParamID::playbackSpeed, 1 }, "Playback Speed",
+        juce::NormalisableRange<float> (0.25f, 4.0f, 0.01f, 0.5f), 1.0f));
 
     return layout;
 }
@@ -96,6 +102,7 @@ void DrawnCurveProcessor::processBlock (juce::AudioBuffer<float>& buffer,
 
     // Advance engine on the audio thread.
     {
+        const float speed = apvts.getRawParameterValue (ParamID::playbackSpeed)->load();
         juce::SpinLock::ScopedLockType lock (_engineLock);
         _engine.processBlock (
             static_cast<uint32_t> (buffer.getNumSamples()),
@@ -103,7 +110,8 @@ void DrawnCurveProcessor::processBlock (juce::AudioBuffer<float>& buffer,
             [&midiMessages] (uint8_t status, uint8_t d1, uint8_t d2)
             {
                 midiMessages.addEvent (makeMidiMessage (status, d1, d2), 0);
-            });
+            },
+            speed);
     }
 }
 
@@ -124,13 +132,15 @@ void DrawnCurveProcessor::hiResTimerCallback()
         juce::SpinLock::ScopedTryLockType tryLock (_engineLock);
         if (! tryLock.isLocked()) return;
 
+        const float speed = apvts.getRawParameterValue (ParamID::playbackSpeed)->load();
         _engine.processBlock (
             nominalFrames,
             _timerSampleRate,
             [&localBuf] (uint8_t status, uint8_t d1, uint8_t d2)
             {
                 localBuf.addEvent (makeMidiMessage (status, d1, d2), 0);
-            });
+            },
+            speed);
     }
 
     if (! localBuf.isEmpty())

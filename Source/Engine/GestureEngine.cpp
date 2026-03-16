@@ -37,18 +37,22 @@ float GestureEngine::sampleCurve(const LaneSnapshot& snap, float phase) const {
                  - snap.table[static_cast<size_t>(i0)]);
 }
 
-void GestureEngine::processBlock(uint32_t frameCount, double sampleRate, const MIDIOut& midiOut) {
+void GestureEngine::processBlock(uint32_t frameCount, double sampleRate, const MIDIOut& midiOut,
+                                  float speedRatio) {
     const auto* snap = _snapshot.load(std::memory_order_acquire);
     if (!snap || !snap->valid || !_isPlaying.load(std::memory_order_acquire))
         return;
 
+    // effectiveDuration shrinks as speedRatio increases (faster = shorter loop).
+    const double effectiveDur = (double)snap->durationSeconds
+                                / (double)std::max(speedRatio, 0.001f);
+
     // ── Advance playhead ──────────────────────────────────────────────────────
     _runtime.playheadSeconds += (double)frameCount / sampleRate;
-    if (_runtime.playheadSeconds >= snap->durationSeconds)
-        _runtime.playheadSeconds = std::fmod(_runtime.playheadSeconds,
-                                              (double)snap->durationSeconds);
+    if (_runtime.playheadSeconds >= effectiveDur)
+        _runtime.playheadSeconds = std::fmod(_runtime.playheadSeconds, effectiveDur);
 
-    const float phase  = (float)(_runtime.playheadSeconds / snap->durationSeconds);
+    const float phase  = (float)(_runtime.playheadSeconds / effectiveDur);
     const float target = sampleCurve(*snap, phase);
     _currentPhase.store(phase, std::memory_order_relaxed);
 
