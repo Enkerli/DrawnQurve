@@ -77,6 +77,9 @@ private:
                       const juce::String& labelText,
                       juce::Slider::SliderStyle style = juce::Slider::LinearHorizontal);
 
+    // Re-colours all child components to match _lightMode.
+    void applyTheme();
+
     // Called on UI thread to highlight the active button and dim CC# if needed.
     void updateMsgTypeButtons();
     void updateCCVisibility();

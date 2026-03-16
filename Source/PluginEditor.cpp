@@ -46,7 +46,7 @@ static const Theme kLight
 // CurveDisplay
 //
 // Margins reserved for axis labels (pixels inside the component bounds):
-static constexpr float kAxisMarginL = 27.0f;   // left  — Y-axis MIDI-value labels
+static constexpr float kAxisMarginL = 36.0f;   // left  — Y-axis MIDI-value labels
 static constexpr float kAxisMarginB = 16.0f;   // bottom — X-axis % + time labels
 
 CurveDisplay::CurveDisplay (DrawnCurveProcessor& p)
@@ -301,7 +301,7 @@ DrawnCurveEditor::DrawnCurveEditor (DrawnCurveProcessor& p)
     {
         const bool nowPlaying = !proc.isPlaying();
         proc.setPlaying (nowPlaying);
-        playButton.setButtonText (nowPlaying ? "Stop" : "Play");
+        playButton.setButtonText (nowPlaying ? "Pause" : "Play");
         curveDisplay.repaint();
     };
 
@@ -320,7 +320,7 @@ DrawnCurveEditor::DrawnCurveEditor (DrawnCurveProcessor& p)
         _lightMode = !_lightMode;
         themeButton.setButtonText (_lightMode ? "Dark" : "Light");
         curveDisplay.setLightMode (_lightMode);
-        repaint();
+        applyTheme();   // re-colours sliders, labels, buttons
     };
 
     // ── Sliders ───────────────────────────────────────────────────────────────
@@ -329,8 +329,8 @@ DrawnCurveEditor::DrawnCurveEditor (DrawnCurveProcessor& p)
     setupSlider (smoothingSlider, smoothingLabel, "Smooth");
     setupSlider (minOutSlider,    minOutLabel,    "Min Out");
     setupSlider (maxOutSlider,    maxOutLabel,    "Max Out");
-    setupSlider (speedSlider,     speedLabel,     "Speed ×");
-    speedSlider.setTextValueSuffix (" x");
+    setupSlider (speedSlider,     speedLabel,     "Speed");
+    speedSlider.setTextValueSuffix ("x");
     speedSlider.setNumDecimalPlacesToDisplay (2);
 
     // ── APVTS attachments ─────────────────────────────────────────────────────
@@ -363,7 +363,9 @@ DrawnCurveEditor::DrawnCurveEditor (DrawnCurveProcessor& p)
 
     // Stay in sync with external parameter changes (automation, state restore).
     proc.apvts.addParameterListener ("messageType", this);
-    updateMsgTypeButtons();   // reflect current (possibly restored) value
+
+    // Apply correct colours for the initial (dark) theme.
+    applyTheme();
 }
 
 DrawnCurveEditor::~DrawnCurveEditor()
@@ -382,7 +384,6 @@ void DrawnCurveEditor::setupSlider (juce::Slider&       s,
 
     l.setText (labelText, juce::dontSendNotification);
     l.setFont (juce::Font (11.0f));
-    l.setColour (juce::Label::textColourId, juce::Colours::lightgrey);
     addAndMakeVisible (l);
 }
 
@@ -397,15 +398,18 @@ void DrawnCurveEditor::updateMsgTypeButtons()
     const int sel = static_cast<int> (
         proc.apvts.getRawParameterValue ("messageType")->load());
 
+    const juce::Colour inactiveBg   = _lightMode ? juce::Colour (0xffe0e0e8)      : juce::Colour (0xff333355);
+    const juce::Colour inactiveText = _lightMode ? juce::Colour (0xff3a3a3c)      : juce::Colours::lightgrey;
+
     for (int i = 0; i < 3; ++i)
     {
         const bool active = (i == sel);
         msgTypeBtns[i].setColour (juce::TextButton::buttonColourId,
-            active ? juce::Colour (0xff2979ff) : juce::Colour (0xff333355));
+            active ? juce::Colour (0xff2979ff) : inactiveBg);
         msgTypeBtns[i].setColour (juce::TextButton::buttonOnColourId,
             juce::Colour (0xff2979ff));
         msgTypeBtns[i].setColour (juce::TextButton::textColourOffId,
-            active ? juce::Colours::white : juce::Colours::lightgrey);
+            active ? juce::Colours::white : inactiveText);
     }
 
     updateCCVisibility();
@@ -421,6 +425,50 @@ void DrawnCurveEditor::updateCCVisibility()
     ccLabel .setEnabled (isCC);
     ccSlider.setAlpha   (isCC ? 1.0f : 0.4f);
     ccLabel .setAlpha   (isCC ? 1.0f : 0.4f);
+}
+
+//==============================================================================
+void DrawnCurveEditor::applyTheme()
+{
+    // Resolve palette colours for the current mode.
+    const bool light = _lightMode;
+
+    const juce::Colour textCol  = light ? juce::Colour (0xff1c1c1e) : juce::Colours::white;
+    const juce::Colour dimText  = light ? juce::Colour (0xff3a3a3c) : juce::Colours::lightgrey;
+    const juce::Colour tbBg     = light ? juce::Colours::white       : juce::Colour (0xff252538);
+    const juce::Colour tbLine   = light ? juce::Colour (0x28000000)  : juce::Colour (0x33ffffff);
+    const juce::Colour accent   = light ? juce::Colour (0xff007aff)  : juce::Colour (0xff00e5ff);
+    const juce::Colour btnBg    = light ? juce::Colour (0xffe0e0e8)  : juce::Colour (0xff333355);
+    const juce::Colour btnText  = light ? juce::Colour (0xff1c1c1e)  : juce::Colours::white;
+
+    // ── Sliders ───────────────────────────────────────────────────────────────
+    for (auto* s : { &ccSlider, &channelSlider, &smoothingSlider,
+                     &minOutSlider, &maxOutSlider, &speedSlider })
+    {
+        s->setColour (juce::Slider::textBoxTextColourId,       textCol);
+        s->setColour (juce::Slider::textBoxBackgroundColourId, tbBg);
+        s->setColour (juce::Slider::textBoxOutlineColourId,    tbLine);
+        s->setColour (juce::Slider::thumbColourId,             accent);
+        s->setColour (juce::Slider::trackColourId,             accent.withAlpha (0.45f));
+        s->setColour (juce::Slider::backgroundColourId,        tbBg);
+    }
+
+    // ── Param labels ──────────────────────────────────────────────────────────
+    for (auto* l : { &ccLabel, &channelLabel, &smoothingLabel,
+                     &minOutLabel, &maxOutLabel, &speedLabel })
+        l->setColour (juce::Label::textColourId, dimText);
+
+    // ── Utility buttons ───────────────────────────────────────────────────────
+    for (auto* b : { &playButton, &clearButton, &themeButton })
+    {
+        b->setColour (juce::TextButton::buttonColourId,  btnBg);
+        b->setColour (juce::TextButton::textColourOffId, btnText);
+    }
+
+    // ── Message-type radio buttons (active button stays blue) ─────────────────
+    updateMsgTypeButtons();
+
+    repaint();
 }
 
 //==============================================================================
