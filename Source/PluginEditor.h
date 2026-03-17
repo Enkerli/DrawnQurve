@@ -17,9 +17,10 @@
  * ────────────────────
  * - Range slider uses JUCE TwoValueHorizontal with manual APVTS write-back
  *   because JUCE SliderAttachment does not support two-value sliders.
- * - The direction control is a SegmentedControl (3 segments: Fwd/Rev/P-P).
- *   A SegmentPainter lambda draws proper stem+arrowhead arrows as juce::Path
- *   objects, with no font dependency — safe in the AUv3 sandboxed XPC process.
+ * - The direction control is a SegmentedControl (3-way switch: ◀ ◆ ▶).
+ *   Visual order is Rev / Ping-Pong / Fwd (left to right); Forward is the
+ *   default (rightmost, APVTS param value 0).  A SegmentPainter draws filled
+ *   triangles as juce::Path objects — no font dependency, AUv3 sandbox safe.
  * - Message-type buttons (CC/Aft/PB/Note) use a minimal SymbolLF subclass
  *   that renders plain centred text at a fixed 12 pt size.
  * - The Speed slider attachment is swapped at runtime between "playbackSpeed"
@@ -128,6 +129,7 @@ public:
 
     void paint   (juce::Graphics&) override;
     void resized ()                override;
+    bool keyPressed (const juce::KeyPress&) override;
 
 private:
     // ── Custom LookAndFeel for message-type buttons ───────────────────────────
@@ -168,11 +170,18 @@ private:
     juce::TextButton syncButton  { "Sync"  };   ///< Toggles host transport + tempo sync
     juce::TextButton helpButton  { "?"     };   ///< Shows/hides the help overlay
 
-    // ── Row 2: playback direction + grid tick controls ────────────────────────
-    /// Unified 3-segment control — Forward / Reverse / Ping-Pong.
-    /// Replaces the former TextButton radio group.  Arrow glyphs are drawn by
-    /// a SegmentPainter (stem + arrowhead paths) — no font required.
+    // ── Row 2: playback direction switch + grid tick controls ─────────────────
+    /// Unified 3-way switch — visual order: Reverse ◀  Ping-Pong ◆  Forward ▶.
+    /// Triangle glyphs are drawn by a SegmentPainter — no font required.
+    ///
+    /// APVTS "playbackDirection" uses a different index order than the visual
+    /// layout (0=Forward, 1=Reverse, 2=Ping-Pong).  The helpers below handle
+    /// the translation so the control and the parameter stay in sync.
     SegmentedControl dirControl;
+
+    // Visual [Rev, P-P, Fwd] ↔ APVTS [Fwd, Rev, P-P] index mapping.
+    static constexpr int kDirParamToVis[3] = { 2, 0, 1 };   // APVTS val → visual index
+    static constexpr int kDirVisToParam[3] = { 1, 2, 0 };   // visual index → APVTS val
 
     /// Grid division controls — adjust how many lines appear on each axis.
     juce::TextButton tickYMinusBtn { "Y-" };

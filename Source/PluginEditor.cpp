@@ -96,8 +96,8 @@ void HelpOverlay::paint (juce::Graphics& g)
                          " Pitch Bend (14-bit), or Note On/Off." },
         { "Sync",        "Follow host transport. On play: engine starts; on stop: engine stops."
                          " Speed slider becomes Beats -- set loop length in beats." },
-        { "Fwd / Rev / P-P",
-                         "Loop direction: Forward, Reverse, or Ping-Pong (back and forth)." },
+        { "<< / <> / >>",  "Direction switch (3-way): Reverse, Ping-Pong (back and forth),"
+                          " or Forward (default, rightmost position)." },
         { "CC# / Vel",   "CC number (0-127) in CC mode, or Note velocity (1-127) in Note mode."
                          " Greyed out when unused." },
         { "Channel",     "MIDI output channel (1-16)." },
@@ -511,6 +511,12 @@ DrawnCurveEditor::DrawnCurveEditor (DrawnCurveProcessor& p)
 {
     setSize (Layout::editorW, Layout::editorH);
 
+    // Enable keyPressed() for the spacebar shortcut.  In the AUv3 XPC sandbox
+    // the host never delivers keyboard events to the plugin regardless of this
+    // setting (EDITOR_WANTS_KEYBOARD_FOCUS is false); it only matters in the
+    // JUCE Standalone app.
+    setWantsKeyboardFocus (true);
+
     // ── Buttons (row 1) ───────────────────────────────────────────────────────
     addAndMakeVisible (playButton);
     playButton.onClick = [this]
@@ -619,69 +625,69 @@ DrawnCurveEditor::DrawnCurveEditor (DrawnCurveProcessor& p)
         };
     }
 
-    // ── Direction segmented control (row 2) ───────────────────────────────────
-    // Replaces the former 3-button radio group.  A SegmentPainter draws proper
-    // stem+arrowhead arrows (→  ←  ←→) as juce::Path — no font dependency.
+    // ── Direction 3-way switch (row 2) ────────────────────────────────────────
+    // Visual order (left → right): Reverse ◀  Ping-Pong ◆  Forward ▶.
+    // Forward is the default (rightmost position, APVTS value 0).
+    // kDirParamToVis / kDirVisToParam (header) handle the index translation.
     dirControl.setSegments ({
-        { "fwd", "Fwd", "Forward — curve plays left to right"       },
-        { "rev", "Rev", "Reverse — curve plays right to left"       },
-        { "pp",  "P-P", "Ping-Pong — alternates forward and reverse" }
+        { "rev", "", "Reverse — curve plays right to left"        },
+        { "pp",  "", "Ping-Pong — alternates forward and reverse" },
+        { "fwd", "", "Forward — curve plays left to right"        }
     });
 
-    // Initialise selection from current APVTS state (handles state restore).
+    // Initialise from APVTS (state restore: param value → visual index).
     dirControl.setSelectedIndex (
-        static_cast<int> (proc.apvts.getRawParameterValue ("playbackDirection")->load()),
+        kDirParamToVis[static_cast<int> (
+            proc.apvts.getRawParameterValue ("playbackDirection")->load())],
         juce::dontSendNotification);
 
-    // Write selection back to APVTS when the user taps a segment.
-    dirControl.onChange = [this] (int i)
+    // User tap → write APVTS param (visual index → param value).
+    dirControl.onChange = [this] (int vis)
     {
-        if (auto* param = dynamic_cast<juce::AudioParameterChoice*> (
-                              proc.apvts.getParameter ("playbackDirection")))
-            *param = i;
+        if (auto* p = dynamic_cast<juce::AudioParameterChoice*> (
+                          proc.apvts.getParameter ("playbackDirection")))
+            *p = kDirVisToParam[vis];
     };
 
-    // Custom painter: stem + arrowhead arrows drawn as filled paths.
-    // The background (active highlight or plain bg) has already been painted
-    // by SegmentedControl::paint() before this lambda is called.
-    // `g` colour is pre-set to activeLabel or labelColour as appropriate.
+    // Painter: filled triangles — ◀  ◆  ▶.  No font, no strings.
+    //   index 0 → Reverse  ◀  (left-pointing triangle)
+    //   index 1 → Ping-Pong ◆ (both triangles superimposed → diamond shape)
+    //   index 2 → Forward  ▶  (right-pointing triangle)
     dirControl.setSegmentPainter ([] (juce::Graphics& g,
                                       juce::Rectangle<float> bounds,
                                       int index,
                                       bool /*active*/)
     {
-        const float cx  = bounds.getCentreX();
-        const float cy  = bounds.getCentreY();
-        const float aw  = bounds.getHeight() * 0.26f;   // arrowhead half-height
-        const float al  = aw  * 0.95f;                  // arrowhead x-depth
-        const float sw  = 1.8f;                          // stem stroke width
-        const float ext = bounds.getWidth()  * 0.22f;   // arrow half-span
+        const float cx = bounds.getCentreX();
+        const float cy = bounds.getCentreY();
+        const float aw = bounds.getHeight() * 0.38f;   // triangle half-height
+        const float tw = aw * 0.85f;                   // triangle half-width (tip depth)
 
-        // Draw one arrow: fromX is the stem tail, toX is the tip.
-        auto drawArrow = [&] (float fromX, float toX)
+        // Filled triangle centred at (cx, cy).  pointRight=true → ▶, false → ◀.
+        auto fillTri = [&] (bool pointRight)
         {
-            const bool  right  = (toX > fromX);
-            const float tipX   = toX;
-            const float baseX  = tipX + (right ? -al : al);   // stem/head junction
-
-            g.drawLine (fromX, cy, baseX, cy, sw);             // stem
-
-            juce::Path head;
-            head.addTriangle (tipX,  cy,
-                              baseX, cy - aw,
-                              baseX, cy + aw);
-            g.fillPath (head);                                  // arrowhead
+            juce::Path p;
+            if (pointRight)   // ▶: tip on right, base on left
+                p.addTriangle (cx + tw, cy,
+                               cx - tw, cy - aw,
+                               cx - tw, cy + aw);
+            else              // ◀: tip on left, base on right
+                p.addTriangle (cx - tw, cy,
+                               cx + tw, cy - aw,
+                               cx + tw, cy + aw);
+            g.fillPath (p);
         };
 
-        if (index == 0)       // Forward  →
-            drawArrow (cx - ext, cx + ext);
-        else if (index == 1)  // Reverse  ←
-            drawArrow (cx + ext, cx - ext);
-        else                  // Ping-Pong  ← →
+        if (index == 0)
+            fillTri (false);          // Reverse  ◀
+        else if (index == 2)
+            fillTri (true);           // Forward  ▶
+        else
         {
-            const float gap = al * 0.55f;        // spacing between the two stems
-            drawArrow (cx - gap, cx - ext);      // left  ←
-            drawArrow (cx + gap, cx + ext);      // right →
+            // Ping-Pong: superimpose ◀ and ▶ at identical centre.
+            // Their union forms a compact diamond shape ◆.
+            fillTri (false);
+            fillTri (true);
         }
     });
 
@@ -824,6 +830,20 @@ void DrawnCurveEditor::setupSlider (juce::Slider&       s,
     addAndMakeVisible (l);
 }
 
+bool DrawnCurveEditor::keyPressed (const juce::KeyPress& key)
+{
+    // Space bar → toggle play/pause, mirroring the Play button.
+    // Active in the JUCE Standalone app on macOS/desktop.
+    // In the AUv3 XPC extension the host does not deliver keyboard events to
+    // the plugin (EDITOR_WANTS_KEYBOARD_FOCUS is false), so this is a no-op there.
+    if (key == juce::KeyPress::spaceKey)
+    {
+        playButton.triggerClick();
+        return true;
+    }
+    return false;
+}
+
 void DrawnCurveEditor::parameterChanged (const juce::String& paramID, float)
 {
     if (paramID == "messageType")
@@ -831,7 +851,8 @@ void DrawnCurveEditor::parameterChanged (const juce::String& paramID, float)
     else if (paramID == "playbackDirection")
         juce::MessageManager::callAsync ([this] {
             dirControl.setSelectedIndex (
-                static_cast<int> (proc.apvts.getRawParameterValue ("playbackDirection")->load()),
+                kDirParamToVis[static_cast<int> (
+                    proc.apvts.getRawParameterValue ("playbackDirection")->load())],
                 juce::dontSendNotification);
         });
     else if (paramID == "minOutput" || paramID == "maxOutput")
@@ -1139,8 +1160,10 @@ void DrawnCurveEditor::resized()
         tickYMinusBtn.setBounds (row.removeFromRight (28));
         row.removeFromRight (pad);
 
-        // Direction segmented control fills the rest of row 2.
-        dirControl.setBounds (row);
+        // Direction 3-way switch: fixed width so it reads as one compact control,
+        // not three large buttons.  56 px per segment × 3 = 168 px total.
+        // Left-aligned; remaining row space is intentionally empty.
+        dirControl.setBounds (row.removeFromLeft (juce::jmin (row.getWidth(), 168)));
     }
     area.removeFromTop (pad);
 
