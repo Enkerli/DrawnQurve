@@ -718,7 +718,11 @@ DrawnCurveEditor::DrawnCurveEditor (DrawnCurveProcessor& p)
     addAndMakeVisible (curveDisplay);
 
     // ── Help overlay — added last so it sits above all other children ────────
-    addAndMakeVisible (helpOverlay);
+    // Use addChildComponent (not addAndMakeVisible) so the overlay stays hidden
+    // until the user explicitly taps "?".  addAndMakeVisible would override the
+    // setVisible(false) in HelpOverlay's own constructor, causing the overlay to
+    // appear unsolicited on every first launch (a "push revelation" — NN/g anti-pattern).
+    addChildComponent (helpOverlay);
 
     // Stay in sync with external parameter changes (automation, state restore).
     proc.apvts.addParameterListener ("messageType",       this);

@@ -139,6 +139,72 @@ decide whether to show only Note-on events or include CC/other.
 
 ---
 
+### 2026-03 | DECIDED | Help overlay first-launch push — fixed
+
+**Bug**: `addAndMakeVisible(helpOverlay)` in the DrawnCurveEditor constructor
+calls `setVisible(true)` on the overlay, overriding the `setVisible(false)` set
+in `HelpOverlay`'s own constructor. Result: the overlay appeared unsolicited on
+every first launch — exactly the "push revelation" NN/g identifies as an anti-pattern.
+
+**Fix**: Changed to `addChildComponent(helpOverlay)`, which registers the component
+in the Z-order without affecting its visibility. The overlay now remains hidden until
+the user explicitly taps "?" (pull revelation, correct behaviour).
+
+**Cross-reference**: `PluginEditor.cpp` line ~721; commit following 2026-03 decisions.
+
+---
+
+### 2026-03 | OPEN | Icons and symbols — SF Symbols access from JUCE/Xcode
+
+**Context**: The current direction-button arrow symbols work but are minimal (JUCE
+`Path`-drawn triangles). The iOS/macOS SF Symbols library (available in any Xcode
+project; iOS 13+) contains thousands of system-quality icons including:
+- `arrow.forward` / `arrow.backward` / `arrow.triangle.2.circlepath` (direction)
+- `waveform.and.mic` / `hand.point.up.left` (gesture/curve metaphors)
+- `music.note` / `metronome` (musical operations)
+- Pressure/force symbols relevant to Aftertouch
+
+**JUCE complication**: JUCE's font/typeface system doesn't natively expose SF Symbols.
+Candidate approaches (in ascending complexity):
+1. **Export to asset** — use the SF Symbols macOS app to export specific symbols as
+   SVG/PDF; include in the Xcode bundle; load as `juce::DrawableSVG` / `juce::Image`.
+   Lowest friction; symbols are static but always match intended appearance.
+2. **ObjC++ bridge** — `juce::Image` from UIKit/NSImage rendering of
+   `UIImage(systemName:)`. Dynamic; respects SF Symbols multicolour / hierarchical
+   rendering. Requires a thin platform bridge file.
+3. **CoreText** — render the `.SFNS` / `.SFUIDisplay` typeface directly through
+   CoreText into a `juce::Image` at the button's required size. Most flexible;
+   highest complexity.
+
+**Recommendation**: Start with approach 1 for the UI redesign sprint; migrate to 2 if
+animation or adaptive colour is needed.
+
+**Pending**: Identify the exact set of symbols needed before implementation.
+Test: do SF Symbol icons test significantly better than the current path-drawn arrows
+for the T4 (direction) and T3 (output type) benchmark tasks?
+
+---
+
+### 2026-03 | NOTED | This build as a playground — eventual feature split
+
+**Context**: DrawnCurve in its current form is explicitly a development playground.
+Adding features like scale quantization, multi-stroke, incoming MIDI display makes
+sense here because:
+1. No full Apple developer account available yet for a separate product
+2. No design system exists yet — adding features here generates design evidence
+3. The plugin is already useful and fun with current features; additions are additive
+4. Testing multiple features together reveals interactions that would be missed in
+   separate products
+
+**Implication**: Some features implemented here may eventually belong in a separate
+plugin. Scale quantization is the primary candidate — a standalone scale quantizer
+for iOS/AUv3 is a legitimate product. When the design system exists and the dev account
+allows it, splitting is the right call.
+
+**For now**: implement, test, learn. #Playground.
+
+---
+
 ### 2026-03 | OPEN | Resonant Design benchmarking
 
 **Context**: resonant.design is a Berlin-based music plugin UX agency whose portfolio

@@ -15,20 +15,34 @@ it is merged.
 
 DrawnCurve's core value is already present: drawing a curve and hearing something
 change is *immediately* playful. Low cognitive load, no setup required, results
-in seconds. Every design decision should be filtered through the question:
-*does this increase or decrease the playfulness of the interaction?*
+in seconds.
+
+There are two distinct kinds of "thinking" in this interaction, and they are not equal:
+
+1. **Productive thinking** — the "aha!" moment when a user discovers what a curve
+   can do, hears the filter respond, grasps the note quantization snapping to scale.
+   This is *part of the reward*. Design should create more of these moments.
+
+2. **Friction thinking** — time spent on routing, abbreviations, MIDI channel numbers,
+   button discovery. This is *a barrier* to the reward. Design should eliminate it.
+
+The goal is not to make everything "unthinking". It is to ensure that every cognitive
+demand is *worth it* — that it leads somewhere surprising or delightful, not just
+somewhere correctly configured.
 
 Implications:
-- The canvas is large and inviting — never compress it for a control panel
-- Drawing must require zero configuration to produce audible results
-- Controls that appear only when needed don't interrupt the flow; those that are
-  always visible compete for attention with the drawing surface
-- Feedback is immediate and visible (banding, note names, playhead) — not a
-  number in a box somewhere
-- "Casual, unthinking, low cognitive load" is a feature, not an accident
+- The canvas is large and inviting — never compress it for parameter panels
+- Drawing must produce audible results with zero configuration
+- Controls that appear when needed don't interrupt flow; always-visible controls
+  compete for attention with the drawing surface
+- Feedback is immediate and perceptual (banding, note names, playhead) — not
+  just a number in a text box
+- Routing complexity is the one area where "thinking" is unavoidable; offset it
+  with pre-mapped templates, documentation, and named CC presets
+- A feature that adds cognitive demand in the drawing moment needs a strong case
 
-#Playfulness. If it makes users smile, it ships. If it makes them think, it
-needs justification.
+#Playfulness. Making people think is a superpower when the thought leads to delight.
+When it leads to documentation, that's a design problem.
 
 ---
 
