@@ -55,6 +55,37 @@ juce_add_plugin(DrawnCurve
     MICROPHONE_PERMISSION_ENABLED FALSE
 )
 
+# ── Symbol font binary data (currently disabled) ──────────────────────────────
+#
+# This is the JUCE equivalent of declaring a font in iOS Info.plist (UIAppFonts).
+# Uncomment when a TTF/OTF symbol font (e.g. Material Symbols, or an exported
+# SF Symbol set) is available at Assets/SymbolFont.ttf.
+#
+# How it works:
+#   1. juce_add_binary_data compiles the font file into a C++ static array.
+#   2. BinaryData::SymbolFont_ttf / BinaryData::SymbolFont_ttfSize are the
+#      resulting symbols (name follows the filename, with '.' → '_').
+#   3. In PluginEditor.cpp (or wherever the font is needed):
+#
+#        static const juce::Typeface::Ptr symbolTypeface =
+#            juce::Typeface::createSystemTypefaceFor (
+#                BinaryData::SymbolFont_ttf,
+#                BinaryData::SymbolFont_ttfSize);
+#        juce::Font symbolFont (juce::FontOptions{}.withTypeface (symbolTypeface));
+#        symbolFont.setHeight (20.0f);
+#        g.setFont (symbolFont);
+#        g.drawText (u8"\U0001F78E", bounds, juce::Justification::centred);
+#
+# This approach is fully sandboxed (no filesystem access) and therefore safe
+# inside an AUv3 XPC extension on iOS.
+#
+# juce_add_binary_data(DrawnCurveAssets SOURCES
+#     Assets/SymbolFont.ttf
+# )
+# target_link_libraries(DrawnCurve PRIVATE DrawnCurveAssets)
+#
+# ─────────────────────────────────────────────────────────────────────────────
+
 # ── Sources ───────────────────────────────────────────────────────────────────
 target_sources(DrawnCurve PRIVATE
     Source/PluginProcessor.cpp

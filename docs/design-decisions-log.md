@@ -154,6 +154,76 @@ the user explicitly taps "?" (pull revelation, correct behaviour).
 
 ---
 
+### 2026-03 | DECIDED | Direction control: SegmentedControl replaces 3 TextButtons
+
+**Context**: Row 2 used three `juce::TextButton` instances in a radio-button pattern
+(Fwd / Rev / P-P). The buttons used a `SymbolLF` (LookAndFeel_V4 subclass) to draw
+filled-triangle arrowheads. Triangles alone (▶) are visually ambiguous — they do not
+clearly communicate "play direction" without additional context.
+
+**Decision**: Replace with a single `SegmentedControl` component (3 segments).
+Arrows are drawn by a `SegmentPainter` lambda using stem+arrowhead `juce::Path` objects:
+- Forward: `→` (single arrow, tip right)
+- Reverse: `←` (single arrow, tip left)
+- Ping-Pong: `← →` (two outward arrows with a small gap)
+
+No font required. The `SegmentedControl` is generic and reusable; it accepts an optional
+`SegmentPainter` callback for fully custom per-segment drawing.
+
+**Future 4th segment**: Adding "Random" later is a one-line `setSegments()` update.
+The APVTS `playbackDirection` parameter would need an additional choice; that is deferred
+until there is a concrete design for random playback behaviour.
+
+**Cross-reference**: `Source/SegmentedControl.h` (new); `Source/PluginEditor.h/cpp`.
+
+---
+
+### 2026-03 | DECIDED | Symbol fonts in JUCE: juce_add_binary_data approach
+
+**Context**: The project needs icon/symbol glyphs (arrows, possibly pressure icons for
+Aftertouch, note symbols) that the built-in JUCE Bitstream Vera font does not contain.
+AUv3 XPC sandbox forbids filesystem access, ruling out loading fonts from a file path.
+
+**The "proper non-JUCE" iOS approach**:
+1. Add the TTF to the Xcode project bundle
+2. Declare it in `Info.plist` under `UIAppFonts`
+3. Use `UIFont(name:size:)` to load it at runtime — iOS CoreText resolves the font
+   by name from the app bundle, with no filesystem path needed
+
+**The JUCE equivalent**:
+1. Add `juce_add_binary_data(DrawnCurveAssets SOURCES Assets/SymbolFont.ttf)` to
+   `CMakeLists.txt` — JUCE compiles the font file into a C++ `const char[]` array
+2. Link `DrawnCurveAssets` to the plugin target
+3. At runtime:
+   ```cpp
+   static const juce::Typeface::Ptr tp =
+       juce::Typeface::createSystemTypefaceFor(BinaryData::SymbolFont_ttf,
+                                               BinaryData::SymbolFont_ttfSize);
+   juce::Font f (juce::FontOptions{}.withTypeface(tp));
+   g.setFont(f.withHeight(20.f));
+   g.drawText(u8"\U000Exxxx", bounds, juce::Justification::centred);
+   ```
+Both approaches load font data from memory (the binary blob), bypassing the filesystem.
+Both are safe in a sandboxed XPC process.
+
+**Current status**: The `CMakeLists.txt` block is present but commented out, ready to
+activate when a font file is chosen. The `SegmentedControl` infrastructure already
+supports a `SegmentPainter` callback that can call `g.setFont(symbolFont)`.
+
+**Candidate fonts** (all open-source / permissive licence):
+- **Material Symbols** (Google, Apache 2.0) — variable font; ligature-name API
+  (`g.drawText("arrow_forward", ...)`) and Unicode PUA codepoints both work
+- **Phosphor Icons** — clean, consistent, available as TTF
+- **Bootstrap Icons** — broad coverage, MIT licence
+
+**SF Symbols**: Not a traditional font; accessed via `UIImage(systemName:)` in UIKit.
+Requires an ObjC++ bridge in JUCE. Deferred (see SF Symbols investigation entry below).
+
+**Cross-reference**: `CMakeLists.txt` (commented block); `Source/SegmentedControl.h`
+header comment.
+
+---
+
 ### 2026-03 | OPEN | Icons and symbols — SF Symbols access from JUCE/Xcode
 
 **Context**: The current direction-button arrow symbols work but are minimal (JUCE

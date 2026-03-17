@@ -619,21 +619,73 @@ DrawnCurveEditor::DrawnCurveEditor (DrawnCurveProcessor& p)
         };
     }
 
-    // ── Direction radio buttons (row 2) ───────────────────────────────────────
-    // SymbolLF::drawButtonText matches "Fwd"/"Rev"/"P-P" and draws path arrows.
-    static const std::array<const char*, 3> kDirLabels { "Fwd", "Rev", "P-P" };
-    for (int i = 0; i < 3; ++i)
+    // ── Direction segmented control (row 2) ───────────────────────────────────
+    // Replaces the former 3-button radio group.  A SegmentPainter draws proper
+    // stem+arrowhead arrows (→  ←  ←→) as juce::Path — no font dependency.
+    dirControl.setSegments ({
+        { "fwd", "Fwd", "Forward — curve plays left to right"       },
+        { "rev", "Rev", "Reverse — curve plays right to left"       },
+        { "pp",  "P-P", "Ping-Pong — alternates forward and reverse" }
+    });
+
+    // Initialise selection from current APVTS state (handles state restore).
+    dirControl.setSelectedIndex (
+        static_cast<int> (proc.apvts.getRawParameterValue ("playbackDirection")->load()),
+        juce::dontSendNotification);
+
+    // Write selection back to APVTS when the user taps a segment.
+    dirControl.onChange = [this] (int i)
     {
-        dirBtns[i].setButtonText (kDirLabels[i]);
-        dirBtns[i].setLookAndFeel (&_symbolLF);
-        addAndMakeVisible (dirBtns[i]);
-        dirBtns[i].onClick = [this, i]
+        if (auto* param = dynamic_cast<juce::AudioParameterChoice*> (
+                              proc.apvts.getParameter ("playbackDirection")))
+            *param = i;
+    };
+
+    // Custom painter: stem + arrowhead arrows drawn as filled paths.
+    // The background (active highlight or plain bg) has already been painted
+    // by SegmentedControl::paint() before this lambda is called.
+    // `g` colour is pre-set to activeLabel or labelColour as appropriate.
+    dirControl.setSegmentPainter ([] (juce::Graphics& g,
+                                      juce::Rectangle<float> bounds,
+                                      int index,
+                                      bool /*active*/)
+    {
+        const float cx  = bounds.getCentreX();
+        const float cy  = bounds.getCentreY();
+        const float aw  = bounds.getHeight() * 0.26f;   // arrowhead half-height
+        const float al  = aw  * 0.95f;                  // arrowhead x-depth
+        const float sw  = 1.8f;                          // stem stroke width
+        const float ext = bounds.getWidth()  * 0.22f;   // arrow half-span
+
+        // Draw one arrow: fromX is the stem tail, toX is the tip.
+        auto drawArrow = [&] (float fromX, float toX)
         {
-            if (auto* param = dynamic_cast<juce::AudioParameterChoice*> (
-                                  proc.apvts.getParameter ("playbackDirection")))
-                *param = i;
+            const bool  right  = (toX > fromX);
+            const float tipX   = toX;
+            const float baseX  = tipX + (right ? -al : al);   // stem/head junction
+
+            g.drawLine (fromX, cy, baseX, cy, sw);             // stem
+
+            juce::Path head;
+            head.addTriangle (tipX,  cy,
+                              baseX, cy - aw,
+                              baseX, cy + aw);
+            g.fillPath (head);                                  // arrowhead
         };
-    }
+
+        if (index == 0)       // Forward  →
+            drawArrow (cx - ext, cx + ext);
+        else if (index == 1)  // Reverse  ←
+            drawArrow (cx + ext, cx - ext);
+        else                  // Ping-Pong  ← →
+        {
+            const float gap = al * 0.55f;        // spacing between the two stems
+            drawArrow (cx - gap, cx - ext);      // left  ←
+            drawArrow (cx + gap, cx + ext);      // right →
+        }
+    });
+
+    addAndMakeVisible (dirControl);
 
     // ── Grid tick buttons: separate Y and X controls ─────────────────────────
     addAndMakeVisible (tickYMinusBtn);
@@ -743,7 +795,6 @@ DrawnCurveEditor::~DrawnCurveEditor()
 {
     // Reset custom L&F before _symbolLF is destroyed.
     for (auto& b : msgTypeBtns) b.setLookAndFeel (nullptr);
-    for (auto& b : dirBtns)     b.setLookAndFeel (nullptr);
 
     proc.apvts.removeParameterListener ("messageType",       this);
     proc.apvts.removeParameterListener ("playbackDirection", this);
@@ -778,7 +829,11 @@ void DrawnCurveEditor::parameterChanged (const juce::String& paramID, float)
     if (paramID == "messageType")
         juce::MessageManager::callAsync ([this] { updateMsgTypeButtons(); updateScaleVisibility(); });
     else if (paramID == "playbackDirection")
-        juce::MessageManager::callAsync ([this] { updateDirButtons(); });
+        juce::MessageManager::callAsync ([this] {
+            dirControl.setSelectedIndex (
+                static_cast<int> (proc.apvts.getRawParameterValue ("playbackDirection")->load()),
+                juce::dontSendNotification);
+        });
     else if (paramID == "minOutput" || paramID == "maxOutput")
         juce::MessageManager::callAsync ([this] { updateRangeSlider(); });
     else if (paramID == "scaleMode")
@@ -840,25 +895,6 @@ void DrawnCurveEditor::updateCCSlot()
     }
 }
 
-void DrawnCurveEditor::updateDirButtons()
-{
-    const int sel = static_cast<int> (
-        proc.apvts.getRawParameterValue ("playbackDirection")->load());
-
-    const juce::Colour inactiveBg   = _lightMode ? juce::Colour (0xffe0e0e8) : juce::Colour (0xff333355);
-    const juce::Colour inactiveText = _lightMode ? juce::Colour (0xff3a3a3c) : juce::Colours::lightgrey;
-
-    for (int i = 0; i < 3; ++i)
-    {
-        const bool active = (i == sel);
-        dirBtns[i].setColour (juce::TextButton::buttonColourId,
-            active ? juce::Colour (0xff2979ff) : inactiveBg);
-        dirBtns[i].setColour (juce::TextButton::buttonOnColourId,
-            juce::Colour (0xff2979ff));
-        dirBtns[i].setColour (juce::TextButton::textColourOffId,
-            active ? juce::Colours::white : inactiveText);
-    }
-}
 
 void DrawnCurveEditor::updateRangeSlider()
 {
@@ -1028,9 +1064,16 @@ void DrawnCurveEditor::applyTheme()
         b->setColour (juce::TextButton::textColourOffId, btnText);
     }
 
-    // ── Message-type + direction + scale radio buttons ────────────────────────
+    // ── Direction segmented control ───────────────────────────────────────────
+    dirControl.bgColour     = btnBg;
+    dirControl.activeColour = juce::Colour (0xff2979ff);   // same accent as other radio groups
+    dirControl.labelColour  = light ? juce::Colour (0xff3a3a3c) : juce::Colours::lightgrey;
+    dirControl.activeLabel  = juce::Colours::white;
+    dirControl.borderColour = light ? juce::Colour (0x28000000) : juce::Colour (0x33ffffff);
+    dirControl.repaint();
+
+    // ── Message-type + scale radio buttons ───────────────────────────────────
     updateMsgTypeButtons();
-    updateDirButtons();
     updateScalePresetButtons();
     updateRootNoteButtons();
     updateCustomMaskButtons();
@@ -1096,13 +1139,8 @@ void DrawnCurveEditor::resized()
         tickYMinusBtn.setBounds (row.removeFromRight (28));
         row.removeFromRight (pad);
 
-        // Direction buttons fill the rest.
-        const int dirBtnW = (row.getWidth() - pad * 2) / 3;
-        for (int i = 0; i < 3; ++i)
-        {
-            dirBtns[i].setBounds (row.removeFromLeft (dirBtnW));
-            if (i < 2) row.removeFromLeft (pad);
-        }
+        // Direction segmented control fills the rest of row 2.
+        dirControl.setBounds (row);
     }
     area.removeFromTop (pad);
 

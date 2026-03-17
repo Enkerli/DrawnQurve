@@ -17,11 +17,11 @@
  * ────────────────────
  * - Range slider uses JUCE TwoValueHorizontal with manual APVTS write-back
  *   because JUCE SliderAttachment does not support two-value sliders.
- * - Direction / message-type buttons use a custom SymbolLF (LookAndFeel_V4
- *   subclass) that draws path-based arrows, bypassing the font system.
- *   This is required because the AUv3 sandboxed XPC process on iOS cannot
- *   load non-default fonts; JUCE's built-in Bitstream Vera font covers only
- *   basic Latin and lacks arrow or music note glyphs.
+ * - The direction control is a SegmentedControl (3 segments: Fwd/Rev/P-P).
+ *   A SegmentPainter lambda draws proper stem+arrowhead arrows as juce::Path
+ *   objects, with no font dependency — safe in the AUv3 sandboxed XPC process.
+ * - Message-type buttons (CC/Aft/PB/Note) use a minimal SymbolLF subclass
+ *   that renders plain centred text at a fixed 12 pt size.
  * - The Speed slider attachment is swapped at runtime between "playbackSpeed"
  *   and "syncBeats" when sync mode is toggled, so no extra slider is needed.
  * - The "?" button opens a full-editor help overlay (HelpOverlay) since
@@ -30,6 +30,7 @@
 
 #include <juce_audio_utils/juce_audio_utils.h>
 #include "PluginProcessor.h"
+#include "SegmentedControl.h"
 
 // Colour palette struct — defined in PluginEditor.cpp.
 // Forward-declared here so CurveDisplay can hold a pointer without
@@ -129,15 +130,15 @@ public:
     void resized ()                override;
 
 private:
-    // ── Custom LookAndFeel for direction buttons ──────────────────────────────
+    // ── Custom LookAndFeel for message-type buttons ───────────────────────────
     //
-    // Draws filled-triangle arrows as juce::Path objects so no Unicode or
-    // font-coverage dependency is introduced.  The button text string is used
-    // as an identifier:
-    //   "Fwd" → right-pointing triangle + "Fwd" label
-    //   "Rev" → left-pointing triangle  + "Rev" label
-    //   "P-P" → outward-facing pair of triangles + "P-P" label
-    //   anything else → plain centred text (CC, Aft, PB, Note, Y-, Y+, …)
+    // Previously also handled direction buttons ("Fwd"/"Rev"/"P-P"), which have
+    // been replaced by a SegmentedControl with a custom SegmentPainter that draws
+    // proper stem+arrowhead arrows without any font dependency.
+    //
+    // Retained here for msgTypeBtns ("CC", "Aft", "PB", "Note").  The override
+    // draws plain centred text for all unrecognised labels.  The reduced() call
+    // gives a small inset margin so text doesn't touch the button edge.
     struct SymbolLF : public juce::LookAndFeel_V4
     {
         void drawButtonText (juce::Graphics& g, juce::TextButton& btn,
@@ -148,63 +149,12 @@ private:
             const auto text = btn.getButtonText();
 
             g.setColour (col);
-
-            const float h  = b.getHeight() * 0.50f;   // arrow height
-            const float w  = h * 0.65f;               // arrow depth
-            const float cy = b.getCentreY();
-
-            // Filled triangle pointing right (tip at tipX) or left.
-            auto fillTri = [&] (float tipX, bool pointRight)
-            {
-                juce::Path p;
-                if (pointRight)
-                    p.addTriangle (tipX,     cy,
-                                   tipX - w, cy - h / 2.0f,
-                                   tipX - w, cy + h / 2.0f);
-                else
-                    p.addTriangle (tipX,     cy,
-                                   tipX + w, cy - h / 2.0f,
-                                   tipX + w, cy + h / 2.0f);
-                g.fillPath (p);
-            };
-
             g.setFont (juce::Font (12.0f));
-
-            if (text == "Fwd")
-            {
-                // Right-pointing arrow + label
-                fillTri (b.getX() + w + 4.0f, true);
-                g.drawFittedText ("Fwd",
-                                  b.withLeft (b.getX() + w + 10.0f).toNearestInt(),
-                                  juce::Justification::centredLeft, 1);
-            }
-            else if (text == "Rev")
-            {
-                // Left-pointing arrow + label
-                fillTri (b.getX() + 4.0f, false);
-                g.drawFittedText ("Rev",
-                                  b.withLeft (b.getX() + w + 10.0f).toNearestInt(),
-                                  juce::Justification::centredLeft, 1);
-            }
-            else if (text == "P-P")
-            {
-                // Outward-facing pair of arrows + centred label
-                fillTri (b.getX()     + 4.0f, false);   // left arrow
-                fillTri (b.getRight() - 4.0f, true);    // right arrow
-                const auto mid = b.withLeft  (b.getX()     + w + 8.0f)
-                                  .withRight (b.getRight() - w - 8.0f);
-                g.drawFittedText ("P-P", mid.toNearestInt(),
-                                  juce::Justification::centred, 1);
-            }
-            else
-            {
-                // All other buttons: centred plain text
-                g.drawFittedText (text, b.toNearestInt(),
-                                  juce::Justification::centred, 1);
-            }
+            g.drawFittedText (text, b.toNearestInt(),
+                              juce::Justification::centred, 1);
         }
     };
-    SymbolLF _symbolLF;   ///< Shared by all direction + message-type buttons
+    SymbolLF _symbolLF;   ///< Used by msgTypeBtns (CC / Aft / PB / Note)
 
     // ── Core references ───────────────────────────────────────────────────────
     DrawnCurveProcessor& proc;   ///< Named 'proc' to avoid shadowing AudioProcessorEditor::processor
@@ -218,9 +168,11 @@ private:
     juce::TextButton syncButton  { "Sync"  };   ///< Toggles host transport + tempo sync
     juce::TextButton helpButton  { "?"     };   ///< Shows/hides the help overlay
 
-    // ── Row 2: playback direction (radio) + grid tick controls ────────────────
-    /// Radio group: [0]=Forward  [1]=Reverse  [2]=Ping-Pong
-    std::array<juce::TextButton, 3> dirBtns;
+    // ── Row 2: playback direction + grid tick controls ────────────────────────
+    /// Unified 3-segment control — Forward / Reverse / Ping-Pong.
+    /// Replaces the former TextButton radio group.  Arrow glyphs are drawn by
+    /// a SegmentPainter (stem + arrowhead paths) — no font required.
+    SegmentedControl dirControl;
 
     /// Grid division controls — adjust how many lines appear on each axis.
     juce::TextButton tickYMinusBtn { "Y-" };
@@ -288,9 +240,6 @@ private:
 
     /// Swaps the ccSlider attachment and label between CC# and Velocity.
     void updateCCSlot();
-
-    /// Highlights the active direction button.
-    void updateDirButtons();
 
     /// Show/hide scale rows and trigger resized().  Call when messageType or scaleMode changes.
     void updateScaleVisibility();
