@@ -9,6 +9,29 @@ it is merged.
 
 ## Core Principles
 
+### 0. Playfulness is the Product
+
+> **This is the foundational design principle. All others serve it.**
+
+DrawnCurve's core value is already present: drawing a curve and hearing something
+change is *immediately* playful. Low cognitive load, no setup required, results
+in seconds. Every design decision should be filtered through the question:
+*does this increase or decrease the playfulness of the interaction?*
+
+Implications:
+- The canvas is large and inviting — never compress it for a control panel
+- Drawing must require zero configuration to produce audible results
+- Controls that appear only when needed don't interrupt the flow; those that are
+  always visible compete for attention with the drawing surface
+- Feedback is immediate and visible (banding, note names, playhead) — not a
+  number in a box somewhere
+- "Casual, unthinking, low cognitive load" is a feature, not an accident
+
+#Playfulness. If it makes users smile, it ships. If it makes them think, it
+needs justification.
+
+---
+
 ### 1. Simple Mode Must Stay Safe
 
 Every new feature must have a sensible default that works silently in Simple
@@ -76,14 +99,24 @@ if they changed something or if the plugin is broken.
 ### 6. Progressive Disclosure Over Mode Toggles
 
 Prefer revealing complexity through expandable sections rather than requiring
-the user to switch modes to access a control.
+the user to switch modes to access a control. The ideal form is *contextual*
+disclosure: the control appears because the user's current action makes it
+relevant (example: scale row appears when Note mode is selected; custom mask
+row appears when Custom scale is selected).
 
-**Preferred pattern**: A disclosure triangle or "more options" row that expands
-within the current mode.
+Mode tiers (Simple/Standard/Expert) are the *fallback* for controls that have
+no obvious contextual trigger. Before assigning a feature to a tier, ask:
+"Can this appear automatically when a related control is active instead?"
+
+**Preferred pattern**: Contextual appearance first; then disclosure sections;
+then tier gating as a last resort.
 
 **Avoid**: Features that only exist in Expert mode and are completely invisible
-in Standard. If a Standard-mode user would reasonably want the feature, it
-should be accessible without a mode switch.
+in Standard. Custom scales are a good example — they are intriguing to
+moderately-engaged users, not just "experts". A user's curiosity about a feature
+does not require them to be an expert.
+
+Everything in this document is a hypothesis until user-tested. #TETO.
 
 ---
 
@@ -181,16 +214,69 @@ Run this checklist for every PR that adds a user-visible feature.
 
 ## Specific Guidance for Known Upcoming Features
 
+### Multi-stroke (gaps within a single curve)
+
+- **Definition**: The user lifts their finger/Pencil mid-draw and places it
+  again further along the X-axis. The result is a single logical curve with
+  one or more empty segments — think `V_______m____/` rather than a continuous line.
+- **Input model (two candidates; #ToBeTested)**:
+  1. Tap-and-hold a "multi-stroke" button in the toolbar while drawing each segment
+  2. Hold a software/hardware key modifier during each stroke
+- **Empty segment behaviour**: sections where no stroke was drawn produce no MIDI output
+  (silence/hold-last-value? → #ToBeTested) for that duration
+- **Mode**: Standard and Expert; Simple mode draws only continuous curves
+- **Implementation note**: requires `LaneSnapshot` to store a segment list rather than
+  a single 256-point table. Non-trivial architectural change; plan before implementation.
+
+---
+
 ### Multi-lane (N curves → N targets)
 
-- Belongs in **Expert and Standard** modes only
-- Simple mode: single curve only; lane selector hidden
-- Each lane is an independent LaneSnapshot with its own output mode, CC#, channel
-- UI: a horizontal lane strip above the canvas (compact, coloured tabs)
-- Canvas: shows the active lane's curve; inactive lanes shown as ghost traces
-- Real-time: engine processes all active lanes per block — each gets its own
-  callback or a vector of events in one call
-- Preset: lane count + all lane snapshots serialised; default is 1 lane (backwards compatible)
+- **Definition**: Multiple independent curves displayed in parallel within the same
+  canvas area, each routed to a different MIDI target (different CC, channel, or
+  message type).
+- **Belongs in**: **Expert and Standard** modes only.
+  Simple mode: single curve only; lane selector hidden.
+- **Visual differentiation**:
+  - Primary: colour-coded (each lane gets a distinct accent colour)
+  - Secondary (accessibility): subtle texture or dash pattern on inactive lanes
+    so colour is not the only differentiator (#Accessibility)
+- **UI**: a horizontal lane strip above (or left of) the canvas — compact coloured
+  tabs or circles. Active lane's curve is full-opacity; inactive lanes are ghost traces.
+- **Each lane is independent**: own output mode, CC#, channel, scale config, range, direction.
+- **Real-time**: engine processes all active lanes per block.
+- **Preset**: lane count + all lane snapshots serialised; default is 1 lane (backwards compatible).
+- **Major change**: requires significant redesign of both `LaneSnapshot`, `GestureEngine`,
+  and the editor layout. Do not begin until multi-stroke is complete or scoped out.
+
+---
+
+### Incoming MIDI display (piano-roll background)
+
+- **Definition**: Note data received by the plugin is drawn in the background of the
+  canvas as a real-time "ghost" layer — note numbers on the Y-axis, velocity as
+  column height (like a standard piano-roll velocity lane), time flowing left to right.
+- **Two interaction modes**:
+  1. *Observation*: incoming notes appear passively, helping the user understand
+     what pitch range they are working with while drawing a curve over them.
+  2. *Redraw loop*: if the input is also the previous output (feedback/loop), the
+     user is drawing a new version of the same gesture — #Playfulness through
+     visible interplay.
+- **Mode**: Expert and Standard (Standard: simplified display; Expert: full velocity).
+- **Real-time safety**: incoming MIDI is available in `processBlock`; write to a
+  ring buffer for the UI thread to read — no direct UI calls from audio thread.
+- **Y-axis alignment**: note numbers in the background should align with the note-name
+  labels on the Y-axis when Note mode is active.
+
+---
+
+### Multi-lane (N curves → N targets)
+
+  *(moved here from above — see separate entry)*
+
+---
+
+### Named CC labels (user-defined)
 
 ### Named CC labels (user-defined)
 
@@ -235,3 +321,7 @@ Run this checklist for every PR that adds a user-visible feature.
 | Compressing the canvas for new controls | Violates "canvas is the product" | Use disclosure section instead |
 | Adding controls with no visible feedback | User doesn't know if it works | Always add a state indicator |
 | Requiring configuration before first use | Fails Persona D's zero-config need | Set safe defaults; config is optional |
+| Full-screen help overlay that hides the UI | "Push revelation" trap: covers context, gets dismissed | Prefer contextual tooltips (long-press) or a non-blocking sidebar; keep the UI visible behind help |
+| Abbreviations as primary label | Violates Nielsen H2 (match real world); T6 task reveals "Aft" is opaque | Full names in Simple; abbreviations only where space forces it, always with tooltip |
+| Tier-gating features that "feel curious" | Curiosity is not expertise; scale customization, multi-stroke, incoming MIDI should be accessible below Expert | Use contextual disclosure; tier gates are a last resort |
+| Piano-key idiom violation for pitch classes | Users have an established mental model from decades of scale-quantizer UI | Follow the two-row piano layout (5 black / 7 white) for pitch-class selectors; #SolvedProblem |

@@ -1,5 +1,24 @@
 # DrawnCurve — Interface Modes
 
+## Design Premise: Continuous Disclosure
+
+> **Note (2026-03): The tier model below describes aspiration, not a lock.**
+> Tier assignments are initial hypotheses to be validated with real users. #TETO.
+>
+> The primary mechanism should always be *contextual* disclosure: controls appear
+> when the user's current action makes them relevant, not because they switched a
+> mode level. The scale quantization feature already demonstrates this correctly —
+> the scale row appears when Note mode is selected; the custom mask row appears when
+> Custom is selected. This is *better* than a mode switch.
+>
+> Rule of thumb: before assigning a feature to a specific tier, ask whether it can
+> instead appear contextually when a related control is active. Tiers are a fallback
+> for controls that have no obvious contextual trigger.
+>
+> The tier labels describe the **floor** (earliest mode where the control is visible),
+> not a hard lock. A Standard-mode user should be able to expand into features
+> typically associated with Expert if the context makes it obvious.
+
 Three progressive disclosure tiers map to the five user personas.
 The goal is a single codebase where `setMode()` shows/hides elements
 and resizes the canvas — no separate UIs, no duplication.
