@@ -252,3 +252,46 @@ evaluators familiar with Nielsen's 10 heuristics.
 | C (Producer) | ≥ 72 | ≤ 45s | ≥ 90% |
 | B (Performer) | ≥ 80 | ≤ 30s | ≥ 95% |
 | A (Experimenter) | ≥ 85 | ≤ 20s | ≥ 98% |
+
+---
+
+## UI Pattern Benchmarking — "Solved Problems"
+
+Before redesigning any control, check whether there is an established idiom
+in the music-software space. Following the idiom reduces learning time.
+Deviating requires strong justification.
+
+### Sources to trace
+
+| Source | Focus | What to look for |
+|--------|-------|-----------------|
+| [Resonant Design](https://resonant.design) | Plugin UX agency; worked on Dubler 2, Arcade 2, Straylight, Opsix, Rosa, BassySynth | Scale rows, keyboard layouts, MIDI routing UI, direction controls |
+| [Scaler 2/3](https://scalermusic.com) | Scale + chord intelligence plugin (VST/AU/AAX) | Scale/key selector, chord mode, piano-roll integration |
+| [ScaleBud AUv3](https://keybudapp.com/scalebud) | iOS scale quantizer; AUv3 | Scale picker UI, pitch-class keyboard layout on small screen |
+| Logic Pro scale quantizer | Built-in; widest install base | Piano keyboard row for scale selection |
+| Intellijel Scales (Eurorack) | Hardware scale quantizer | LED button layout (5 banks × 7 scales; black/white key metaphor) |
+| AutoTonic | MIDI scale transposer | White key / black key functional mapping |
+
+### Known solved patterns
+
+| Control | Established pattern | Notes / Caveats |
+|---------|--------------------|-|
+| Scale/pitch-class picker | Two rows: 5 "black" buttons staggered above 7 "white" buttons (piano keyboard idiom) | Acknowledged as piano-centric (#PianoCentric) but is the dominant expectation |
+| Root note selection | Same piano-row layout, single selection | Same idiom as scale picker |
+| Output message type | Segmented control (radio group) with full names or clear icons | "Aft" is a known comprehension failure (see T6 task) |
+| Playback direction | 3-state segmented control; arrow icons are understood; Fwd/Rev/Loop | A single rotary with 3 detents is also valid (Eurorack convention) — #ToBeTested |
+| Loop/play transport | Large play/pause; smaller stop; clear visual state | Standard across all music apps |
+| MIDI channel | Numeric stepper or small slider (1–16); 1 as default | Channel is rarely changed; hide in Simple mode |
+| Smoothing / slew | Horizontal slider labelled with low=sharp, high=smooth | Some plugins use a "glide" icon |
+| Quick reference / help | Long-press on a control → tooltip (NN/g "pull revelation") is preferred over a full-screen overlay | Full-screen overlay covers context; NN/g heuristics show they are often dismissed |
+| Abbreviations | Full names in Simple; abbreviations in Standard/Expert with tooltip | Nielsen H2: match between system and real world |
+
+### Open investigations (assign and close before UI redesign)
+
+- [ ] Trace Resonant Design → Arcade 2 Note Kits: how do they lay out the pitch-class keyboard?
+- [ ] Trace Resonant Design → Straylight: any scale/mode selector present?
+- [ ] Trace Opsix (Korg FM synth): Expert-level scale UI pattern
+- [ ] Investigate: how do Ableton Live/Logic handle loop direction in a small control space?
+- [ ] Investigate: iOS SF Symbols — which symbol best represents "aftertouch / channel pressure"?
+- [ ] Validate: does the direction arrow icon set (filled triangles) test well for "Fwd/Rev/P-P"
+      or does something else test better? (T4 task)

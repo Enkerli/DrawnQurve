@@ -15,38 +15,74 @@
  * GestureCaptureSession; bridges between the JUCE host API, the APVTS
  * parameter system, and the real-time engine.
  *
+ * Multi-lane architecture
+ * ───────────────────────
+ * Up to kMaxLanes = 3 lanes play simultaneously.  Each lane has its own:
+ *   - Curve snapshot (recorded gesture)
+ *   - MIDI routing (message type, CC#, channel)
+ *   - Shaping (smooth, min/max output range)
+ *   - Scale (mode, root, custom mask) — used in Note mode
+ *   - Enabled/mute state
+ *
+ * Shared across lanes: playback direction, speed/sync, grid density.
+ *
+ * Parameter naming convention
+ * ───────────────────────────
+ * Per-lane parameters use prefix "lN_" where N is the zero-based lane index:
+ *   l0_msgType, l0_ccNumber, l0_smooth, …
+ *   l1_msgType, l1_ccNumber, l1_smooth, …
+ *   l2_msgType, …
+ *
+ * Use the static helper laneParam(lane, base) to build parameter IDs.
+ *
  * Threading model
  * ───────────────
  * Three threads interact with the processor:
- *
- *   1. UI / message thread  — editor calls beginCapture / addCapturePoint /
- *      finalizeCapture / setPlaying / clearSnapshot.
- *
+ *   1. UI / message thread  — editor calls begin/addCapturePoint/finalizeCapture
+ *      / setPlaying / clearSnapshot(lane) / clearAllSnapshots.
  *   2. Audio thread  — host calls processBlock() each buffer period.
- *      Reads APVTS atomics, advances GestureEngine, emits MIDI.
+ *   3. HiRes timer thread  — fallback when audio graph is not connected.
  *
- *   3. HiRes timer thread  — fallback when the host isn't calling processBlock
- *      (e.g. app in background, or no audio graph connected in Loopy Pro).
- *      Advances the engine and queues MIDI into _pendingMidi; the next
- *      processBlock call flushes it.
- *
- * _engineLock (SpinLock) ensures only one of {audio, timer} drives the engine
- * at any given moment.  The audio thread wins whenever it is active.
- *
- * Host-sync mode
- * ──────────────
- * When syncEnabled is true, processBlock reads the host play head:
- *   - Rising  edge (stop→play): reset engine phase, start playback.
- *   - Falling edge (play→stop): stop playback.
- *   - BPM available: compute effectiveSpeed so the loop duration matches
- *     syncBeats beats at the current tempo.
- *
- * State persistence
- * ─────────────────
- * APVTS parameters are saved/restored automatically via getStateInformation /
- * setStateInformation.  The 256-sample curve table and LaneSnapshot fields
- * are serialised as additional ValueTree properties (base-64 encoded binary).
+ * _engineLock (SpinLock) ensures only one of {audio, timer} drives the engine.
  */
+
+// ---------------------------------------------------------------------------
+/// Build a per-lane APVTS parameter ID.  Examples:
+///   laneParam(0, "ccNumber") → "l0_ccNumber"
+///   laneParam(2, "smooth")   → "l2_smooth"
+inline juce::String laneParam (int lane, const juce::String& base)
+{
+    return "l" + juce::String (lane) + "_" + base;
+}
+
+// ---------------------------------------------------------------------------
+// ParamID — stable string IDs for all APVTS parameters.
+// Shared params use these directly; per-lane params via laneParam(lane, base).
+// These must never change once shipped — they are part of the preset ABI.
+// ---------------------------------------------------------------------------
+namespace ParamID
+{
+    // Shared / global
+    inline const juce::String playbackSpeed     { "playbackSpeed"     };
+    inline const juce::String syncEnabled       { "syncEnabled"       };
+    inline const juce::String syncBeats         { "syncBeats"         };
+    inline const juce::String playbackDirection { "playbackDirection" };
+
+    // Per-lane bases — always used via laneParam(lane, base)
+    inline const juce::String msgType      { "msgType"      };
+    inline const juce::String ccNumber     { "ccNumber"     };
+    inline const juce::String midiChannel  { "midiChannel"  };
+    inline const juce::String smoothing    { "smoothing"    };
+    inline const juce::String minOutput    { "minOutput"    };
+    inline const juce::String maxOutput    { "maxOutput"    };
+    inline const juce::String noteVelocity { "noteVelocity" };
+    inline const juce::String scaleMode    { "scaleMode"    };
+    inline const juce::String scaleRoot    { "scaleRoot"    };
+    inline const juce::String scaleMask    { "scaleMask"    };
+    inline const juce::String laneEnabled  { "enabled"      };
+}
+
+// ---------------------------------------------------------------------------
 class DrawnCurveProcessor : public juce::AudioProcessor,
                              private juce::HighResolutionTimer
 {
@@ -57,9 +93,8 @@ public:
     // ── AudioProcessor identity ───────────────────────────────────────────────
     const juce::String getName() const override { return "DrawnCurve"; }
 
-    // isMidiEffect() = true  → JUCE registers the AUv3 as type 'aumi' (MIDI processor).
-    // producesMidi() = true  → JUCE wires up midiOutputEventBlock on iOS.
-    bool acceptsMidi()  const override { return false; }
+    // acceptsMidi = true so incoming MIDI CC messages can trigger Teach/Learn.
+    bool acceptsMidi()  const override { return true;  }
     bool producesMidi() const override { return true;  }
     bool isMidiEffect() const override { return true;  }
 
@@ -77,7 +112,7 @@ public:
     void releaseResources()                                      override;
     void processBlock   (juce::AudioBuffer<float>&, juce::MidiBuffer&) override;
 
-    // ── Editor ────────────────────────────────────────────────────────────────
+    // ── Editor ───────────────────────────────────────────────────────────────
     bool hasEditor() const override { return true; }
     juce::AudioProcessorEditor* createEditor() override;
 
@@ -93,78 +128,89 @@ public:
     static juce::AudioProcessorValueTreeState::ParameterLayout createParams();
 
     // ── Gesture capture API (UI thread) ──────────────────────────────────────
-    /// Signal the start of a drawing gesture.  Clears previous capture data.
-    void beginCapture();
+    /// Signal the start of a drawing gesture on the given lane.
+    void beginCapture (int lane = 0);
 
     /// Append a normalised point to the ongoing gesture.
-    /// @param t         Seconds since beginCapture() (must be monotonically increasing).
-    /// @param x         Horizontal position in [0, 1] (time axis; currently unused in baking).
-    /// @param y         Vertical position in [0, 1] (UIKit: 0 = top, 1 = bottom).
-    /// @param pressure  Touch pressure in [0, 1]; defaults to 1.0 if unavailable.
     void addCapturePoint (double t, float x, float y, float pressure = 1.0f);
 
     /// Finalise the capture: bake current APVTS param values into a LaneSnapshot
-    /// and load it into the engine.  No-op if fewer than 2 points were captured.
-    void finalizeCapture();
+    /// and load it into the engine for the given lane.
+    void finalizeCapture (int lane = 0);
 
-    /// Clear the current curve and stop playback.
-    void clearSnapshot();
+    /// Clear the curve for one lane and stop it from playing.
+    void clearSnapshot (int lane);
+
+    /// Clear all lane curves and stop playback entirely.
+    void clearAllSnapshots();
 
     // ── Playback control (UI thread) ─────────────────────────────────────────
     void  setPlaying (bool on);
     bool  isPlaying()  const noexcept;
 
     // ── Query API (any thread) ────────────────────────────────────────────────
-    bool  hasCurve()     const noexcept;  ///< true if a valid snapshot is loaded
-    float currentPhase() const noexcept;  ///< Approximate playhead phase [0, 1] — for UI display
+    /// true if the given lane has a valid recorded curve.
+    bool  hasCurve (int lane = 0)     const noexcept;
+    /// true if ANY lane has a valid curve (used by the fallback timer).
+    bool  anyLaneHasCurve()           const noexcept;
 
-    /// Copy of the 256-sample lookup table (or zero-filled if no curve loaded).
-    std::array<float, 256> getCurveTable() const noexcept;
+    /// Approximate playhead phase [0, 1] — shared across all lanes.
+    float currentPhase() const noexcept;
 
-    /// Original recorded gesture duration (0 if no curve).
-    float curveDuration() const noexcept;
+    /// Copy of the 256-sample lookup table for the given lane (zero-filled if empty).
+    std::array<float, 256> getCurveTable (int lane = 0) const noexcept;
+
+    /// Original recorded gesture duration for the given lane (0 if no curve).
+    float curveDuration (int lane = 0) const noexcept;
 
     /// Last computed speed ratio (manual or host-synced).
-    /// Used by the UI's duration overlay (no audio-thread synchronisation needed).
     float getEffectiveSpeedRatio() const noexcept
     {
         return _effectiveSpeedRatio.load (std::memory_order_relaxed);
     }
 
+    /// Build a ScaleConfig from the current APVTS state for the given lane.
+    ScaleConfig getScaleConfig (int lane = 0) const noexcept;
+
+    /// Re-read scale params for one lane and push to the engine.
+    void updateEngineScale (int lane);
+
+    /// Re-read scale params for ALL lanes and push to the engine.
+    void updateAllLaneScales();
+
+    // ── Teach / Learn (CC target lanes only) ─────────────────────────────────
+    /// Enter learn mode for the given lane.  Next incoming CC message sets its CC#.
+    void beginTeach  (int lane);
+    /// Cancel learn mode (no-op if not active).
+    void cancelTeach ();
+    /// true if the given lane is currently waiting for a CC message.
+    bool isTeachPending (int lane) const noexcept;
+
 private:
     // ── Engine ────────────────────────────────────────────────────────────────
     GestureEngine         _engine;
     GestureCaptureSession _capture;
-    const LaneSnapshot*   _currentSnap { nullptr };   ///< UI-thread ownership; checked for hasCurve()
+
+    /// UI-thread ownership of per-lane snapshots (checked for hasCurve).
+    std::array<const LaneSnapshot*, kMaxLanes> _laneSnaps;
+
+    // ── Teach / Learn ─────────────────────────────────────────────────────────
+    /// Lane index currently waiting for a CC learn message (-1 = none).
+    std::atomic<int> _teachPendingLane { -1 };
 
     // ── Fallback HiRes timer ──────────────────────────────────────────────────
-    // When no audio graph is connected (e.g. Loopy Pro MIDI-only routing,
-    // or the app is backgrounded), processBlock is never called.  This timer
-    // fires every ~10 ms to keep the engine advancing and the UI animated.
-    //
-    // MIDI generated by the timer is accumulated in _pendingMidi and flushed
-    // the next time the audio thread does call processBlock.
-    //
-    // Guard: the audio thread is considered "active" if it has called
-    // processBlock within the last kAudioThreadTimeoutMs milliseconds.
-    // The timer checks this before touching the engine.
+    static constexpr int      kTimerIntervalMs      = 10;
+    static constexpr int64_t  kAudioThreadTimeoutMs = 50;
 
-    static constexpr int      kTimerIntervalMs      = 10;   ///< Timer period (ms)
-    static constexpr int64_t  kAudioThreadTimeoutMs = 50;   ///< Audio thread considered idle after this
-
-    juce::SpinLock       _engineLock;         ///< Ensures only one thread drives the engine
-    juce::MidiBuffer     _pendingMidi;        ///< Timer-generated events awaiting flush by audio thread
+    juce::SpinLock       _engineLock;
+    juce::MidiBuffer     _pendingMidi;
     juce::SpinLock       _pendingMidiLock;
-    std::atomic<int64_t> _lastProcessBlockMs  { 0 };       ///< Timestamp of last audio-thread call
-    double               _timerSampleRate     { 44100.0 }; ///< Sample rate cached from prepareToPlay
+    std::atomic<int64_t> _lastProcessBlockMs  { 0 };
+    double               _timerSampleRate     { 44100.0 };
 
     // ── Host-sync atomics ─────────────────────────────────────────────────────
-    /// Previous host transport state — used to edge-detect play/stop transitions.
     std::atomic<bool>  _hostWasPlaying      { false };
-
-    /// Speed ratio computed in processBlock; cached here so hiResTimerCallback
-    /// can use the same value without re-reading APVTS.
-    std::atomic<float> _effectiveSpeedRatio { 1.0f };
+    std::atomic<float> _effectiveSpeedRatio { 1.0f  };
 
     void hiResTimerCallback() override;
 

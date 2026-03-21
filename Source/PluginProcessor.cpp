@@ -8,31 +8,11 @@
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
 
-// ---------------------------------------------------------------------------
-// ParamID — stable string identifiers for all APVTS parameters.
-// These are the keys written into the preset XML; changing them will break
-// existing presets, so treat them as part of the ABI.
-// ---------------------------------------------------------------------------
-namespace ParamID
-{
-    static const juce::String ccNumber          { "ccNumber"          };
-    static const juce::String midiChannel       { "midiChannel"       };
-    static const juce::String smoothing         { "smoothing"         };
-    static const juce::String minOutput         { "minOutput"         };
-    static const juce::String maxOutput         { "maxOutput"         };
-    static const juce::String messageType       { "messageType"       };
-    static const juce::String playbackSpeed     { "playbackSpeed"     };
-    static const juce::String syncEnabled       { "syncEnabled"       };
-    static const juce::String syncBeats         { "syncBeats"         };
-    static const juce::String playbackDirection { "playbackDirection" };
-    static const juce::String noteVelocity      { "noteVelocity"      };
-}
-
-// Helper: channel pressure is a 2-byte MIDI message; everything else is 3-byte.
+// Helper: create a 2-byte MIDI message for channel pressure; 3-byte for everything else.
 static juce::MidiMessage makeMidiMessage (uint8_t status, uint8_t d1, uint8_t d2)
 {
     if ((status & 0xF0u) == 0xD0u)
-        return juce::MidiMessage (status, d1);          // channel pressure
+        return juce::MidiMessage (status, d1);
     return juce::MidiMessage (status, d1, d2);
 }
 
@@ -41,59 +21,91 @@ juce::AudioProcessorValueTreeState::ParameterLayout DrawnCurveProcessor::createP
 {
     juce::AudioProcessorValueTreeState::ParameterLayout layout;
 
-    layout.add (std::make_unique<juce::AudioParameterInt>(
-        juce::ParameterID { ParamID::ccNumber, 1 }, "CC Number", 0, 127, 74));
-
-    layout.add (std::make_unique<juce::AudioParameterInt>(
-        juce::ParameterID { ParamID::midiChannel, 1 }, "MIDI Channel", 1, 16, 1));
-
-    layout.add (std::make_unique<juce::AudioParameterFloat>(
-        juce::ParameterID { ParamID::smoothing, 1 }, "Smoothing",
-        juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.08f));
-
-    layout.add (std::make_unique<juce::AudioParameterFloat>(
-        juce::ParameterID { ParamID::minOutput, 1 }, "Min Output",
-        juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f));
-
-    layout.add (std::make_unique<juce::AudioParameterFloat>(
-        juce::ParameterID { ParamID::maxOutput, 1 }, "Max Output",
-        juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f), 1.0f));
-
-    layout.add (std::make_unique<juce::AudioParameterChoice>(
-        juce::ParameterID { ParamID::messageType, 1 }, "Message Type",
-        juce::StringArray { "CC", "Channel Pressure", "Pitch Bend", "Note" }, 0));
-
-    // Note velocity (1-127), used only when messageType == Note.
-    layout.add (std::make_unique<juce::AudioParameterInt>(
-        juce::ParameterID { ParamID::noteVelocity, 1 }, "Note Velocity", 1, 127, 100));
-
-    // Speed: 0.25× to 4×, log-centred at 1× (skew=0.5 → midpoint = sqrt(0.25*4) = 1.0)
+    // ── Shared / global parameters ────────────────────────────────────────────
     layout.add (std::make_unique<juce::AudioParameterFloat>(
         juce::ParameterID { ParamID::playbackSpeed, 1 }, "Playback Speed",
         juce::NormalisableRange<float> (0.25f, 4.0f, 0.01f, 0.5f), 1.0f));
 
-    // Sync to host transport + tempo.
     layout.add (std::make_unique<juce::AudioParameterBool>(
         juce::ParameterID { ParamID::syncEnabled, 1 }, "Sync to Host", false));
 
-    // Loop length in beats (used when sync is enabled).
     layout.add (std::make_unique<juce::AudioParameterFloat>(
         juce::ParameterID { ParamID::syncBeats, 1 }, "Sync Beats",
         juce::NormalisableRange<float> (1.0f, 32.0f, 1.0f), 4.0f));
 
-    // Playback direction: Forward / Reverse / Ping-Pong.
     layout.add (std::make_unique<juce::AudioParameterChoice>(
         juce::ParameterID { ParamID::playbackDirection, 1 }, "Playback Direction",
         juce::StringArray { "Forward", "Reverse", "Ping-Pong" }, 0));
+
+    // ── Per-lane parameters ───────────────────────────────────────────────────
+    static const juce::StringArray kMsgTypeChoices { "CC", "Channel Pressure", "Pitch Bend", "Note" };
+
+    // Lane-specific defaults to give each lane a distinct starting CC.
+    static const int kDefaultCC[kMaxLanes]  = { 74, 1, 11 };
+    static const int kDefaultCh[kMaxLanes]  = { 1, 1, 1   };
+
+    for (int L = 0; L < kMaxLanes; ++L)
+    {
+        const juce::String lname = "L" + juce::String (L + 1) + " ";
+
+        layout.add (std::make_unique<juce::AudioParameterBool>(
+            juce::ParameterID { laneParam (L, ParamID::laneEnabled), 1 },
+            lname + "Enabled", true));
+
+        layout.add (std::make_unique<juce::AudioParameterChoice>(
+            juce::ParameterID { laneParam (L, ParamID::msgType), 1 },
+            lname + "Message Type", kMsgTypeChoices, 0));
+
+        layout.add (std::make_unique<juce::AudioParameterInt>(
+            juce::ParameterID { laneParam (L, ParamID::ccNumber), 1 },
+            lname + "CC Number", 0, 127, kDefaultCC[L]));
+
+        layout.add (std::make_unique<juce::AudioParameterInt>(
+            juce::ParameterID { laneParam (L, ParamID::midiChannel), 1 },
+            lname + "MIDI Channel", 1, 16, kDefaultCh[L]));
+
+        layout.add (std::make_unique<juce::AudioParameterFloat>(
+            juce::ParameterID { laneParam (L, ParamID::smoothing), 1 },
+            lname + "Smoothing",
+            juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.08f));
+
+        layout.add (std::make_unique<juce::AudioParameterFloat>(
+            juce::ParameterID { laneParam (L, ParamID::minOutput), 1 },
+            lname + "Min Output",
+            juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f));
+
+        layout.add (std::make_unique<juce::AudioParameterFloat>(
+            juce::ParameterID { laneParam (L, ParamID::maxOutput), 1 },
+            lname + "Max Output",
+            juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f), 1.0f));
+
+        layout.add (std::make_unique<juce::AudioParameterInt>(
+            juce::ParameterID { laneParam (L, ParamID::noteVelocity), 1 },
+            lname + "Note Velocity", 1, 127, 100));
+
+        layout.add (std::make_unique<juce::AudioParameterInt>(
+            juce::ParameterID { laneParam (L, ParamID::scaleMode), 1 },
+            lname + "Scale Mode", 0, 7, 0));
+
+        layout.add (std::make_unique<juce::AudioParameterInt>(
+            juce::ParameterID { laneParam (L, ParamID::scaleRoot), 1 },
+            lname + "Scale Root", 0, 11, 0));
+
+        layout.add (std::make_unique<juce::AudioParameterInt>(
+            juce::ParameterID { laneParam (L, ParamID::scaleMask), 1 },
+            lname + "Scale Custom Mask", 0, 4095, 4095));
+    }
 
     return layout;
 }
 
 //==============================================================================
 DrawnCurveProcessor::DrawnCurveProcessor()
-    : AudioProcessor (BusesProperties()),   // no audio I/O — pure MIDI effect
+    : AudioProcessor (BusesProperties()),
       apvts (*this, nullptr, "DrawnCurve", createParams())
 {
+    _laneSnaps.fill (nullptr);
+    updateAllLaneScales();
 }
 
 DrawnCurveProcessor::~DrawnCurveProcessor()
@@ -121,11 +133,35 @@ void DrawnCurveProcessor::processBlock (juce::AudioBuffer<float>& buffer,
     juce::ScopedNoDenormals noDenormals;
     juce::ignoreUnused (buffer);
 
-    _lastProcessBlockMs.store (juce::Time::currentTimeMillis(),
-                                std::memory_order_relaxed);
+    _lastProcessBlockMs.store (juce::Time::currentTimeMillis(), std::memory_order_relaxed);
+
+    // ── Teach / Learn: scan incoming MIDI for CC messages ────────────────────
+    {
+        const int pending = _teachPendingLane.load (std::memory_order_relaxed);
+        if (pending >= 0)
+        {
+            for (const auto meta : midiMessages)
+            {
+                const auto msg = meta.getMessage();
+                if (msg.isController())
+                {
+                    // Apply CC# to the pending lane's parameter.
+                    // Note: writing an APVTS parameter from the audio thread is technically
+                    // discouraged, but JUCE AudioParameterInt uses an atomic store internally
+                    // and this is widely practiced for learn workflows.
+                    const juce::String pid = laneParam (pending, ParamID::ccNumber);
+                    if (auto* p = dynamic_cast<juce::AudioParameterInt*> (apvts.getParameter (pid)))
+                        *p = msg.getControllerNumber();
+                    _teachPendingLane.store (-1, std::memory_order_relaxed);
+                    break;
+                }
+            }
+        }
+    }
+
     midiMessages.clear();
 
-    // Flush MIDI buffered by the fallback timer.
+    // ── Flush MIDI buffered by the fallback timer ─────────────────────────────
     {
         juce::SpinLock::ScopedLockType lock (_pendingMidiLock);
         if (! _pendingMidi.isEmpty())
@@ -145,40 +181,32 @@ void DrawnCurveProcessor::processBlock (juce::AudioBuffer<float>& buffer,
         {
             if (auto pos = ph->getPosition())
             {
-                // Transport sync: edge-detect host play / stop.
                 const bool hostNowPlaying = pos->getIsPlaying();
                 const bool wasPlaying     = _hostWasPlaying.exchange (hostNowPlaying,
                                                                        std::memory_order_acq_rel);
                 if (hostNowPlaying && ! wasPlaying)
                 {
-                    // Rising edge — reset phase to 0 and start.
                     juce::SpinLock::ScopedLockType lock (_engineLock);
                     _engine.reset();
                     _engine.setPlaying (true);
                 }
                 else if (! hostNowPlaying && wasPlaying)
                 {
-                    // Falling edge — stop.
                     _engine.setPlaying (false);
                 }
 
-                // Tempo sync: compute speed ratio from BPM and beat count.
                 if (auto bpmOpt = pos->getBpm())
                 {
                     const float bpm        = static_cast<float> (*bpmOpt);
                     const float syncBeats  = apvts.getRawParameterValue (ParamID::syncBeats)->load();
-                    const float recordedDur = curveDuration();
+                    const float recordedDur = curveDuration (0);  // use lane 0 as reference
                     if (bpm > 0.0f && syncBeats > 0.0f && recordedDur > 0.0f)
-                    {
-                        const float targetDur = syncBeats * 60.0f / bpm;
-                        effectiveSpeed = recordedDur / targetDur;
-                    }
+                        effectiveSpeed = recordedDur / (syncBeats * 60.0f / bpm);
                 }
             }
         }
     }
 
-    // Cache for fallback timer thread.
     _effectiveSpeedRatio.store (effectiveSpeed, std::memory_order_relaxed);
 
     // ── Advance engine on the audio thread ────────────────────────────────────
@@ -202,7 +230,7 @@ void DrawnCurveProcessor::processBlock (juce::AudioBuffer<float>& buffer,
 //==============================================================================
 void DrawnCurveProcessor::hiResTimerCallback()
 {
-    if (! isPlaying() || ! hasCurve()) return;
+    if (! isPlaying() || ! anyLaneHasCurve()) return;
 
     const int64_t now    = juce::Time::currentTimeMillis();
     const int64_t lastAT = _lastProcessBlockMs.load (std::memory_order_relaxed);
@@ -211,7 +239,6 @@ void DrawnCurveProcessor::hiResTimerCallback()
     const auto nominalFrames =
         static_cast<uint32_t> (_timerSampleRate * kTimerIntervalMs / 1000.0);
 
-    // Use cached values so the timer stays consistent with the audio thread.
     const float speed = _effectiveSpeedRatio.load (std::memory_order_relaxed);
     const auto  dir   = static_cast<PlaybackDirection> (
         static_cast<int> (apvts.getRawParameterValue (ParamID::playbackDirection)->load()));
@@ -241,46 +268,66 @@ void DrawnCurveProcessor::hiResTimerCallback()
 }
 
 //==============================================================================
-void DrawnCurveProcessor::beginCapture()   { _capture.begin(); }
-void DrawnCurveProcessor::addCapturePoint (double t, float x, float y, float pressure)
-                                           { _capture.addPoint (t, x, y, pressure); }
+// Capture API
+//==============================================================================
 
-void DrawnCurveProcessor::finalizeCapture()
+void DrawnCurveProcessor::beginCapture (int /*lane*/)  { _capture.begin(); }
+
+void DrawnCurveProcessor::addCapturePoint (double t, float x, float y, float pressure)
+{
+    _capture.addPoint (t, x, y, pressure);
+}
+
+void DrawnCurveProcessor::finalizeCapture (int lane)
 {
     if (! _capture.hasPoints()) return;
 
-    uint8_t ccNum  = static_cast<uint8_t> (
-                         static_cast<int> (apvts.getRawParameterValue (ParamID::ccNumber)->load()));
-    uint8_t ch     = static_cast<uint8_t> (
-                         static_cast<int> (apvts.getRawParameterValue (ParamID::midiChannel)->load()) - 1);
-    float smooth   = apvts.getRawParameterValue (ParamID::smoothing)->load();
-    float minOut   = apvts.getRawParameterValue (ParamID::minOutput)->load();
-    float maxOut   = apvts.getRawParameterValue (ParamID::maxOutput)->load();
-    auto  msgType  = static_cast<MessageType> (
-                         static_cast<int> (apvts.getRawParameterValue (ParamID::messageType)->load()));
-    uint8_t noteVel = static_cast<uint8_t> (
-                         static_cast<int> (apvts.getRawParameterValue (ParamID::noteVelocity)->load()));
+    const uint8_t ccNum  = static_cast<uint8_t> (
+        static_cast<int> (apvts.getRawParameterValue (laneParam (lane, ParamID::ccNumber))->load()));
+    const uint8_t ch     = static_cast<uint8_t> (
+        static_cast<int> (apvts.getRawParameterValue (laneParam (lane, ParamID::midiChannel))->load()) - 1);
+    const float smooth   = apvts.getRawParameterValue (laneParam (lane, ParamID::smoothing))->load();
+    const float minOut   = apvts.getRawParameterValue (laneParam (lane, ParamID::minOutput))->load();
+    const float maxOut   = apvts.getRawParameterValue (laneParam (lane, ParamID::maxOutput))->load();
+    const auto  msgType  = static_cast<MessageType> (
+        static_cast<int> (apvts.getRawParameterValue (laneParam (lane, ParamID::msgType))->load()));
+    const uint8_t noteVel = static_cast<uint8_t> (
+        static_cast<int> (apvts.getRawParameterValue (laneParam (lane, ParamID::noteVelocity))->load()));
 
-    auto* snap   = new LaneSnapshot (_capture.finalize (ccNum, ch, minOut, maxOut, smooth, msgType));
+    auto* snap = new LaneSnapshot (_capture.finalize (ccNum, ch, minOut, maxOut, smooth, msgType));
     snap->noteVelocity = noteVel;
-    _currentSnap = snap;
+    _laneSnaps[lane] = snap;
 
     {
         juce::SpinLock::ScopedLockType lock (_engineLock);
-        _engine.setSnapshot (snap);
+        _engine.setSnapshot (lane, snap);
         _engine.reset();
     }
 }
 
-void DrawnCurveProcessor::clearSnapshot()
+void DrawnCurveProcessor::clearSnapshot (int lane)
 {
     {
         juce::SpinLock::ScopedLockType lock (_engineLock);
-        _engine.clearSnapshot();
+        _engine.clearSnapshot (lane);
+        if (lane == 0) _capture.clear();   // capture session belongs to whichever lane is being drawn
+    }
+    _laneSnaps[lane] = nullptr;
+}
+
+void DrawnCurveProcessor::clearAllSnapshots()
+{
+    {
+        juce::SpinLock::ScopedLockType lock (_engineLock);
+        _engine.clearAllSnapshots();
         _capture.clear();
     }
-    _currentSnap = nullptr;
+    _laneSnaps.fill (nullptr);
 }
+
+//==============================================================================
+// Playback
+//==============================================================================
 
 void DrawnCurveProcessor::setPlaying (bool on)
 {
@@ -289,38 +336,129 @@ void DrawnCurveProcessor::setPlaying (bool on)
     else    stopTimer();
 }
 
-bool  DrawnCurveProcessor::isPlaying()    const noexcept { return _engine.getPlaying(); }
-bool  DrawnCurveProcessor::hasCurve()     const noexcept { return _currentSnap != nullptr && _currentSnap->valid; }
+bool DrawnCurveProcessor::isPlaying() const noexcept { return _engine.getPlaying(); }
+
+//==============================================================================
+// Query API
+//==============================================================================
+
+bool DrawnCurveProcessor::hasCurve (int lane) const noexcept
+{
+    if (lane < 0 || lane >= kMaxLanes) return false;
+    return _laneSnaps[lane] != nullptr && _laneSnaps[lane]->valid;
+}
+
+bool DrawnCurveProcessor::anyLaneHasCurve() const noexcept
+{
+    for (int i = 0; i < kMaxLanes; ++i)
+        if (hasCurve (i)) return true;
+    return false;
+}
+
 float DrawnCurveProcessor::currentPhase() const noexcept { return _engine.getCurrentPhase(); }
 
-std::array<float, 256> DrawnCurveProcessor::getCurveTable() const noexcept
+std::array<float, 256> DrawnCurveProcessor::getCurveTable (int lane) const noexcept
 {
-    if (_currentSnap && _currentSnap->valid) return _currentSnap->table;
+    if (lane >= 0 && lane < kMaxLanes && _laneSnaps[lane] && _laneSnaps[lane]->valid)
+        return _laneSnaps[lane]->table;
     return {};
 }
 
-float DrawnCurveProcessor::curveDuration() const noexcept
+float DrawnCurveProcessor::curveDuration (int lane) const noexcept
 {
-    return (_currentSnap && _currentSnap->valid) ? _currentSnap->durationSeconds : 0.0f;
+    if (lane >= 0 && lane < kMaxLanes && _laneSnaps[lane] && _laneSnaps[lane]->valid)
+        return _laneSnaps[lane]->durationSeconds;
+    return 0.0f;
 }
 
 //==============================================================================
+// Scale quantization
+//==============================================================================
+
+static constexpr uint16_t kScalePresetMasks[8] =
+{
+    0xFFF,   // 0 Chromatic
+    0xAB5,   // 1 Major
+    0x5AD,   // 2 Natural Minor
+    0x6AD,   // 3 Dorian
+    0x295,   // 4 Pentatonic Major
+    0x4A9,   // 5 Pentatonic Minor
+    0x4E9,   // 6 Blues
+    0x000,   // 7 Custom
+};
+
+ScaleConfig DrawnCurveProcessor::getScaleConfig (int lane) const noexcept
+{
+    const int     mode = static_cast<int> (
+        apvts.getRawParameterValue (laneParam (lane, ParamID::scaleMode))->load());
+    const uint8_t root = static_cast<uint8_t> (
+        apvts.getRawParameterValue (laneParam (lane, ParamID::scaleRoot))->load());
+
+    uint16_t mask;
+    if (mode == 7)
+        mask = static_cast<uint16_t> (
+            apvts.getRawParameterValue (laneParam (lane, ParamID::scaleMask))->load());
+    else
+        mask = kScalePresetMasks[std::clamp (mode, 0, 7)];
+
+    return { mask, root };
+}
+
+void DrawnCurveProcessor::updateEngineScale (int lane)
+{
+    _engine.setScaleConfig (lane, getScaleConfig (lane));
+}
+
+void DrawnCurveProcessor::updateAllLaneScales()
+{
+    for (int i = 0; i < kMaxLanes; ++i)
+        updateEngineScale (i);
+}
+
+//==============================================================================
+// Teach / Learn
+//==============================================================================
+
+void DrawnCurveProcessor::beginTeach (int lane)
+{
+    _teachPendingLane.store (lane, std::memory_order_relaxed);
+}
+
+void DrawnCurveProcessor::cancelTeach()
+{
+    _teachPendingLane.store (-1, std::memory_order_relaxed);
+}
+
+bool DrawnCurveProcessor::isTeachPending (int lane) const noexcept
+{
+    return _teachPendingLane.load (std::memory_order_relaxed) == lane;
+}
+
+//==============================================================================
+// State persistence
+//==============================================================================
+
 void DrawnCurveProcessor::getStateInformation (juce::MemoryBlock& destData)
 {
-    auto state = apvts.copyState();   // includes all APVTS params automatically
+    auto state = apvts.copyState();
 
-    if (_currentSnap && _currentSnap->valid)
+    for (int L = 0; L < kMaxLanes; ++L)
     {
-        juce::MemoryBlock tableBlock (_currentSnap->table.data(), 256 * sizeof (float));
-        state.setProperty ("tableData", tableBlock.toBase64Encoding(),                            nullptr);
-        state.setProperty ("duration",  _currentSnap->durationSeconds,                           nullptr);
-        state.setProperty ("ccNum",     static_cast<int> (_currentSnap->ccNumber),                nullptr);
-        state.setProperty ("midiCh",    static_cast<int> (_currentSnap->midiChannel),             nullptr);
-        state.setProperty ("minOut",    _currentSnap->minOut,                                     nullptr);
-        state.setProperty ("maxOut",    _currentSnap->maxOut,                                     nullptr);
-        state.setProperty ("smooth",    _currentSnap->smoothing,                                  nullptr);
-        state.setProperty ("msgType",   static_cast<int> (_currentSnap->messageType),             nullptr);
-        state.setProperty ("noteVel",   static_cast<int> (_currentSnap->noteVelocity),            nullptr);
+        const auto* snap = _laneSnaps[L];
+        if (snap && snap->valid)
+        {
+            const juce::String pfx = "L" + juce::String (L) + "_";
+            juce::MemoryBlock tableBlock (snap->table.data(), 256 * sizeof (float));
+            state.setProperty (pfx + "tableData", tableBlock.toBase64Encoding(), nullptr);
+            state.setProperty (pfx + "duration",  snap->durationSeconds,         nullptr);
+            state.setProperty (pfx + "ccNum",     static_cast<int> (snap->ccNumber),    nullptr);
+            state.setProperty (pfx + "midiCh",    static_cast<int> (snap->midiChannel), nullptr);
+            state.setProperty (pfx + "minOut",    snap->minOut,                   nullptr);
+            state.setProperty (pfx + "maxOut",    snap->maxOut,                   nullptr);
+            state.setProperty (pfx + "smooth",    snap->smoothing,                nullptr);
+            state.setProperty (pfx + "msgType",   static_cast<int> (snap->messageType),   nullptr);
+            state.setProperty (pfx + "noteVel",   static_cast<int> (snap->noteVelocity),  nullptr);
+        }
     }
 
     std::unique_ptr<juce::XmlElement> xml (state.createXml());
@@ -333,32 +471,78 @@ void DrawnCurveProcessor::setStateInformation (const void* data, int sizeInBytes
     if (! xml) return;
 
     auto state = juce::ValueTree::fromXml (*xml);
-    apvts.replaceState (state);   // restores all params automatically
+    apvts.replaceState (state);
+    updateAllLaneScales();
 
-    juce::String tableB64 = state.getProperty ("tableData", juce::String());
-    if (tableB64.isNotEmpty())
+    for (int L = 0; L < kMaxLanes; ++L)
     {
-        juce::MemoryBlock tableBlock;
-        if (tableBlock.fromBase64Encoding (tableB64) &&
-            tableBlock.getSize() == 256 * sizeof (float))
+        const juce::String pfx = "L" + juce::String (L) + "_";
+        const juce::String tableB64 = state.getProperty (pfx + "tableData", juce::String());
+        if (tableB64.isNotEmpty())
         {
-            auto* snap = new LaneSnapshot();
-            memcpy (snap->table.data(), tableBlock.getData(), 256 * sizeof (float));
-            snap->durationSeconds = static_cast<float>  (static_cast<double> (state.getProperty ("duration", 1.0)));
-            snap->ccNumber    = static_cast<uint8_t> (static_cast<int>    (state.getProperty ("ccNum",   74)));
-            snap->midiChannel = static_cast<uint8_t> (static_cast<int>    (state.getProperty ("midiCh",  0)));
-            snap->minOut      = static_cast<float>   (static_cast<double> (state.getProperty ("minOut",   0.0)));
-            snap->maxOut      = static_cast<float>   (static_cast<double> (state.getProperty ("maxOut",   1.0)));
-            snap->smoothing   = static_cast<float>   (static_cast<double> (state.getProperty ("smooth",  0.08)));
-            snap->messageType  = static_cast<MessageType> (static_cast<int> (state.getProperty ("msgType",  0)));
-            snap->noteVelocity = static_cast<uint8_t>    (static_cast<int> (state.getProperty ("noteVel",  100)));
-            snap->valid        = true;
-
-            _currentSnap = snap;
+            juce::MemoryBlock tableBlock;
+            if (tableBlock.fromBase64Encoding (tableB64) &&
+                tableBlock.getSize() == 256 * sizeof (float))
             {
-                juce::SpinLock::ScopedLockType lock (_engineLock);
-                _engine.setSnapshot (snap);
-                _engine.reset();
+                auto* snap = new LaneSnapshot();
+                memcpy (snap->table.data(), tableBlock.getData(), 256 * sizeof (float));
+                snap->durationSeconds = static_cast<float> (static_cast<double> (
+                    state.getProperty (pfx + "duration", 1.0)));
+                snap->ccNumber    = static_cast<uint8_t>  (static_cast<int> (
+                    state.getProperty (pfx + "ccNum",   74)));
+                snap->midiChannel = static_cast<uint8_t>  (static_cast<int> (
+                    state.getProperty (pfx + "midiCh",  0)));
+                snap->minOut      = static_cast<float>    (static_cast<double> (
+                    state.getProperty (pfx + "minOut",   0.0)));
+                snap->maxOut      = static_cast<float>    (static_cast<double> (
+                    state.getProperty (pfx + "maxOut",   1.0)));
+                snap->smoothing   = static_cast<float>    (static_cast<double> (
+                    state.getProperty (pfx + "smooth",  0.08)));
+                snap->messageType  = static_cast<MessageType> (static_cast<int> (
+                    state.getProperty (pfx + "msgType", 0)));
+                snap->noteVelocity = static_cast<uint8_t> (static_cast<int> (
+                    state.getProperty (pfx + "noteVel", 100)));
+                snap->valid = true;
+
+                _laneSnaps[L] = snap;
+                {
+                    juce::SpinLock::ScopedLockType lock (_engineLock);
+                    _engine.setSnapshot (L, snap);
+                }
+            }
+        }
+    }
+
+    // Backward compat: single-lane v1 presets stored table under "tableData" (no prefix).
+    // If lane 0 has no curve from the loop above, try the old keys.
+    if (! hasCurve (0))
+    {
+        const juce::String tableB64 = state.getProperty ("tableData", juce::String());
+        if (tableB64.isNotEmpty())
+        {
+            juce::MemoryBlock tableBlock;
+            if (tableBlock.fromBase64Encoding (tableB64) &&
+                tableBlock.getSize() == 256 * sizeof (float))
+            {
+                auto* snap = new LaneSnapshot();
+                memcpy (snap->table.data(), tableBlock.getData(), 256 * sizeof (float));
+                snap->durationSeconds = static_cast<float> (static_cast<double> (
+                    state.getProperty ("duration", 1.0)));
+                snap->ccNumber    = static_cast<uint8_t>  (static_cast<int> (state.getProperty ("ccNum",   74)));
+                snap->midiChannel = static_cast<uint8_t>  (static_cast<int> (state.getProperty ("midiCh",  0)));
+                snap->minOut      = static_cast<float>    (static_cast<double> (state.getProperty ("minOut",  0.0)));
+                snap->maxOut      = static_cast<float>    (static_cast<double> (state.getProperty ("maxOut",  1.0)));
+                snap->smoothing   = static_cast<float>    (static_cast<double> (state.getProperty ("smooth",  0.08)));
+                snap->messageType  = static_cast<MessageType> (static_cast<int> (state.getProperty ("msgType", 0)));
+                snap->noteVelocity = static_cast<uint8_t> (static_cast<int> (state.getProperty ("noteVel", 100)));
+                snap->valid = true;
+
+                _laneSnaps[0] = snap;
+                {
+                    juce::SpinLock::ScopedLockType lock (_engineLock);
+                    _engine.setSnapshot (0, snap);
+                    _engine.reset();
+                }
             }
         }
     }

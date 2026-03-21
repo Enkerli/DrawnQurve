@@ -2,6 +2,7 @@
 #include "LaneSnapshot.hpp"
 #include <atomic>
 #include <functional>
+#include <array>
 #include <cstdint>
 
 /**
@@ -9,29 +10,41 @@
  *
  * Real-time, lock-minimised MIDI playback engine.
  *
- * Architecture
- * ────────────
- * GestureEngine loops a LaneSnapshot continuously, sampling the 256-point
- * curve table at the current playhead position and emitting MIDI events via
- * a caller-supplied callback.
- *
- * Thread safety
- * ─────────────
- * - setSnapshot / clearSnapshot / setPlaying are called from the **UI thread**.
- * - processBlock is called from the **audio thread** (or the fallback HiRes
- *   timer thread — never both simultaneously, guarded by a SpinLock in the
- *   processor).
- * - All cross-thread communication uses std::atomic with explicit ordering.
- *
- * Ownership
+ * Threading
  * ─────────
- * The engine holds a raw pointer to the current LaneSnapshot.  The caller
- * allocates snapshots with `new` and must NOT delete them while the engine
- * may be referencing them.  (MVP: snapshots are never deleted.)
+ * UI thread  : setSnapshot / clearSnapshot / setPlaying / setScaleConfig
+ * Audio thread: processBlock (or fallback HiRes timer — never both at once)
+ * All cross-thread state uses std::atomic with explicit ordering.
+ *
+ * Multi-lane
+ * ──────────
+ * Up to kMaxLanes lanes play simultaneously.  Each lane has its own snapshot,
+ * runtime state, and scale config.  Playback (isPlaying) and the global phase
+ * display (currentPhase) are shared across all lanes so they stay in sync.
+ * Each lane's curve advances its own playheadSeconds using the common speed
+ * ratio, so lanes recorded at different durations loop at their natural rates.
  */
 
+static constexpr int kMaxLanes = 3;
+
 // ---------------------------------------------------------------------------
-/// Per-lane runtime state — lives entirely on the render thread.
+/**
+ * Scale quantization configuration.
+ *
+ * mask  — 12-bit interval pattern, root-relative.
+ *         Bit 0 = root is active, bit 1 = root+1 semitone active, …, bit 11 = root+11.
+ *         0xFFF = chromatic (all notes) = no quantization.
+ *
+ * root  — root pitch class (0=C, 1=C#/Db, …, 11=B).
+ */
+struct ScaleConfig
+{
+    uint16_t mask { 0xFFF };   ///< Root-relative 12-bit interval mask; 0xFFF = chromatic
+    uint8_t  root { 0     };   ///< Root pitch class (0=C … 11=B)
+};
+
+// ---------------------------------------------------------------------------
+/// Per-lane runtime state — render thread only.
 struct LaneRuntime
 {
     double playheadSeconds = 0.0;   ///< Elapsed playback time within the current loop period
@@ -48,74 +61,59 @@ struct LaneRuntime
 
 // ---------------------------------------------------------------------------
 /**
- * Real-time-safe MIDI CC / Pressure / PitchBend / Note playback engine.
- *
- * Typical usage (from DrawnCurveProcessor):
- * @code
- *   engine.setSnapshot(snap);       // UI thread: load new curve
- *   engine.setPlaying(true);        // UI thread: start looping
- *   engine.processBlock(n, sr, cb, speed, dir); // audio thread: advance + emit MIDI
- * @endcode
+ * Real-time-safe MIDI playback engine supporting up to kMaxLanes lanes.
  */
 class GestureEngine
 {
 public:
-    /// Callback type for emitting a single MIDI message.
-    /// Called synchronously from processBlock on the render thread.
     using MIDIOut = std::function<void(uint8_t status, uint8_t data1, uint8_t data2)>;
 
+    GestureEngine();
+
     // ── UI-thread API ─────────────────────────────────────────────────────────
+    void setSnapshot    (int lane, const LaneSnapshot* snapshot);
+    void clearSnapshot  (int lane);
+    void clearAllSnapshots();
+    void setPlaying     (bool playing);
+    void reset          ();
 
-    /// Load a new curve.  The engine immediately starts using it on the next
-    /// processBlock call (atomic store with release ordering).
-    void setSnapshot (const LaneSnapshot* snapshot);
-
-    /// Clear the current snapshot and stop playback.
-    void clearSnapshot();
-
-    /// Start or stop looping.
-    /// On stop: sets _noteOffNeeded so processBlock can emit Note Off on the
-    /// very next audio block — prevents stuck notes.
-    void setPlaying (bool playing);
-
-    /// Reset the playhead to 0 and clear smoother state.
-    /// Call before starting fresh playback (e.g. on a sync rising edge).
-    void reset();
+    /// Update scale quantization config for one lane atomically.
+    void setScaleConfig (int lane, ScaleConfig config);
 
     // ── Query API (UI or render thread) ──────────────────────────────────────
-
-    bool  getPlaying()      const;   ///< true if currently looping
-    float getCurrentPhase() const;   ///< Approximate 0..1 playhead, for UI display only
+    bool  getPlaying()      const;
+    /// Phase of lane 0 (or the first valid lane) — for UI playhead display.
+    float getCurrentPhase() const;
 
     // ── Render-thread API ─────────────────────────────────────────────────────
-
     /**
-     * Advance the playhead by @p frameCount frames and emit MIDI via @p midiOut.
-     *
-     * @param frameCount  Audio buffer size in samples.
-     * @param sampleRate  Current sample rate (Hz).
-     * @param midiOut     Callback for each MIDI event generated this block.
-     * @param speedRatio  >1 = faster (shorter loop); <1 = slower (longer loop).
-     *                    Computed from either the Speed slider or BPM sync.
+     * Advance all lane playheads and emit MIDI.
+     * @param speedRatio  >1 = faster; <1 = slower.  Applied equally to all lanes.
      * @param direction   Forward / Reverse / PingPong.
-     *
-     * No-op if no valid snapshot is loaded or playback is stopped.
-     * Sends a Note Off first if _noteOffNeeded is set (guarded internally).
      */
     void processBlock (uint32_t frameCount, double sampleRate, const MIDIOut& midiOut,
                        float speedRatio = 1.0f,
                        PlaybackDirection direction = PlaybackDirection::Forward);
 
+    // ── Utility (also called from UI for Y-axis display) ─────────────────────
+    static int quantizeNote (int rawNote, ScaleConfig sc, bool movingUp);
+
 private:
-    // ── Atomic cross-thread state ─────────────────────────────────────────────
-    std::atomic<const LaneSnapshot*> _snapshot     { nullptr }; ///< Current curve (set on UI thread, read on audio thread)
-    std::atomic<bool>                _isPlaying     { false   }; ///< Playback running?
-    std::atomic<float>               _currentPhase  { 0.0f   }; ///< Written by audio thread, read by UI (display only)
-    std::atomic<bool>                _noteOffNeeded { false   }; ///< Set by setPlaying(false), cleared by processBlock
+    std::array<std::atomic<const LaneSnapshot*>, kMaxLanes> _snapshots;
+    std::array<std::atomic<bool>,                kMaxLanes> _noteOffNeeded;
+    std::array<std::atomic<uint32_t>,            kMaxLanes> _scalesPacked;
 
-    // ── Render-thread-only state ──────────────────────────────────────────────
-    LaneRuntime _runtime;   ///< Playhead + smoother (render thread only — no synchronisation needed)
+    std::atomic<bool>  _isPlaying    { false };
+    std::atomic<float> _currentPhase { 0.0f  };
 
-    /// Linear interpolation into the 256-sample lookup table at [0,1] phase.
+    std::array<LaneRuntime, kMaxLanes> _runtimes;   ///< Render-thread only
+
     float sampleCurve (const LaneSnapshot& snap, float phase) const;
+
+    void processLane (int lane, uint32_t frameCount, double sampleRate,
+                      const MIDIOut& midiOut,
+                      float speedRatio, PlaybackDirection direction);
+
+    static uint32_t    packScale   (ScaleConfig s) noexcept { return (uint32_t(s.root) << 12) | s.mask; }
+    static ScaleConfig unpackScale (uint32_t p)    noexcept { return { uint16_t(p & 0xFFF), uint8_t(p >> 12) }; }
 };
