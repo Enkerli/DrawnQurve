@@ -58,8 +58,10 @@ void GestureEngine::reset()
         _noteOffNeeded[i].store (false, std::memory_order_relaxed);
         _runtimes[i].playheadSeconds = 0.0;
         _runtimes[i].lastSentValue   = -1;
+        _runtimes[i].lockedNote      = -1.0f;
         _runtimes[i].smoothedValue   = 0.0f;
     }
+
     _currentPhase.store (0.0f, std::memory_order_relaxed);
 }
 
@@ -153,6 +155,7 @@ void GestureEngine::processLane (int lane, uint32_t frameCount, double sampleRat
                      static_cast<uint8_t> (rt.lastSentValue), 0u);
         }
         rt.lastSentValue = -1;
+        rt.lockedNote    = -1.0f;
     }
 
     if (! snap || ! snap->valid) return;
@@ -243,7 +246,16 @@ void GestureEngine::processLane (int lane, uint32_t frameCount, double sampleRat
         }
         case MessageType::Note:
         {
-            const int rawNote = std::clamp (static_cast<int> (std::lround (ranged * 127.0f)), 0, 127);
+            // Hysteresis: commit a new pitch only when the curve has moved ≥ 0.6 semitones
+            // away from the currently locked value.  Prevents rapid Note Off/On bursts
+            // when the curve hovers near a semitone boundary.
+            constexpr float kNoteHysteresis = 0.6f;
+            const float rawNoteF = ranged * 127.0f;
+            if (rt.lockedNote < 0.0f
+                || std::fabs (rawNoteF - rt.lockedNote) >= kNoteHysteresis)
+                rt.lockedNote = rawNoteF;
+
+            const int rawNote = std::clamp (static_cast<int> (std::lround (rt.lockedNote)), 0, 127);
             const ScaleConfig sc = unpackScale (_scalesPacked[lane].load (std::memory_order_acquire));
             const bool movingUp  = (rt.lastSentValue < 0) || (rawNote >= rt.lastSentValue);
             const int  note      = quantizeNote (rawNote, sc, movingUp);
