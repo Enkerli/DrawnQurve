@@ -47,7 +47,7 @@ juce_add_plugin(DrawnCurve
     ICON_BIG                    "${CMAKE_SOURCE_DIR}/Assets/icon_1024.png"
     DESCRIPTION                 "Drawn-curve MIDI CC looper"
     IS_SYNTH                    FALSE
-    NEEDS_MIDI_INPUT            FALSE
+    NEEDS_MIDI_INPUT            TRUE
     NEEDS_MIDI_OUTPUT           TRUE
     IS_MIDI_EFFECT              TRUE
     EDITOR_WANTS_KEYBOARD_FOCUS FALSE
