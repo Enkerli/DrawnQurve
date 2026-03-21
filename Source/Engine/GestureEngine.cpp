@@ -61,7 +61,6 @@ void GestureEngine::reset()
         if (! _noteOffNeeded[i].load (std::memory_order_acquire))
         {
             _runtimes[i].lastSentValue = -1;
-            _runtimes[i].lockedNote    = -1.0f;
         }
         _runtimes[i].playheadSeconds = 0.0;
         _runtimes[i].smoothedValue   = 0.0f;
@@ -179,7 +178,6 @@ void GestureEngine::processLane (int lane, uint32_t frameCount, double sampleRat
                      static_cast<uint8_t> (rt.lastSentValue), 0u);
         }
         rt.lastSentValue = -1;
-        rt.lockedNote    = -1.0f;
     }
 
     if (! snap || ! snap->valid) return;
@@ -270,32 +268,50 @@ void GestureEngine::processLane (int lane, uint32_t frameCount, double sampleRat
         }
         case MessageType::Note:
         {
-            // Hysteresis: commit a new pitch only when the curve has moved ≥ 0.6 semitones
-            // away from the currently locked value.  Prevents rapid Note Off/On bursts
-            // when the curve hovers near a semitone boundary.
-            constexpr float kNoteHysteresis = 0.6f;
-            const float rawNoteF = ranged * 127.0f;
-            if (rt.lockedNote < 0.0f
-                || std::fabs (rawNoteF - rt.lockedNote) >= kNoteHysteresis)
-                rt.lockedNote = rawNoteF;
+            // Midpoint dead-zone hysteresis.
+            //
+            // Problem with the previous approach: movingUp was derived from
+            // lastSentValue, which oscillates when quantizeNote alternates
+            // between two adjacent scale notes.  That causes movingUp to
+            // flip each block, making quantizeNote oscillate forever.
+            //
+            // Fix: derive movingUp from rawNoteF vs committed (float), then
+            // only commit the candidate when rawNoteF has clearly crossed the
+            // midpoint between committed and candidate by ≥ kClearance.
+            // Once committed is -1 (first note), skip the dead-zone check.
 
-            const int rawNote = std::clamp (static_cast<int> (std::lround (rt.lockedNote)), 0, 127);
-            const ScaleConfig sc = unpackScale (_scalesPacked[lane].load (std::memory_order_acquire));
-            const bool movingUp  = (rt.lastSentValue < 0) || (rawNote >= rt.lastSentValue);
-            const int  note      = quantizeNote (rawNote, sc, movingUp);
+            constexpr float kClearance = 0.35f;   // semitones past midpoint required to commit
 
-            if (note != rt.lastSentValue)
+            const float rawNoteF  = ranged * 127.0f;
+            const int   committed = rt.lastSentValue;
+            const ScaleConfig sc  = unpackScale (_scalesPacked[lane].load (std::memory_order_acquire));
+
+            // Direction based on continuous float position vs last committed integer note.
+            const bool movingUp  = (committed < 0) || (rawNoteF > static_cast<float> (committed));
+            const int  candidate = quantizeNote (
+                std::clamp (static_cast<int> (std::lround (rawNoteF)), 0, 127), sc, movingUp);
+
+            if (candidate == committed) break;
+
+            // Require rawNoteF to pass the midpoint + clearance before committing.
+            if (committed >= 0)
             {
-                if (midiOut)
-                {
-                    if (rt.lastSentValue >= 0)
-                        midiOut (0x80u | (snap->midiChannel & 0x0Fu),
-                                 static_cast<uint8_t> (rt.lastSentValue), 0u);
-                    midiOut (0x90u | (snap->midiChannel & 0x0Fu),
-                             static_cast<uint8_t> (note), snap->noteVelocity);
-                }
-                rt.lastSentValue = note;
+                const float mid = (static_cast<float> (committed) + static_cast<float> (candidate)) * 0.5f;
+                const bool crossedClearly =
+                    (candidate > committed && rawNoteF >= mid + kClearance) ||
+                    (candidate < committed && rawNoteF <= mid - kClearance);
+                if (!crossedClearly) break;
             }
+
+            if (midiOut)
+            {
+                if (committed >= 0)
+                    midiOut (0x80u | (snap->midiChannel & 0x0Fu),
+                             static_cast<uint8_t> (committed), 0u);
+                midiOut (0x90u | (snap->midiChannel & 0x0Fu),
+                         static_cast<uint8_t> (candidate), snap->noteVelocity);
+            }
+            rt.lastSentValue = candidate;
             break;
         }
     }

@@ -51,12 +51,6 @@ struct LaneRuntime
     int    lastSentValue   = -1;    ///< Last emitted value (-1 = nothing sent yet); for dedup + Note Off
     float  smoothedValue   = 0.0f;  ///< One-pole smoother state
 
-    /// Note-mode hysteresis: the most recently committed pitch as a continuous
-    /// float (0–127 scale, -1 = no note active).  A new pitch is committed only
-    /// when the raw computed note has moved at least kNoteHysteresis semitones
-    /// away from this value, preventing rapid alternation when the curve hovers
-    /// at a semitone boundary.
-    float  lockedNote      = -1.0f;
 };
 
 // ---------------------------------------------------------------------------
