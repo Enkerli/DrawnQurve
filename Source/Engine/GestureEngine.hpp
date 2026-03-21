@@ -77,6 +77,14 @@ public:
     void setPlaying     (bool playing);
     void reset          ();
 
+    /// Send a Note Off for one lane (sets _noteOffNeeded) without stopping other lanes.
+    /// Call from beginCapture() on the UI thread before drawing a new curve.
+    void stopLane       (int lane);
+
+    /// Rewind one lane's playhead and smoother without clearing its note-off flag
+    /// or lastSentValue.  Call from finalizeCapture() after loading a new snapshot.
+    void resetLane      (int lane);
+
     /// Update scale quantization config for one lane atomically.
     void setScaleConfig (int lane, ScaleConfig config);
 

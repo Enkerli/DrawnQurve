@@ -55,14 +55,38 @@ void GestureEngine::reset()
 {
     for (int i = 0; i < kMaxLanes; ++i)
     {
-        _noteOffNeeded[i].store (false, std::memory_order_relaxed);
+        // Don't clear _noteOffNeeded here — let processLane send the Note Off
+        // on the next block before starting the new curve.  Only reset dedup
+        // state when no note-off is already pending.
+        if (! _noteOffNeeded[i].load (std::memory_order_acquire))
+        {
+            _runtimes[i].lastSentValue = -1;
+            _runtimes[i].lockedNote    = -1.0f;
+        }
         _runtimes[i].playheadSeconds = 0.0;
-        _runtimes[i].lastSentValue   = -1;
-        _runtimes[i].lockedNote      = -1.0f;
         _runtimes[i].smoothedValue   = 0.0f;
     }
 
     _currentPhase.store (0.0f, std::memory_order_relaxed);
+}
+
+void GestureEngine::stopLane (int lane)
+{
+    if (lane < 0 || lane >= kMaxLanes) return;
+    // Signal processLane to send Note Off on the next processBlock call.
+    // Does not stop playback on other lanes.
+    _noteOffNeeded[lane].store (true, std::memory_order_release);
+}
+
+void GestureEngine::resetLane (int lane)
+{
+    if (lane < 0 || lane >= kMaxLanes) return;
+    // Rewind playhead and smoother.  Do NOT touch _noteOffNeeded or lastSentValue
+    // so any pending Note Off still fires correctly in processLane.
+    _runtimes[lane].playheadSeconds = 0.0;
+    _runtimes[lane].smoothedValue   = 0.0f;
+    if (lane == 0)
+        _currentPhase.store (0.0f, std::memory_order_relaxed);
 }
 
 void GestureEngine::setScaleConfig (int lane, ScaleConfig config)

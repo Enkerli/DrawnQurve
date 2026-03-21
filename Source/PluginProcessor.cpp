@@ -54,7 +54,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout DrawnCurveProcessor::createP
 
         layout.add (std::make_unique<juce::AudioParameterChoice>(
             juce::ParameterID { laneParam (L, ParamID::msgType), 1 },
-            lname + "Message Type", kMsgTypeChoices, 0));
+            lname + "Message Type", kMsgTypeChoices, L == 0 ? 3 : 0));
 
         layout.add (std::make_unique<juce::AudioParameterInt>(
             juce::ParameterID { laneParam (L, ParamID::ccNumber), 1 },
@@ -160,6 +160,21 @@ void DrawnCurveProcessor::processBlock (juce::AudioBuffer<float>& buffer,
     }
 
     midiMessages.clear();
+
+    // ── MIDI Panic: All Notes Off + brute-force Note Off sweep ───────────────
+    if (_panicNeeded.exchange (false, std::memory_order_acq_rel))
+    {
+        for (int ch = 0; ch < 16; ++ch)
+        {
+            // CC 123 = All Notes Off
+            midiMessages.addEvent (juce::MidiMessage::controllerEvent (ch + 1, 123, 0), 0);
+            // Belt-and-suspenders: explicit Note Off for every pitch
+            for (int note = 0; note < 128; ++note)
+                midiMessages.addEvent (juce::MidiMessage::noteOff (ch + 1, note, static_cast<uint8_t> (0)), 0);
+        }
+        // Reset all lane dedup state so next curve resumes cleanly
+        _engine.reset();
+    }
 
     // ── Flush MIDI buffered by the fallback timer ─────────────────────────────
     {
@@ -271,7 +286,13 @@ void DrawnCurveProcessor::hiResTimerCallback()
 // Capture API
 //==============================================================================
 
-void DrawnCurveProcessor::beginCapture (int /*lane*/)  { _capture.begin(); }
+void DrawnCurveProcessor::beginCapture (int lane)
+{
+    // Signal the engine to send Note Off for this lane before drawing overwrites it.
+    // Other lanes continue playing uninterrupted.
+    _engine.stopLane (lane);
+    _capture.begin();
+}
 
 void DrawnCurveProcessor::addCapturePoint (double t, float x, float y, float pressure)
 {
@@ -301,7 +322,7 @@ void DrawnCurveProcessor::finalizeCapture (int lane)
     {
         juce::SpinLock::ScopedLockType lock (_engineLock);
         _engine.setSnapshot (lane, snap);
-        _engine.reset();
+        _engine.resetLane (lane);   // rewind only this lane; Note Off from stopLane still fires
     }
 }
 
@@ -323,6 +344,15 @@ void DrawnCurveProcessor::clearAllSnapshots()
         _capture.clear();
     }
     _laneSnaps.fill (nullptr);
+}
+
+//==============================================================================
+// MIDI Panic
+//==============================================================================
+
+void DrawnCurveProcessor::sendPanic()
+{
+    _panicNeeded.store (true, std::memory_order_release);
 }
 
 //==============================================================================

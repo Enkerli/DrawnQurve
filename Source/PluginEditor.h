@@ -241,6 +241,7 @@ private:
     // ── Utility bar ───────────────────────────────────────────────────────────
     juce::TextButton playButton  { "Play"  };
     juce::TextButton clearButton { "Clear" };
+    juce::TextButton panicButton { "!"     };
     juce::TextButton themeButton { "Light" };
     juce::TextButton syncButton  { "Sync"  };
     juce::TextButton helpButton  { "?"     };

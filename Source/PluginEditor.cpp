@@ -540,6 +540,9 @@ DrawnCurveEditor::DrawnCurveEditor (DrawnCurveProcessor& p)
         curveDisplay.repaint();
     };
 
+    addAndMakeVisible (panicButton);
+    panicButton.onClick = [this] { proc.sendPanic(); };
+
     addAndMakeVisible (themeButton);
     themeButton.onClick = [this]
     {
@@ -1310,12 +1313,18 @@ void DrawnCurveEditor::applyTheme()
         l->setColour (juce::Label::textColourId, dimText);
 
     // Utility buttons
-    for (auto* b : { &playButton, &clearButton, &themeButton, &helpButton,
+    for (auto* b : { &playButton, &clearButton, &panicButton, &themeButton, &helpButton,
                      &tickYMinusBtn, &tickYPlusBtn, &tickXMinusBtn, &tickXPlusBtn })
     {
         b->setColour (juce::TextButton::buttonColourId,  btnBg);
         b->setColour (juce::TextButton::textColourOffId, btnText);
     }
+
+    // Panic button — red accent to signal danger
+    panicButton.setColour (juce::TextButton::buttonColourId,
+                           light ? juce::Colour (0xffFFE4E1) : juce::Colour (0xff5C1010));
+    panicButton.setColour (juce::TextButton::textColourOffId,
+                           light ? juce::Colour (0xffC0392B) : juce::Colour (0xffFF6B6B));
 
     // Direction control — violet accent
     dirControl.bgColour     = light ? juce::Colour (0xffEDE8FF) : btnBg;
@@ -1525,6 +1534,8 @@ void DrawnCurveEditor::resized()
         themeButton.setBounds (row.removeFromRight (62));
         row.removeFromRight (pad);
         helpButton .setBounds (row.removeFromRight (28));
+        row.removeFromRight (pad);
+        panicButton.setBounds (row.removeFromRight (22));
     }
     area.removeFromTop (pad);
 

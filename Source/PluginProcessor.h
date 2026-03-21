@@ -186,6 +186,11 @@ public:
     /// true if the given lane is currently waiting for a CC message.
     bool isTeachPending (int lane) const noexcept;
 
+    // ── MIDI Panic ────────────────────────────────────────────────────────────
+    /// Schedule an All Notes Off + brute-force Note Off sweep on all channels.
+    /// Safe to call from any thread; executes on the next processBlock.
+    void sendPanic();
+
 private:
     // ── Engine ────────────────────────────────────────────────────────────────
     GestureEngine         _engine;
@@ -197,6 +202,9 @@ private:
     // ── Teach / Learn ─────────────────────────────────────────────────────────
     /// Lane index currently waiting for a CC learn message (-1 = none).
     std::atomic<int> _teachPendingLane { -1 };
+
+    /// Set by sendPanic(); cleared after the panic sweep fires in processBlock.
+    std::atomic<bool> _panicNeeded { false };
 
     // ── Fallback HiRes timer ──────────────────────────────────────────────────
     static constexpr int      kTimerIntervalMs      = 10;
