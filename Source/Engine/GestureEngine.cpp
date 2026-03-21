@@ -39,6 +39,7 @@ void GestureEngine::reset()
 
     _runtime.playheadSeconds = 0.0;
     _runtime.lastSentValue   = -1;     // -1 forces re-send on next play (all modes)
+    _runtime.lockedNote      = -1.0f;  // reset hysteresis state along with dedup
     _runtime.smoothedValue   = 0.0f;
 
     _currentPhase.store (0.0f, std::memory_order_relaxed);
@@ -89,8 +90,9 @@ void GestureEngine::processBlock (uint32_t frameCount, double sampleRate,
                      static_cast<uint8_t> (_runtime.lastSentValue), 0u);
         }
 
-        // Reset dedup state so the next play sends a fresh event.
+        // Reset dedup and hysteresis state so the next play sends a fresh event.
         _runtime.lastSentValue = -1;
+        _runtime.lockedNote    = -1.0f;
     }
 
     if (! _isPlaying.load (std::memory_order_acquire))
@@ -210,7 +212,24 @@ void GestureEngine::processBlock (uint32_t frameCount, double sampleRate,
             // Vertical position maps to MIDI pitch [0, 127].
             // When the pitch changes: send Note Off for the old pitch,
             // then Note On for the new one (monophonic glide / pitch scan).
-            const int note = std::clamp (static_cast<int> (std::lround (ranged * 127.0f)), 0, 127);
+            //
+            // Hysteresis: the curve value is compared against _runtime.lockedNote
+            // (a float, not yet quantised to a semitone).  A pitch change is only
+            // committed when the raw value has moved at least kNoteHysteresis
+            // semitones away from the locked value.  This prevents rapid alternating
+            // Note Off/On bursts when the curve hovers near a semitone boundary.
+            constexpr float kNoteHysteresis = 0.6f;   // semitones; < 1.0 so a clean
+                                                       // step still triggers immediately
+
+            const float rawNote = ranged * 127.0f;
+
+            if (_runtime.lockedNote < 0.0f                                    // nothing playing yet
+                || std::fabs (rawNote - _runtime.lockedNote) >= kNoteHysteresis)
+            {
+                _runtime.lockedNote = rawNote;   // commit the new pitch position
+            }
+
+            const int note = std::clamp (static_cast<int> (std::lround (_runtime.lockedNote)), 0, 127);
             if (note != _runtime.lastSentValue)
             {
                 if (midiOut)

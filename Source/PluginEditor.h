@@ -196,6 +196,109 @@ private:
                 g.drawFittedText ("P-P", mid.toNearestInt(),
                                   juce::Justification::centred, 1);
             }
+            // ── Message-type buttons: icon on the left, label to its right ──────
+            // All icons are path-drawn (no font / Unicode glyph dependency).
+            // Coordinate helpers shared by all four cases:
+            //   ix  = left edge of icon area
+            //   icx = horizontal centre of icon
+            //   icy = vertical centre of button (same as cy above)
+            else if (text == "CC")
+            {
+                // Wavy tilde line — represents smooth continuous control change.
+                const float iw  = b.getHeight() * 0.80f;
+                const float ix  = b.getX() + 2.0f;
+                const float amp = b.getHeight() * 0.18f;
+
+                juce::Path wave;
+                wave.startNewSubPath (ix,              cy);
+                wave.cubicTo (ix + iw * 0.125f, cy - amp,
+                              ix + iw * 0.375f, cy - amp,
+                              ix + iw * 0.50f,  cy);
+                wave.cubicTo (ix + iw * 0.625f, cy + amp,
+                              ix + iw * 0.875f, cy + amp,
+                              ix + iw,          cy);
+                g.strokePath (wave, juce::PathStrokeType (1.8f, juce::PathStrokeType::curved));
+
+                g.drawFittedText ("CC",
+                                  b.withLeft (ix + iw + 3.0f).toNearestInt(),
+                                  juce::Justification::centredLeft, 1);
+            }
+            else if (text == "Aft")
+            {
+                // Filled downward arrow — represents pressing a key after the
+                // initial strike (channel pressure / aftertouch).
+                const float ih     = b.getHeight() * 0.62f;
+                const float iw     = ih * 0.68f;
+                const float icx    = b.getX() + 2.0f + iw * 0.5f;
+                const float iy     = cy - ih * 0.5f;
+                const float shaftW = iw * 0.36f;
+                const float shaftH = ih * 0.52f;
+
+                juce::Path arrow;
+                arrow.addRectangle (icx - shaftW * 0.5f, iy, shaftW, shaftH);
+                arrow.addTriangle  (icx - iw * 0.5f, iy + shaftH,
+                                    icx + iw * 0.5f, iy + shaftH,
+                                    icx,             iy + ih);
+                g.fillPath (arrow);
+
+                g.drawFittedText ("Aft",
+                                  b.withLeft (b.getX() + iw + 5.0f).toNearestInt(),
+                                  juce::Justification::centredLeft, 1);
+            }
+            else if (text == "PB")
+            {
+                // Bidirectional vertical arrow — pitch bends both up and down.
+                const float ih    = b.getHeight() * 0.72f;
+                const float iw    = ih * 0.55f;
+                const float icx   = b.getX() + 2.0f + iw * 0.5f;
+                const float iy    = cy - ih * 0.5f;
+                const float headH = ih * 0.30f;
+                const float barW  = 1.8f;
+
+                juce::Path pbPath;
+                pbPath.addRectangle (icx - barW * 0.5f, iy + headH, barW, ih - 2.0f * headH);
+                pbPath.addTriangle  (icx - iw * 0.5f, iy + headH,        // top arrowhead
+                                     icx + iw * 0.5f, iy + headH,
+                                     icx,             iy);
+                pbPath.addTriangle  (icx - iw * 0.5f, iy + ih - headH,   // bottom arrowhead
+                                     icx + iw * 0.5f, iy + ih - headH,
+                                     icx,             iy + ih);
+                g.fillPath (pbPath);
+
+                g.drawFittedText ("PB",
+                                  b.withLeft (b.getX() + iw + 5.0f).toNearestInt(),
+                                  juce::Justification::centredLeft, 1);
+            }
+            else if (text == "Note")
+            {
+                // Eighth-note glyph: filled oval head + vertical stem + curved flag.
+                // The head sits at the bottom-left of the icon area; the stem rises
+                // to the top-right; the flag curves away from the stem tip.
+                const float ih     = b.getHeight() * 0.68f;
+                const float ix     = b.getX() + 2.0f;
+                const float iy     = cy - ih * 0.5f;
+                const float headW  = ih * 0.50f;
+                const float headH  = ih * 0.36f;
+                const float headY  = iy + ih - headH * 1.1f;
+                const float stemX  = ix + headW * 0.82f;
+                const float stemTop = iy;
+
+                juce::Path notePath;
+                notePath.addEllipse    (ix, headY, headW, headH);
+                notePath.addRectangle  (stemX, stemTop, 1.8f, headY - stemTop + headH * 0.35f);
+                g.fillPath (notePath);
+
+                juce::Path flag;
+                flag.startNewSubPath (stemX + 0.9f, stemTop);
+                flag.cubicTo (stemX + headW * 0.80f, stemTop + ih * 0.18f,
+                              stemX + headW * 0.65f, stemTop + ih * 0.36f,
+                              stemX + headW * 0.20f, stemTop + ih * 0.44f);
+                g.strokePath (flag, juce::PathStrokeType (1.6f, juce::PathStrokeType::curved));
+
+                g.drawFittedText ("Note",
+                                  b.withLeft (stemX + headW * 0.5f + 4.0f).toNearestInt(),
+                                  juce::Justification::centredLeft, 1);
+            }
             else
             {
                 // All other buttons: centred plain text
