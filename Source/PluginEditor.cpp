@@ -77,15 +77,14 @@ namespace Layout
     static constexpr int paramRowH    = paramLabelH + paramSliderH;  // 44
 
     // Routing matrix row geometry (fits 244 px column)
-    // dot(12)+gap(4)+target(72)+gap(4)+detail(28)+gap(4)+chan(22)+gap(4)+loop(20)+gap(4)+teach(32)+gap(4)+mute(20) = 230 + margins(8) = 238 < 244
+    // dot(12)+gap(4)+target(72)+gap(4)+detail(36)+gap(4)+chan(26)+gap(4)+teach(36)+gap(4)+mute(24) = 226 + margins(8) = 234 < 244
     static constexpr int matRowH     = 28;
     static constexpr int matDotW     = 12;
     static constexpr int matTargetW  = 72;
-    static constexpr int matDetailW  = 28;
-    static constexpr int matChanW    = 22;
-    static constexpr int matLoopW    = 20;
-    static constexpr int matTeachW   = 32;
-    static constexpr int matMuteW    = 20;
+    static constexpr int matDetailW  = 36;  // was 28 (+8)
+    static constexpr int matChanW    = 26;  // was 22 (+4)
+    static constexpr int matTeachW   = 36;  // was 32 (+4)
+    static constexpr int matMuteW    = 24;  // was 20 (+4)
     static constexpr int matInnerGap = 4;
 }
 
@@ -146,7 +145,6 @@ void HelpOverlay::paint (juce::Graphics& g)
         { "Mute",        "Silence one lane without erasing its curve." },
         { "Scale",       "In Note mode: choose a scale preset and root note. Use the 12 circles (C to B, left to right) to build a custom scale. Only active pitch classes are played." },
         { "FREE / SYNC", "Toggle host-tempo sync. FREE = manual speed; SYNC = follows host BPM and transport; speed becomes loop length in Beats." },
-        { u8"\u21ba",    "Restart all lane playheads to their start positions simultaneously. In free mode, re-aligns lanes that have drifted due to different loop lengths. Respects per-lane phase offset." },
         { "Smooth",      "Output smoothing (0 = instant). Applied per focused lane. Affects CC and Pitch Bend; bypassed for note-change detection in Note mode." },
         { "Range",       "Output range min/max per lane. In Note mode, shows the note name boundaries." },
         { "Y- / Y+",     "Decrease or increase horizontal grid lines." },
@@ -612,10 +610,6 @@ DrawnCurveEditor::DrawnCurveEditor (DrawnCurveProcessor& p)
     addAndMakeVisible (panicButton);
     panicButton.onClick = [this] { proc.sendPanic(); };
 
-    addAndMakeVisible (restartBtn);
-    restartBtn.setTooltip ("Restart all lane playheads. In free mode, re-aligns lanes that have drifted apart.");
-    restartBtn.onClick = [this] { proc.restartAllLanes(); };
-
     addAndMakeVisible (themeButton);
     themeButton.onClick = [this]
     {
@@ -626,21 +620,19 @@ DrawnCurveEditor::DrawnCurveEditor (DrawnCurveProcessor& p)
         applyTheme();
     };
 
-    syncButton.setLookAndFeel (&_syncLF);
     addAndMakeVisible (syncButton);
-    {   // Set initial text from current param state
+    syncButton.setClickingTogglesState (true);
+    {
         const bool isSyncing = proc.apvts.getRawParameterValue (ParamID::syncEnabled)->load() > 0.5f;
-        syncButton.setButtonText (isSyncing ? "SYNC" : "FREE");
+        syncButton.setToggleState (isSyncing, juce::dontSendNotification);
     }
     syncButton.onClick = [this]
     {
-        const bool wasSyncing =
-            proc.apvts.getRawParameterValue (ParamID::syncEnabled)->load() > 0.5f;
-        if (auto* param = dynamic_cast<juce::AudioParameterBool*> (
+        const bool nowSyncing = syncButton.getToggleState();  // already toggled
+        if (auto* pSync = dynamic_cast<juce::AudioParameterBool*> (
                               proc.apvts.getParameter (ParamID::syncEnabled)))
-            *param = ! wasSyncing;
-        syncButton.setButtonText (wasSyncing ? "FREE" : "SYNC");
-        onSyncToggled (! wasSyncing);
+            *pSync = nowSyncing;
+        onSyncToggled (nowSyncing);
     };
 
     addAndMakeVisible (helpButton);
@@ -739,6 +731,8 @@ DrawnCurveEditor::DrawnCurveEditor (DrawnCurveProcessor& p)
             g.fillRoundedRectangle (px+bw+gap, py, bw, ps, 2.0f);
         }
     });
+    _muteDrawLF.iconType  = dcui::IconType::mute;
+    _teachDrawLF.iconType = dcui::IconType::teach;
     addAndMakeVisible (dirControl);
 
     // ── Grid density buttons ──────────────────────────────────────────────────
@@ -788,6 +782,11 @@ DrawnCurveEditor::DrawnCurveEditor (DrawnCurveProcessor& p)
     setupSlider (phaseOffsetSlider, phaseOffsetLabel, "Phase");
     phaseOffsetSlider.setTextValueSuffix ("%");
     phaseOffsetSlider.setNumDecimalPlacesToDisplay (0);
+
+    // One-shot toggle (inline with lane focus selector in shaping panel)
+    addAndMakeVisible (oneShotBtn);
+    oneShotBtn.setClickingTogglesState (false);   // we manage state manually via bindShapingToLane
+    oneShotBtn.setButtonText (u8"\u221E");         // ∞ = loop (default)
 
     // Bind shaping to lane 0 at startup.
     bindShapingToLane (0);
@@ -927,29 +926,8 @@ DrawnCurveEditor::DrawnCurveEditor (DrawnCurveProcessor& p)
         };
         addAndMakeVisible (laneChannelLabel[static_cast<size_t>(L)]);
 
-        // Loop / One-Shot button  ("∞" = loop, "1×" = one-shot)
-        laneLoopBtn[static_cast<size_t>(L)].setLookAndFeel (&_symbolLF);
-        addAndMakeVisible (laneLoopBtn[static_cast<size_t>(L)]);
-        {
-            const bool isOneShot =
-                proc.apvts.getRawParameterValue (laneParam (L, "loopMode"))->load() > 0.5f;
-            laneLoopBtn[static_cast<size_t>(L)].setButtonText (isOneShot ? "1" : u8"\u221E");
-        }
-        laneLoopBtn[static_cast<size_t>(L)].onClick = [this, L]
-        {
-            if (auto* pLoop = dynamic_cast<juce::AudioParameterBool*> (
-                                  proc.apvts.getParameter (laneParam (L, "loopMode"))))
-            {
-                const bool nowOneShot = ! pLoop->get();
-                *pLoop = nowOneShot;
-                laneLoopBtn[static_cast<size_t>(L)].setButtonText (nowOneShot ? "1" : u8"\u221E");
-                // Re-bake so the running snapshot picks up the new mode immediately.
-                proc.updateLaneSnapshot (L);
-            }
-        };
-
         // Teach button
-        laneTeachBtn[static_cast<size_t>(L)].setLookAndFeel (&_symbolLF);
+        laneTeachBtn[static_cast<size_t>(L)].setLookAndFeel (&_teachDrawLF);
         addAndMakeVisible (laneTeachBtn[static_cast<size_t>(L)]);
         laneTeachBtn[static_cast<size_t>(L)].onClick = [this, L]
         {
@@ -967,7 +945,7 @@ DrawnCurveEditor::DrawnCurveEditor (DrawnCurveProcessor& p)
         };
 
         // Mute button
-        laneMuteBtn[static_cast<size_t>(L)].setLookAndFeel (&_symbolLF);
+        laneMuteBtn[static_cast<size_t>(L)].setLookAndFeel (&_muteDrawLF);
         addAndMakeVisible (laneMuteBtn[static_cast<size_t>(L)]);
         laneMuteBtn[static_cast<size_t>(L)].onClick = [this, L]
         {
@@ -1148,13 +1126,11 @@ DrawnCurveEditor::~DrawnCurveEditor()
 {
     // Reset all L&Fs before structs are destroyed.
     for (auto& b : laneTypeBtn)   b.setLookAndFeel (nullptr);
-    for (auto& b : laneLoopBtn)   b.setLookAndFeel (nullptr);
     for (auto& b : laneTeachBtn)  b.setLookAndFeel (nullptr);
     for (auto& b : laneMuteBtn)   b.setLookAndFeel (nullptr);
     for (auto& b : scalePresetBtns) b.setLookAndFeel (nullptr);
     for (auto* b : { &tickYMinusBtn, &tickYPlusBtn, &tickXMinusBtn, &tickXPlusBtn })
         b->setLookAndFeel (nullptr);
-    syncButton.setLookAndFeel (nullptr);
     for (auto* b : { &scaleAllBtn, &scaleNoneBtn, &scaleInvBtn, &scaleRootBtn })
         b->setLookAndFeel (nullptr);
 
@@ -1229,6 +1205,19 @@ void DrawnCurveEditor::bindShapingToLane (int lane)
     rangeSlider.setMaxValue (proc.apvts.getRawParameterValue (laneParam (lane, "maxOutput"))->load(),
                              juce::dontSendNotification);
     updateRangeLabel();
+
+    // One-shot toggle
+    const bool isOneShot = proc.apvts.getRawParameterValue (laneParam (lane, "loopMode"))->load() > 0.5f;
+    oneShotBtn.setButtonText (isOneShot ? "1" : u8"\u221E");
+    oneShotBtn.onClick = [this, lane] {
+        if (auto* pLoop = dynamic_cast<juce::AudioParameterBool*>(
+                              proc.apvts.getParameter (laneParam (lane, "loopMode")))) {
+            const bool nowOneShot = ! pLoop->get();
+            *pLoop = nowOneShot;
+            oneShotBtn.setButtonText (nowOneShot ? "1" : u8"\u221E");
+            proc.updateLaneSnapshot (lane);
+        }
+    };
 }
 
 //==============================================================================
@@ -1323,7 +1312,7 @@ void DrawnCurveEditor::parameterChanged (const juce::String& paramID, float)
     {
         juce::MessageManager::callAsync ([this] {
             const bool isSyncing = proc.apvts.getRawParameterValue (ParamID::syncEnabled)->load() > 0.5f;
-            syncButton.setButtonText (isSyncing ? "SYNC" : "FREE");
+            syncButton.setToggleState (isSyncing, juce::dontSendNotification);
             onSyncToggled (isSyncing);
         });
         return;
@@ -1356,14 +1345,16 @@ void DrawnCurveEditor::parameterChanged (const juce::String& paramID, float)
 
         if (paramID == laneParam (L, "loopMode"))
         {
-            // Re-bake oneShot flag into running snapshot immediately.
             proc.updateLaneSnapshot (L);
-            juce::MessageManager::callAsync ([this, L] {
-                const bool isOneShot =
-                    proc.apvts.getRawParameterValue (laneParam (L, "loopMode"))->load() > 0.5f;
-                laneLoopBtn[static_cast<size_t>(L)].setButtonText (isOneShot ? "1" : u8"\u221E");
-                applyTheme();
-            });
+            if (L == _focusedLane)
+            {
+                juce::MessageManager::callAsync ([this] {
+                    const bool isOneShot = proc.apvts.getRawParameterValue (
+                        laneParam (_focusedLane, "loopMode"))->load() > 0.5f;
+                    oneShotBtn.setButtonText (isOneShot ? "1" : u8"\u221E");
+                    applyTheme();
+                });
+            }
             return;
         }
 
@@ -1417,13 +1408,19 @@ void DrawnCurveEditor::onSyncToggled (bool isSync)
     if (isSync)
     {
         speedAttach = std::make_unique<Attach> (proc.apvts, ParamID::syncBeats, speedSlider);
-        speedLabel.setText ("Beats", juce::dontSendNotification);
-        speedSlider.setTextValueSuffix ("");
+        // Invert the slider range so right = fewer beats = faster (consistent
+        // with FREE mode where right = faster).  The APVTS attachment still
+        // writes the actual beat count; the slider's inverted [32→1] range
+        // maps positions correctly.
+        speedSlider.setRange (32.0, 1.0, 1.0);
+        speedLabel.setText ("Length", juce::dontSendNotification);
+        speedSlider.setTextValueSuffix (" bars");
         speedSlider.setNumDecimalPlacesToDisplay (0);
     }
     else
     {
         speedAttach = std::make_unique<Attach> (proc.apvts, ParamID::playbackSpeed, speedSlider);
+        speedSlider.setRange (0.25, 4.0, 0.0);   // restore normal range
         speedLabel.setText ("Speed", juce::dontSendNotification);
         speedSlider.setTextValueSuffix ("x");
         speedSlider.setNumDecimalPlacesToDisplay (2);
@@ -1563,9 +1560,13 @@ void DrawnCurveEditor::applyTheme()
     for (auto* l : { &smoothingLabel, &rangeLabel, &speedLabel, &phaseOffsetLabel })
         l->setColour (juce::Label::textColourId, dimText);
 
+    // clearButton is a dcui::IconButton
+    clearButton.setBaseColour (light ? juce::Colour (0xff706D64) : juce::Colours::lightgrey);
+
     // Utility buttons
-    for (auto* b : { &playButton, &clearButton, &panicButton, &themeButton, &restartBtn, &helpButton,
-                     &tickYMinusBtn, &tickYPlusBtn, &tickXMinusBtn, &tickXPlusBtn })
+    for (auto* b : { &playButton, &panicButton, &themeButton, &helpButton,
+                     &tickYMinusBtn, &tickYPlusBtn, &tickXMinusBtn, &tickXPlusBtn,
+                     &oneShotBtn })
     {
         b->setColour (juce::TextButton::buttonColourId,  btnBg);
         b->setColour (juce::TextButton::textColourOffId, btnText);
@@ -1630,16 +1631,6 @@ void DrawnCurveEditor::applyTheme()
             lbl->setAlpha (rowAlpha);
         }
 
-        // Loop / One-Shot button: glows when one-shot active
-        {
-            const bool oneShot = proc.apvts.getRawParameterValue (laneParam (L, "loopMode"))->load() > 0.5f;
-            laneLoopBtn[static_cast<size_t>(L)].setColour (juce::TextButton::buttonColourId,
-                                   oneShot ? accent.withAlpha (0.22f) : btnBg);
-            laneLoopBtn[static_cast<size_t>(L)].setColour (juce::TextButton::textColourOffId,
-                                   oneShot ? accent : btnText);
-            laneLoopBtn[static_cast<size_t>(L)].setAlpha (rowAlpha);
-        }
-
         // Teach button: glows amber while pending
         const bool teaching = proc.isTeachPending (L);
         const auto teachAccent = light ? juce::Colour (0xffF59E0B) : juce::Colour (0xffFBBF24);
@@ -1692,14 +1683,9 @@ void DrawnCurveEditor::applyTheme()
     maskLabel.setColour (juce::Label::outlineColourId,         dimText);
     maskLabel.setColour (juce::Label::textWhenEditingColourId, textCol);
 
-    // Sync button
-    {
-        const bool isSync = proc.apvts.getRawParameterValue (ParamID::syncEnabled)->load() > 0.5f;
-        syncButton.setColour (juce::TextButton::buttonColourId,
-                              isSync ? accent : btnBg);
-        syncButton.setColour (juce::TextButton::textColourOffId,
-                              isSync ? juce::Colours::white : btnText);
-    }
+    // syncButton is a dcui::IconButton — use setBaseColour
+    syncButton.setBaseColour (light ? juce::Colour (0xff6D28D9) : juce::Colour (0xff2979ff));
+    syncButton.repaint();
 
     repaint();
 }
@@ -1752,9 +1738,6 @@ void DrawnCurveEditor::paint (juce::Graphics& g)
                 g.drawFittedText ("Ch", hx, hy, matChanW, hh,
                                   juce::Justification::centredLeft, 1);
                 hx += matChanW + matInnerGap;
-                g.drawFittedText ("Lp", hx, hy, matLoopW, hh,
-                                  juce::Justification::centredLeft, 1);
-                hx += matLoopW + matInnerGap;
                 g.drawFittedText ("Teach", hx, hy, matTeachW, hh,
                                   juce::Justification::centredLeft, 1);
                 hx += matTeachW + matInnerGap;
@@ -1824,9 +1807,7 @@ void DrawnCurveEditor::resized()
         ts.removeFromTop (4);
 
         auto row = ts.removeFromTop (paramRowH);
-        syncButton .setBounds (row.removeFromLeft (44).withSizeKeepingCentre (44, 32));
-        row.removeFromLeft (4);
-        restartBtn .setBounds (row.removeFromLeft (28).withSizeKeepingCentre (28, 28));
+        syncButton .setBounds (row.removeFromLeft (52).withSizeKeepingCentre (52, 32));
         row.removeFromLeft (4);
         speedLabel .setBounds (row.removeFromTop (paramLabelH));
         speedSlider.setBounds (row);
@@ -1838,8 +1819,13 @@ void DrawnCurveEditor::resized()
     {
         auto ss = _secShaping.reduced (4);
 
-        // Lane focus selector
-        laneFocusCtrl.setBounds (ss.removeFromTop (28));
+        // Lane focus selector + one-shot toggle (inline in same row)
+        {
+            auto focusRow = ss.removeFromTop (28);
+            oneShotBtn.setBounds (focusRow.removeFromRight (28));
+            focusRow.removeFromRight (4);
+            laneFocusCtrl.setBounds (focusRow);
+        }
         ss.removeFromTop (4);
 
         // Smooth
@@ -1895,10 +1881,6 @@ void DrawnCurveEditor::resized()
 
             // Channel
             laneChannelLabel[static_cast<size_t>(L)].setBounds (row.removeFromLeft (matChanW));
-            row.removeFromLeft (matInnerGap);
-
-            // Loop / One-Shot
-            laneLoopBtn[static_cast<size_t>(L)].setBounds (row.removeFromLeft (matLoopW));
             row.removeFromLeft (matInnerGap);
 
             // Teach

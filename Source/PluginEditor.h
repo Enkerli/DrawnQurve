@@ -27,6 +27,7 @@
 #include "PluginProcessor.h"
 #include "SegmentedControl.h"
 #include "ScaleLattice.h"
+#include "UI/IconFactory.h"
 
 // Colour palette struct — defined in PluginEditor.cpp.
 struct Theme;
@@ -144,32 +145,37 @@ private:
     };
     SymbolLF _symbolLF;
 
-    struct SyncLF : public juce::LookAndFeel_V4
+    /// LookAndFeel that draws a dcui icon instead of text — applied to
+    /// TextButton arrays (mute, teach) that cannot be changed to IconButton
+    /// without structural changes.
+    struct IconDrawLF : public juce::LookAndFeel_V4
     {
-        // Draws two stacked labels: "FREE" and "SYNC".
-        // The button's text string is "FREE" or "SYNC"; the active one is
-        // drawn at full opacity, the inactive one at 35%.
-        void drawButtonText (juce::Graphics& g, juce::TextButton& btn,
-                             bool, bool) override
+        dcui::IconType iconType { dcui::IconType::mute };
+
+        void drawButtonBackground (juce::Graphics& g, juce::Button& btn,
+                                   const juce::Colour&, bool, bool) override
         {
-            const juce::String active = btn.getButtonText();   // "FREE" or "SYNC"
-            const auto col   = btn.findColour (juce::TextButton::textColourOffId);
-            const auto b     = btn.getLocalBounds().toFloat();
-            const float half = b.getHeight() * 0.5f;
-            g.setFont (juce::Font (juce::FontOptions{}.withHeight (9.5f).withStyle ("Bold")));
-            for (int i = 0; i < 2; ++i)
-            {
-                const juce::String label = (i == 0) ? "FREE" : "SYNC";
-                const bool isActive = (label == active);
-                g.setColour (col.withAlpha (isActive ? 1.0f : 0.32f));
-                g.drawFittedText (label,
-                    juce::roundToInt (b.getX()), juce::roundToInt (b.getY() + half * i),
-                    juce::roundToInt (b.getWidth()), juce::roundToInt (half),
-                    juce::Justification::centred, 1);
-            }
+            const auto r     = btn.getLocalBounds().toFloat().reduced (0.5f);
+            const bool tog   = btn.getToggleState();
+            const auto bg    = btn.findColour (juce::TextButton::buttonColourId);
+            const auto hlBg  = btn.findColour (juce::TextButton::buttonOnColourId);
+            g.setColour (tog ? hlBg : bg);
+            g.fillRoundedRectangle (r, 4.0f);
+        }
+
+        void drawButtonText (juce::Graphics& g, juce::TextButton& btn,
+                             bool isHover, bool) override
+        {
+            const bool tog = btn.getToggleState();
+            auto col = btn.findColour (tog ? juce::TextButton::textColourOnId
+                                           : juce::TextButton::textColourOffId);
+            if (isHover) col = col.brighter (0.18f);
+            const auto iconBounds = btn.getLocalBounds().toFloat().reduced (5.0f, 5.0f);
+            dcui::IconFactory::drawIcon (g, iconType, iconBounds, col);
         }
     };
-    SyncLF _syncLF;
+    IconDrawLF _muteDrawLF;
+    IconDrawLF _teachDrawLF;
 
     struct ScaleActionLF : public juce::LookAndFeel_V4
     {
@@ -239,12 +245,11 @@ private:
 
     // ── Utility bar ───────────────────────────────────────────────────────────
     juce::TextButton playButton  { "Play"  };
-    juce::TextButton clearButton { "Clear" };
+    dcui::IconButton clearButton { "Clear", dcui::IconType::clearGesture };
     juce::TextButton panicButton { "!"     };
     juce::TextButton themeButton { "Dark"  };
-    juce::TextButton syncButton    { "Sync"  };
-    juce::TextButton restartBtn    { u8"\u21ba" };   ///< ↺  restart all lane playheads
-    juce::TextButton helpButton    { "?"     };
+    dcui::IconButton syncButton  { "Sync", dcui::IconType::sync };
+    juce::TextButton helpButton  { "?"     };
 
     // ── Transport: direction + sync ───────────────────────────────────────────
     SegmentedControl dirControl;
@@ -266,6 +271,7 @@ private:
     // ── Shaping panel — per focused lane ─────────────────────────────────────
     SegmentedControl laneFocusCtrl;   ///< Lane 1 | Lane 2 | Lane 3
 
+    juce::TextButton oneShotBtn;            ///< Loop (∞) / One-shot (1) — shaping panel
     juce::Slider smoothingSlider;
     juce::Slider rangeSlider;
     juce::Slider phaseOffsetSlider;
@@ -274,13 +280,11 @@ private:
     std::unique_ptr<Attach> phaseOffsetAttach;
 
     // ── Routing matrix — one row per lane ─────────────────────────────────────
-    // Each row: type button | detail label | channel label | loop | teach | mute
+    // Each row: type button | detail label | channel label | teach | mute
     // laneTypeBtn cycles through CC/PB/Note/Aft on click; right-click = popup menu.
-    // laneLoopBtn toggles loop (∞) vs one-shot (1×).
     std::array<juce::TextButton, kMaxLanes> laneTypeBtn;
     std::array<juce::Label,      kMaxLanes> laneDetailLabel;
     std::array<juce::Label,      kMaxLanes> laneChannelLabel;
-    std::array<juce::TextButton, kMaxLanes> laneLoopBtn;
     std::array<juce::TextButton, kMaxLanes> laneTeachBtn;
     std::array<juce::TextButton, kMaxLanes> laneMuteBtn;
 

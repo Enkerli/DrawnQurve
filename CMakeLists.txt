@@ -113,7 +113,19 @@ target_sources(DrawnCurve PRIVATE
     Source/Engine/GestureCaptureSession.cpp
 )
 
-target_include_directories(DrawnCurve PRIVATE Source/Engine)
+target_include_directories(DrawnCurve PRIVATE Source/Engine Source Source/UI)
+
+# ── iOS code signing ──────────────────────────────────────────────────────────
+# Embed signing identity so cmake regeneration preserves it.
+# These settings match the provisioning profiles on the build machine.
+set_target_properties (DrawnCurve_AUv3 PROPERTIES
+    XCODE_ATTRIBUTE_DEVELOPMENT_TEAM        "P8W7XXJN6C"
+    XCODE_ATTRIBUTE_CODE_SIGN_STYLE         "Automatic"
+    XCODE_ATTRIBUTE_CODE_SIGN_IDENTITY      "Apple Development")
+set_target_properties (DrawnCurve_Standalone PROPERTIES
+    XCODE_ATTRIBUTE_DEVELOPMENT_TEAM        "P8W7XXJN6C"
+    XCODE_ATTRIBUTE_CODE_SIGN_STYLE         "Automatic"
+    XCODE_ATTRIBUTE_CODE_SIGN_IDENTITY      "Apple Development")
 
 target_compile_definitions(DrawnCurve
     PUBLIC
