@@ -156,7 +156,7 @@ private:
             const auto col   = btn.findColour (juce::TextButton::textColourOffId);
             const auto b     = btn.getLocalBounds().toFloat();
             const float half = b.getHeight() * 0.5f;
-            g.setFont (juce::Font (juce::FontOptions{}.withHeight (9.5f).withStyle (juce::Font::bold)));
+            g.setFont (juce::Font (juce::FontOptions{}.withHeight (9.5f).withStyle ("Bold")));
             for (int i = 0; i < 2; ++i)
             {
                 const juce::String label = (i == 0) ? "FREE" : "SYNC";

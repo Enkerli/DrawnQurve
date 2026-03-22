@@ -313,7 +313,7 @@ inline void ScaleLattice::paint (juce::Graphics& g)
                                              : colTextOff;
         g.setColour (textCol);
         const float fontSize = juce::jmax (9.0f, n.r * 0.62f);
-        g.setFont (juce::Font (juce::FontOptions{}.withHeight (fontSize).withStyle (juce::Font::bold)));
+        g.setFont (juce::Font (juce::FontOptions{}.withHeight (fontSize).withStyle ("Bold")));
         g.drawFittedText (n.name, circ.toNearestInt(), juce::Justification::centred, 1);
     }
 }

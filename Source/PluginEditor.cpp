@@ -127,7 +127,7 @@ void HelpOverlay::paint (juce::Graphics& g)
 
     const auto bounds = getLocalBounds().toFloat().reduced (24.0f, 20.0f);
     g.setColour (juce::Colours::white);
-    g.setFont (juce::Font (juce::FontOptions{}.withHeight (15.0f).withStyle (juce::Font::bold)));
+    g.setFont (juce::Font (juce::FontOptions{}.withHeight (15.0f).withStyle ("Bold")));
     g.drawText ("DrawnCurve  Quick Reference",
                 bounds.withHeight (22.0f).toNearestInt(),
                 juce::Justification::centred, false);
@@ -158,7 +158,7 @@ void HelpOverlay::paint (juce::Graphics& g)
 
     for (const auto& e : kEntries)
     {
-        g.setFont (juce::Font (juce::FontOptions{}.withHeight (11.5f).withStyle (juce::Font::bold)));
+        g.setFont (juce::Font (juce::FontOptions{}.withHeight (11.5f).withStyle ("Bold")));
         g.setColour (juce::Colour (0xff80d8ff));
         g.drawText (e.label,
                     juce::roundToInt (bounds.getX()), juce::roundToInt (y),
@@ -175,7 +175,7 @@ void HelpOverlay::paint (juce::Graphics& g)
         if (y + lineH * 2 > bounds.getBottom() - 18.0f) break;
     }
 
-    g.setFont (juce::Font (juce::FontOptions{}.withHeight (11.0f).withStyle (juce::Font::italic)));
+    g.setFont (juce::Font (juce::FontOptions{}.withHeight (11.0f).withStyle ("Italic")));
     g.setColour (juce::Colours::white.withAlpha (0.6f));
     g.drawText ("Tap anywhere to close", getLocalBounds().withTop (getHeight() - 22),
                 juce::Justification::centred, false);
@@ -1078,7 +1078,7 @@ DrawnCurveEditor::DrawnCurveEditor (DrawnCurveProcessor& p)
     };
 
     // Mask label
-    maskLabel.setFont (juce::Font (juce::FontOptions{}.withName (juce::Font::getDefaultMonospacedFontName()).withHeight (11.0f).withStyle (juce::Font::plain)));
+    maskLabel.setFont (juce::Font (juce::FontOptions{}.withName (juce::Font::getDefaultMonospacedFontName()).withHeight (11.0f)));
     maskLabel.setJustificationType (juce::Justification::centred);
     maskLabel.setEditable (false, true, false);
     addAndMakeVisible (maskLabel);
