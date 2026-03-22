@@ -60,8 +60,6 @@ namespace Layout
     static constexpr int pad      = 6;
     static constexpr int colGap   = 8;
     static constexpr int rightColW = 244;
-    static constexpr int leftColW  = editorW - 2*pad - colGap - rightColW;  // 376
-
     static constexpr int utilityRowH = 28;
 
     // Right column sections
@@ -129,7 +127,7 @@ void HelpOverlay::paint (juce::Graphics& g)
 
     const auto bounds = getLocalBounds().toFloat().reduced (24.0f, 20.0f);
     g.setColour (juce::Colours::white);
-    g.setFont (juce::Font (15.0f, juce::Font::bold));
+    g.setFont (juce::Font (juce::FontOptions{}.withHeight (15.0f).withStyle (juce::Font::bold)));
     g.drawText ("DrawnCurve  Quick Reference",
                 bounds.withHeight (22.0f).toNearestInt(),
                 juce::Justification::centred, false);
@@ -160,14 +158,14 @@ void HelpOverlay::paint (juce::Graphics& g)
 
     for (const auto& e : kEntries)
     {
-        g.setFont (juce::Font (11.5f, juce::Font::bold));
+        g.setFont (juce::Font (juce::FontOptions{}.withHeight (11.5f).withStyle (juce::Font::bold)));
         g.setColour (juce::Colour (0xff80d8ff));
         g.drawText (e.label,
                     juce::roundToInt (bounds.getX()), juce::roundToInt (y),
                     juce::roundToInt (labelW), juce::roundToInt (lineH * 2),
                     juce::Justification::topRight, false);
 
-        g.setFont (juce::Font (11.5f));
+        g.setFont (juce::Font (juce::FontOptions{}.withHeight (11.5f)));
         g.setColour (juce::Colours::white);
         g.drawMultiLineText (e.desc,
                              juce::roundToInt (bounds.getX() + labelW + gap),
@@ -177,7 +175,7 @@ void HelpOverlay::paint (juce::Graphics& g)
         if (y + lineH * 2 > bounds.getBottom() - 18.0f) break;
     }
 
-    g.setFont (juce::Font (11.0f, juce::Font::italic));
+    g.setFont (juce::Font (juce::FontOptions{}.withHeight (11.0f).withStyle (juce::Font::italic)));
     g.setColour (juce::Colours::white.withAlpha (0.6f));
     g.drawText ("Tap anywhere to close", getLocalBounds().withTop (getHeight() - 22),
                 juce::Justification::centred, false);
@@ -327,7 +325,7 @@ void CurveDisplay::paint (juce::Graphics& g)
     {
         const auto col = (_lightMode ? kLaneColourLight : kLaneColourDark)[_focusedLane];
         g.setColour (col.withAlpha (0.40f));
-        g.setFont (juce::Font (14.0f));
+        g.setFont (juce::Font (juce::FontOptions{}.withHeight (14.0f)));
         const juce::String hint = "Draw Lane " + juce::String (_focusedLane + 1) + " here";
         g.drawText (hint, plot, juce::Justification::centred, false);
     }
@@ -390,7 +388,7 @@ void CurveDisplay::paint (juce::Graphics& g)
                     g.fillRect (plotX, noteY - halfUp, plotW, halfUp + halfDn);
                 }
             }
-            g.setFont (juce::Font (9.5f));
+            g.setFont (juce::Font (juce::FontOptions{}.withHeight (9.5f)));
             g.setColour (T.hint);
             const int lblW = juce::roundToInt (kAxisMarginL) - 2, lblH = 11;
             int lastLabelY = -100;   // tracks the bottom edge of the last drawn label
@@ -422,7 +420,7 @@ void CurveDisplay::paint (juce::Graphics& g)
                 }
                 return {};
             };
-            g.setFont (juce::Font (10.0f));
+            g.setFont (juce::Font (juce::FontOptions{}.withHeight (10.0f)));
             g.setColour (T.hint);
             const int lblW = juce::roundToInt (kAxisMarginL) - 2, lblH = 12;
             int lastGridLabelY = -100;
@@ -440,7 +438,7 @@ void CurveDisplay::paint (juce::Graphics& g)
         }
 
         // ── X axis ────────────────────────────────────────────────────────────
-        g.setFont (juce::Font (10.0f));
+        g.setFont (juce::Font (juce::FontOptions{}.withHeight (10.0f)));
         g.setColour (T.hint);
         const int xLblY = juce::roundToInt (h - kAxisMarginB + 2);
         const int xLblH = juce::roundToInt (kAxisMarginB - 3);
@@ -456,7 +454,7 @@ void CurveDisplay::paint (juce::Graphics& g)
         // ── Duration overlay ──────────────────────────────────────────────────
         if (dur > 0.0f)
         {
-            g.setFont (juce::Font (10.0f));
+            g.setFont (juce::Font (juce::FontOptions{}.withHeight (10.0f)));
             g.setColour (T.hint);
             g.drawText (juce::String (dur, 2) + "s",
                         juce::roundToInt (plotX + plotW - 46), 2, 46, 12,
@@ -476,7 +474,7 @@ void CurveDisplay::paint (juce::Graphics& g)
             g.setColour (lane == _focusedLane ? col : col.withAlpha (0.50f));
             g.fillEllipse (static_cast<float> (lx), static_cast<float> (ly + (legH - dotSz) / 2),
                            static_cast<float> (dotSz), static_cast<float> (dotSz));
-            g.setFont (juce::Font (9.5f));
+            g.setFont (juce::Font (juce::FontOptions{}.withHeight (9.5f)));
             g.drawText ("L" + juce::String (lane + 1),
                         lx + dotSz + 2, ly, legW, legH,
                         juce::Justification::centredLeft, false);
@@ -668,9 +666,9 @@ DrawnCurveEditor::DrawnCurveEditor (DrawnCurveProcessor& p)
         // Direction (Forward / PingPong / Reverse) is always user-controlled.
         // Sync mode only affects speed/timing from the host BPM; it does not
         // lock the looping direction.
-        if (auto* p = dynamic_cast<juce::AudioParameterChoice*> (
+        if (auto* pDir = dynamic_cast<juce::AudioParameterChoice*> (
                           proc.apvts.getParameter (ParamID::playbackDirection)))
-            *p = kDirVisToParam[vis];
+            *pDir = kDirVisToParam[vis];
     };
     dirControl.onTap = [this] (int, bool wasAlready)
     {
@@ -713,10 +711,10 @@ DrawnCurveEditor::DrawnCurveEditor (DrawnCurveProcessor& p)
         g.setColour (baseCol.withAlpha (arrowAlpha));
 
         auto fillTri = [&] (bool pointRight) {
-            juce::Path p;
-            if (pointRight) p.addTriangle (cx+tw, cy, cx-tw, cy-aw, cx-tw, cy+aw);
-            else            p.addTriangle (cx-tw, cy, cx+tw, cy-aw, cx+tw, cy+aw);
-            g.fillPath (p);
+            juce::Path triPath;
+            if (pointRight) triPath.addTriangle (cx+tw, cy, cx-tw, cy-aw, cx-tw, cy+aw);
+            else            triPath.addTriangle (cx-tw, cy, cx+tw, cy-aw, cx+tw, cy+aw);
+            g.fillPath (triPath);
         };
 
         if (index == 0)      fillTri (false);
@@ -765,7 +763,7 @@ DrawnCurveEditor::DrawnCurveEditor (DrawnCurveProcessor& p)
     rangeSlider.setTextBoxStyle (juce::Slider::NoTextBox, true, 0, 0);
     rangeSlider.setRange (0.0, 1.0, 0.001);
     addAndMakeVisible (rangeSlider);
-    rangeLabel.setFont (juce::Font (11.0f));
+    rangeLabel.setFont (juce::Font (juce::FontOptions{}.withHeight (11.0f)));
     addAndMakeVisible (rangeLabel);
 
     rangeSlider.onValueChange = [this]
@@ -774,9 +772,9 @@ DrawnCurveEditor::DrawnCurveEditor (DrawnCurveProcessor& p)
         if (auto* p = dynamic_cast<juce::AudioParameterFloat*> (
                           proc.apvts.getParameter (laneParam (L, "minOutput"))))
             *p = static_cast<float> (rangeSlider.getMinValue());
-        if (auto* p = dynamic_cast<juce::AudioParameterFloat*> (
+        if (auto* p2 = dynamic_cast<juce::AudioParameterFloat*> (
                           proc.apvts.getParameter (laneParam (L, "maxOutput"))))
-            *p = static_cast<float> (rangeSlider.getMaxValue());
+            *p2 = static_cast<float> (rangeSlider.getMaxValue());
         updateRangeLabel();
     };
 
@@ -793,24 +791,24 @@ DrawnCurveEditor::DrawnCurveEditor (DrawnCurveProcessor& p)
             proc.apvts.getRawParameterValue (laneParam (L, "msgType"))->load());
         // initial text set via updateLaneRow below; just pre-populate here
         { static auto s = [] (int t) -> juce::String { switch(t){case 0:return "CC";case 1:return "At";case 2:return "PB";case 3:return "N";}return "?"; };
-          laneTypeBtn[L].setButtonText (s (curType)); }
-        laneTypeBtn[L].setLookAndFeel (&_symbolLF);
-        laneTypeBtn[L].onClick = [this, L]
+          laneTypeBtn[static_cast<size_t>(L)].setButtonText (s (curType)); }
+        laneTypeBtn[static_cast<size_t>(L)].setLookAndFeel (&_symbolLF);
+        laneTypeBtn[static_cast<size_t>(L)].onClick = [this, L]
         {
             static const int kCycleNext[4] = { 2, 0, 3, 1 };
             const int cur = static_cast<int> (
                 proc.apvts.getRawParameterValue (laneParam (L, "msgType"))->load());
             const int next = kCycleNext[std::clamp (cur, 0, 3)];
-            if (auto* p = dynamic_cast<juce::AudioParameterChoice*> (
+            if (auto* pType = dynamic_cast<juce::AudioParameterChoice*> (
                               proc.apvts.getParameter (laneParam (L, "msgType"))))
-                *p = next;
+                *pType = next;
             updateLaneRow (L);
             if (L == _focusedLane)
                 updateScaleVisibility();
         };
-        laneTypeBtn[L].onStateChange = [this, L] {
+        laneTypeBtn[static_cast<size_t>(L)].onStateChange = [this, L] {
             // Right-click → popup menu
-            if (laneTypeBtn[L].getState() == juce::Button::ButtonState::buttonDown
+            if (laneTypeBtn[static_cast<size_t>(L)].getState() == juce::Button::ButtonState::buttonDown
                 && juce::ModifierKeys::currentModifiers.isRightButtonDown())
             {
                 const int cur = static_cast<int> (
@@ -824,16 +822,16 @@ DrawnCurveEditor::DrawnCurveEditor (DrawnCurveProcessor& p)
                 m.addItem (10, "Copy type to all lanes");
                 m.addItem (11, "Copy channel to all lanes");
                 m.addItem (12, "Copy all settings to all lanes");
-                m.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (&laneTypeBtn[L]),
+                m.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (&laneTypeBtn[static_cast<size_t>(L)]),
                     [this, L] (int result) {
                         if (result == 0) return;
                         if (result <= 4)
                         {
                             static const int kMenuToParam[5] = { 0, 0, 2, 3, 1 };
                             const int newType = kMenuToParam[result];
-                            if (auto* p = dynamic_cast<juce::AudioParameterChoice*> (
+                            if (auto* pNewType = dynamic_cast<juce::AudioParameterChoice*> (
                                               proc.apvts.getParameter (laneParam (L, "msgType"))))
-                                *p = newType;
+                                *pNewType = newType;
                             updateLaneRow (L);
                             if (L == _focusedLane) updateScaleVisibility();
                             return;
@@ -846,17 +844,17 @@ DrawnCurveEditor::DrawnCurveEditor (DrawnCurveProcessor& p)
                             {
                                 const int srcType = static_cast<int> (
                                     proc.apvts.getRawParameterValue (laneParam (L, "msgType"))->load());
-                                if (auto* p = dynamic_cast<juce::AudioParameterChoice*> (
+                                if (auto* pType = dynamic_cast<juce::AudioParameterChoice*> (
                                                   proc.apvts.getParameter (laneParam (T, "msgType"))))
-                                    *p = srcType;
+                                    *pType = srcType;
                             }
                             if (result == 11 || result == 12)   // channel
                             {
                                 const int srcCh = static_cast<int> (
                                     proc.apvts.getRawParameterValue (laneParam (L, "midiChannel"))->load());
-                                if (auto* p = dynamic_cast<juce::AudioParameterInt*> (
+                                if (auto* pCh = dynamic_cast<juce::AudioParameterInt*> (
                                                   proc.apvts.getParameter (laneParam (T, "midiChannel"))))
-                                    *p = srcCh;
+                                    *pCh = srcCh;
                             }
                             if (result == 12)   // all settings: also CC# and velocity
                             {
@@ -864,12 +862,12 @@ DrawnCurveEditor::DrawnCurveEditor (DrawnCurveProcessor& p)
                                     proc.apvts.getRawParameterValue (laneParam (L, "ccNumber"))->load());
                                 const int srcVel = static_cast<int> (
                                     proc.apvts.getRawParameterValue (laneParam (L, "noteVelocity"))->load());
-                                if (auto* p = dynamic_cast<juce::AudioParameterInt*> (
+                                if (auto* pCC = dynamic_cast<juce::AudioParameterInt*> (
                                                   proc.apvts.getParameter (laneParam (T, "ccNumber"))))
-                                    *p = srcCC;
-                                if (auto* p = dynamic_cast<juce::AudioParameterInt*> (
+                                    *pCC = srcCC;
+                                if (auto* pVel = dynamic_cast<juce::AudioParameterInt*> (
                                                   proc.apvts.getParameter (laneParam (T, "noteVelocity"))))
-                                    *p = srcVel;
+                                    *pVel = srcVel;
                             }
                         }
                         updateAllLaneRows();
@@ -877,51 +875,51 @@ DrawnCurveEditor::DrawnCurveEditor (DrawnCurveProcessor& p)
                     });
             }
         };
-        addAndMakeVisible (laneTypeBtn[L]);
+        addAndMakeVisible (laneTypeBtn[static_cast<size_t>(L)]);
 
         // Detail label (CC# or velocity)
-        laneDetailLabel[L].setFont (juce::Font (10.0f));
-        laneDetailLabel[L].setJustificationType (juce::Justification::centred);
-        laneDetailLabel[L].setEditable (false, true, false);
-        laneDetailLabel[L].onEditorHide = [this, L]
+        laneDetailLabel[static_cast<size_t>(L)].setFont (juce::Font (juce::FontOptions{}.withHeight (10.0f)));
+        laneDetailLabel[static_cast<size_t>(L)].setJustificationType (juce::Justification::centred);
+        laneDetailLabel[static_cast<size_t>(L)].setEditable (false, true, false);
+        laneDetailLabel[static_cast<size_t>(L)].onEditorHide = [this, L]
         {
-            const int val = juce::jlimit (0, 127, laneDetailLabel[L].getText().getIntValue());
+            const int val = juce::jlimit (0, 127, laneDetailLabel[static_cast<size_t>(L)].getText().getIntValue());
             const int type = static_cast<int> (
                 proc.apvts.getRawParameterValue (laneParam (L, "msgType"))->load());
             if (type == 3)   // Note — edit velocity
             {
-                if (auto* p = dynamic_cast<juce::AudioParameterInt*> (
+                if (auto* pVel = dynamic_cast<juce::AudioParameterInt*> (
                                   proc.apvts.getParameter (laneParam (L, "noteVelocity"))))
-                    *p = juce::jlimit (1, 127, val);
+                    *pVel = juce::jlimit (1, 127, val);
             }
             else             // CC — edit cc number
             {
-                if (auto* p = dynamic_cast<juce::AudioParameterInt*> (
+                if (auto* pCC = dynamic_cast<juce::AudioParameterInt*> (
                                   proc.apvts.getParameter (laneParam (L, "ccNumber"))))
-                    *p = val;
+                    *pCC = val;
             }
             updateLaneRow (L);
         };
-        addAndMakeVisible (laneDetailLabel[L]);
+        addAndMakeVisible (laneDetailLabel[static_cast<size_t>(L)]);
 
         // Channel label
-        laneChannelLabel[L].setFont (juce::Font (10.0f));
-        laneChannelLabel[L].setJustificationType (juce::Justification::centred);
-        laneChannelLabel[L].setEditable (false, true, false);
-        laneChannelLabel[L].onEditorHide = [this, L]
+        laneChannelLabel[static_cast<size_t>(L)].setFont (juce::Font (juce::FontOptions{}.withHeight (10.0f)));
+        laneChannelLabel[static_cast<size_t>(L)].setJustificationType (juce::Justification::centred);
+        laneChannelLabel[static_cast<size_t>(L)].setEditable (false, true, false);
+        laneChannelLabel[static_cast<size_t>(L)].onEditorHide = [this, L]
         {
-            const int val = juce::jlimit (1, 16, laneChannelLabel[L].getText().getIntValue());
-            if (auto* p = dynamic_cast<juce::AudioParameterInt*> (
+            const int val = juce::jlimit (1, 16, laneChannelLabel[static_cast<size_t>(L)].getText().getIntValue());
+            if (auto* pChan = dynamic_cast<juce::AudioParameterInt*> (
                               proc.apvts.getParameter (laneParam (L, "midiChannel"))))
-                *p = val;
+                *pChan = val;
             updateLaneRow (L);
         };
-        addAndMakeVisible (laneChannelLabel[L]);
+        addAndMakeVisible (laneChannelLabel[static_cast<size_t>(L)]);
 
         // Teach button
-        laneTeachBtn[L].setLookAndFeel (&_symbolLF);
-        addAndMakeVisible (laneTeachBtn[L]);
-        laneTeachBtn[L].onClick = [this, L]
+        laneTeachBtn[static_cast<size_t>(L)].setLookAndFeel (&_symbolLF);
+        addAndMakeVisible (laneTeachBtn[static_cast<size_t>(L)]);
+        laneTeachBtn[static_cast<size_t>(L)].onClick = [this, L]
         {
             if (proc.isTeachPending (L))
             {
@@ -931,21 +929,19 @@ DrawnCurveEditor::DrawnCurveEditor (DrawnCurveProcessor& p)
             else
             {
                 proc.cancelTeach();   // cancel any previous lane
-                const int type = static_cast<int> (
-                    proc.apvts.getRawParameterValue (laneParam (L, "msgType"))->load());
                 proc.beginTeach (L);   // all message types: isolates lane output
                 applyTheme();
             }
         };
 
         // Mute button
-        laneMuteBtn[L].setLookAndFeel (&_symbolLF);
-        addAndMakeVisible (laneMuteBtn[L]);
-        laneMuteBtn[L].onClick = [this, L]
+        laneMuteBtn[static_cast<size_t>(L)].setLookAndFeel (&_symbolLF);
+        addAndMakeVisible (laneMuteBtn[static_cast<size_t>(L)]);
+        laneMuteBtn[static_cast<size_t>(L)].onClick = [this, L]
         {
-            if (auto* p = dynamic_cast<juce::AudioParameterBool*> (
+            if (auto* pEnabled = dynamic_cast<juce::AudioParameterBool*> (
                               proc.apvts.getParameter (laneParam (L, "enabled"))))
-                *p = ! (p->get());
+                *pEnabled = ! (pEnabled->get());
             applyTheme();
         };
 
@@ -965,7 +961,7 @@ DrawnCurveEditor::DrawnCurveEditor (DrawnCurveProcessor& p)
     proc.apvts.addParameterListener ("scaleMask", this);
 
     // Mapping detail label
-    mappingDetailLabel.setFont (juce::Font (10.0f));
+    mappingDetailLabel.setFont (juce::Font (juce::FontOptions{}.withHeight (10.0f)));
     mappingDetailLabel.setJustificationType (juce::Justification::centredLeft);
     addAndMakeVisible (mappingDetailLabel);
 
@@ -976,17 +972,17 @@ DrawnCurveEditor::DrawnCurveEditor (DrawnCurveProcessor& p)
         { "Chrom", "Major", "Minor", "Dorian", "Penta+", "Penta-", "Blues", "Custom" };
 
     addAndMakeVisible (scaleLabel);
-    scaleLabel.setFont (juce::Font (11.0f));
+    scaleLabel.setFont (juce::Font (juce::FontOptions{}.withHeight (11.0f)));
 
     for (int i = 0; i < kNumScalePresets; ++i)
     {
-        scalePresetBtns[i].setButtonText (kScaleNames[i]);
-        scalePresetBtns[i].setLookAndFeel (&_symbolLF);
-        addAndMakeVisible (scalePresetBtns[i]);
-        scalePresetBtns[i].onClick = [this, i]
+        scalePresetBtns[static_cast<size_t>(i)].setButtonText (kScaleNames[static_cast<size_t>(i)]);
+        scalePresetBtns[static_cast<size_t>(i)].setLookAndFeel (&_symbolLF);
+        addAndMakeVisible (scalePresetBtns[static_cast<size_t>(i)]);
+        scalePresetBtns[static_cast<size_t>(i)].onClick = [this, i]
         {
-            if (auto* p = dynamic_cast<juce::AudioParameterInt*> (proc.apvts.getParameter ("scaleMode")))
-                *p = i;
+            if (auto* pMode = dynamic_cast<juce::AudioParameterInt*> (proc.apvts.getParameter ("scaleMode")))
+                *pMode = i;
             proc.updateAllLaneScales();
             updateScalePresetButtons();
             scaleLattice.setMask (calcAbsLatticeMask (proc, 0));
@@ -1002,8 +998,8 @@ DrawnCurveEditor::DrawnCurveEditor (DrawnCurveProcessor& p)
     {
         if (auto* p = dynamic_cast<juce::AudioParameterInt*> (proc.apvts.getParameter ("scaleMask")))
             *p = static_cast<int> (mask);
-        if (auto* p = dynamic_cast<juce::AudioParameterInt*> (proc.apvts.getParameter ("scaleMode")))
-            *p = 7;
+        if (auto* p2 = dynamic_cast<juce::AudioParameterInt*> (proc.apvts.getParameter ("scaleMode")))
+            *p2 = 7;
         proc.updateAllLaneScales();
         updateScalePresetButtons();
         updateMaskLabel();
@@ -1018,8 +1014,8 @@ DrawnCurveEditor::DrawnCurveEditor (DrawnCurveProcessor& p)
     {
         if (auto* p = dynamic_cast<juce::AudioParameterInt*> (proc.apvts.getParameter ("scaleMask")))
             *p = static_cast<int> (mask);
-        if (auto* p = dynamic_cast<juce::AudioParameterInt*> (proc.apvts.getParameter ("scaleMode")))
-            *p = 7;
+        if (auto* p2 = dynamic_cast<juce::AudioParameterInt*> (proc.apvts.getParameter ("scaleMode")))
+            *p2 = 7;
         proc.updateAllLaneScales();
         updateScalePresetButtons();
         scaleLattice.setMask (mask);
@@ -1031,7 +1027,7 @@ DrawnCurveEditor::DrawnCurveEditor (DrawnCurveProcessor& p)
         b->setLookAndFeel (&_scaleActionLF);
 
     addAndMakeVisible (scaleAllBtn);
-    scaleAllBtn.onClick = [this, applyMask] { applyMask (0x0FFF); };
+    scaleAllBtn.onClick = [applyMask] { applyMask (0x0FFF); };
 
     addAndMakeVisible (scaleNoneBtn);
     scaleNoneBtn.onClick = [this, applyMask]
@@ -1058,7 +1054,7 @@ DrawnCurveEditor::DrawnCurveEditor (DrawnCurveProcessor& p)
         scaleRootBtn.setColour (juce::TextButton::textColourOffId, btnText);
     };
 
-    scaleRootBtn.onClick = [this, resetRootBtn]
+    scaleRootBtn.onClick = [this]
     {
         const bool entering = ! scaleLattice.isRootSelectMode();
         scaleLattice.setRootSelectMode (entering);
@@ -1073,8 +1069,8 @@ DrawnCurveEditor::DrawnCurveEditor (DrawnCurveProcessor& p)
 
     scaleLattice.onRootChanged = [this, resetRootBtn] (int root)
     {
-        if (auto* p = dynamic_cast<juce::AudioParameterInt*> (proc.apvts.getParameter ("scaleRoot")))
-            *p = root;
+        if (auto* pRoot = dynamic_cast<juce::AudioParameterInt*> (proc.apvts.getParameter ("scaleRoot")))
+            *pRoot = root;
         proc.updateAllLaneScales();
         curveDisplay.repaint();
         resetRootBtn();
@@ -1082,7 +1078,7 @@ DrawnCurveEditor::DrawnCurveEditor (DrawnCurveProcessor& p)
     };
 
     // Mask label
-    maskLabel.setFont (juce::Font (juce::Font::getDefaultMonospacedFontName(), 11.0f, juce::Font::plain));
+    maskLabel.setFont (juce::Font (juce::FontOptions{}.withName (juce::Font::getDefaultMonospacedFontName()).withHeight (11.0f).withStyle (juce::Font::plain)));
     maskLabel.setJustificationType (juce::Justification::centred);
     maskLabel.setEditable (false, true, false);
     addAndMakeVisible (maskLabel);
@@ -1091,8 +1087,8 @@ DrawnCurveEditor::DrawnCurveEditor (DrawnCurveProcessor& p)
         const int val = juce::jlimit (0, 4095, maskLabel.getText().getIntValue());
         if (auto* p = dynamic_cast<juce::AudioParameterInt*> (proc.apvts.getParameter ("scaleMask")))
             *p = val;
-        if (auto* p = dynamic_cast<juce::AudioParameterInt*> (proc.apvts.getParameter ("scaleMode")))
-            *p = 7;
+        if (auto* p2 = dynamic_cast<juce::AudioParameterInt*> (proc.apvts.getParameter ("scaleMode")))
+            *p2 = 7;
         proc.updateAllLaneScales();
         updateScalePresetButtons();
         scaleLattice.setMask (static_cast<uint16_t> (val));
@@ -1153,7 +1149,7 @@ void DrawnCurveEditor::setupSlider (juce::Slider& s, juce::Label& l,
     s.setTextBoxStyle (juce::Slider::TextBoxRight, false, 52, 18);
     addAndMakeVisible (s);
     l.setText (labelText, juce::dontSendNotification);
-    l.setFont (juce::Font (11.0f));
+    l.setFont (juce::Font (juce::FontOptions{}.withHeight (11.0f)));
     addAndMakeVisible (l);
 }
 
@@ -1217,24 +1213,24 @@ void DrawnCurveEditor::updateLaneRow (int lane)
     if (type == 0)       detailText = juce::String (ccNum);
     else if (type == 3)  detailText = juce::String (vel);
     else                 detailText = "-";
-    laneDetailLabel[lane].setText (detailText, juce::dontSendNotification);
+    laneDetailLabel[static_cast<size_t>(lane)].setText (detailText, juce::dontSendNotification);
 
     // Type button symbol
     static auto sym = [] (int t) -> juce::String {
         switch (t) { case 0: return "CC"; case 1: return "At"; case 2: return "PB"; case 3: return "N"; } return "?";
     };
-    laneTypeBtn[lane].setButtonText (sym (type));
+    laneTypeBtn[static_cast<size_t>(lane)].setButtonText (sym (type));
 
-    laneChannelLabel[lane].setText (juce::String (ch), juce::dontSendNotification);
+    laneChannelLabel[static_cast<size_t>(lane)].setText (juce::String (ch), juce::dontSendNotification);
 
     // Teach button: works for all message types (solos lane output so a receiving
     // synth can MIDI-Learn; CC lanes also capture incoming CC#)
-    laneTeachBtn[lane].setButtonText (proc.isTeachPending (lane) ? "..." : "Teach");
-    laneTeachBtn[lane].setEnabled (true);
-    laneTeachBtn[lane].setAlpha (1.0f);
+    laneTeachBtn[static_cast<size_t>(lane)].setButtonText (proc.isTeachPending (lane) ? "..." : "Teach");
+    laneTeachBtn[static_cast<size_t>(lane)].setEnabled (true);
+    laneTeachBtn[static_cast<size_t>(lane)].setAlpha (1.0f);
 
     // Mute button
-    laneMuteBtn[lane].setButtonText (enabled ? "ON" : "mute");
+    laneMuteBtn[static_cast<size_t>(lane)].setButtonText (enabled ? "ON" : "mute");
 
     // Mapping detail panel (for focused lane only)
     if (lane == _focusedLane)
@@ -1427,9 +1423,9 @@ void DrawnCurveEditor::updateScalePresetButtons()
     for (int i = 0; i < kNumScalePresets; ++i)
     {
         const bool active = (i == sel);
-        scalePresetBtns[i].setColour (juce::TextButton::buttonColourId,  active ? activeCol : inactiveBg);
-        scalePresetBtns[i].setColour (juce::TextButton::buttonOnColourId, activeCol);
-        scalePresetBtns[i].setColour (juce::TextButton::textColourOffId, active ? juce::Colours::white : inactiveText);
+        scalePresetBtns[static_cast<size_t>(i)].setColour (juce::TextButton::buttonColourId,  active ? activeCol : inactiveBg);
+        scalePresetBtns[static_cast<size_t>(i)].setColour (juce::TextButton::buttonOnColourId, activeCol);
+        scalePresetBtns[static_cast<size_t>(i)].setColour (juce::TextButton::textColourOffId, active ? juce::Colours::white : inactiveText);
     }
 }
 
@@ -1565,10 +1561,10 @@ void DrawnCurveEditor::applyTheme()
         const auto laneCol = light ? kLaneColourLight[L] : kLaneColourDark[L];
         const float rowAlpha = enabled ? 1.0f : 0.45f;
 
-        laneTypeBtn[L].setColour (juce::TextButton::buttonColourId,  laneCol.withAlpha (0.18f * rowAlpha));
-        laneTypeBtn[L].setColour (juce::TextButton::textColourOffId, laneCol);
+        laneTypeBtn[static_cast<size_t>(L)].setColour (juce::TextButton::buttonColourId,  laneCol.withAlpha (0.18f * rowAlpha));
+        laneTypeBtn[static_cast<size_t>(L)].setColour (juce::TextButton::textColourOffId, laneCol);
 
-        for (auto* lbl : { &laneDetailLabel[L], &laneChannelLabel[L] })
+        for (auto* lbl : { &laneDetailLabel[static_cast<size_t>(L)], &laneChannelLabel[static_cast<size_t>(L)] })
         {
             lbl->setColour (juce::Label::textColourId,       enabled ? textCol : dimText);
             lbl->setColour (juce::Label::backgroundColourId, tbBg.withAlpha (rowAlpha));
@@ -1580,15 +1576,15 @@ void DrawnCurveEditor::applyTheme()
         // Teach button: glows amber while pending
         const bool teaching = proc.isTeachPending (L);
         const auto teachAccent = light ? juce::Colour (0xffF59E0B) : juce::Colour (0xffFBBF24);
-        laneTeachBtn[L].setColour (juce::TextButton::buttonColourId,
+        laneTeachBtn[static_cast<size_t>(L)].setColour (juce::TextButton::buttonColourId,
                                    teaching ? teachAccent : btnBg);
-        laneTeachBtn[L].setColour (juce::TextButton::textColourOffId,
+        laneTeachBtn[static_cast<size_t>(L)].setColour (juce::TextButton::textColourOffId,
                                    teaching ? juce::Colours::white : btnText);
 
         // Mute button: uses lane colour when active
-        laneMuteBtn[L].setColour (juce::TextButton::buttonColourId,
+        laneMuteBtn[static_cast<size_t>(L)].setColour (juce::TextButton::buttonColourId,
                                   enabled ? laneCol.withAlpha (0.85f) : btnBg);
-        laneMuteBtn[L].setColour (juce::TextButton::textColourOffId,
+        laneMuteBtn[static_cast<size_t>(L)].setColour (juce::TextButton::textColourOffId,
                                   enabled ? juce::Colours::white : dimText);
 
         // Selected row indicator: slightly different background
@@ -1677,7 +1673,7 @@ void DrawnCurveEditor::paint (juce::Graphics& g)
             // ── Header labels ─────────────────────────────────────────────────
             {
                 g.setColour (juce::Colour (0xff706D64));
-                g.setFont (juce::Font (9.0f));
+                g.setFont (juce::Font (juce::FontOptions{}.withHeight (9.0f)));
                 int hx = rs_x + matDotW + matInnerGap;
                 const int hy = rs_top, hh = headerH;
                 g.drawFittedText ("Type", hx, hy, matTargetW, hh,
@@ -1810,23 +1806,23 @@ void DrawnCurveEditor::resized()
             row.removeFromLeft (matDotW + matInnerGap);
 
             // Target type
-            laneTypeBtn[L].setBounds (row.removeFromLeft (matTargetW));
+            laneTypeBtn[static_cast<size_t>(L)].setBounds (row.removeFromLeft (matTargetW));
             row.removeFromLeft (matInnerGap);
 
             // Detail
-            laneDetailLabel[L].setBounds (row.removeFromLeft (matDetailW));
+            laneDetailLabel[static_cast<size_t>(L)].setBounds (row.removeFromLeft (matDetailW));
             row.removeFromLeft (matInnerGap);
 
             // Channel
-            laneChannelLabel[L].setBounds (row.removeFromLeft (matChanW));
+            laneChannelLabel[static_cast<size_t>(L)].setBounds (row.removeFromLeft (matChanW));
             row.removeFromLeft (matInnerGap);
 
             // Teach
-            laneTeachBtn[L].setBounds (row.removeFromLeft (matTeachW));
+            laneTeachBtn[static_cast<size_t>(L)].setBounds (row.removeFromLeft (matTeachW));
             row.removeFromLeft (matInnerGap);
 
             // Mute
-            laneMuteBtn[L].setBounds (row.removeFromLeft (matMuteW));
+            laneMuteBtn[static_cast<size_t>(L)].setBounds (row.removeFromLeft (matMuteW));
         }
 
         rs.removeFromTop (4);
@@ -1863,7 +1859,7 @@ void DrawnCurveEditor::resized()
             const int presetW = (row.getWidth() - (kNumScalePresets - 1) * 2) / kNumScalePresets;
             for (int i = 0; i < kNumScalePresets; ++i)
             {
-                scalePresetBtns[i].setBounds (row.removeFromLeft (presetW));
+                scalePresetBtns[static_cast<size_t>(i)].setBounds (row.removeFromLeft (presetW));
                 if (i < kNumScalePresets - 1) row.removeFromLeft (2);
             }
         }

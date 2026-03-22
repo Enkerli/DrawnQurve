@@ -175,8 +175,8 @@ public:
             else
             {
                 g.setColour (active ? activeLabel : labelColour);
-                g.setFont (juce::Font (b.getHeight() * 0.42f));
-                g.drawText (_segments[i].label, sb.toNearestInt(),
+                g.setFont (juce::Font (juce::FontOptions{}.withHeight (b.getHeight() * 0.42f)));
+                g.drawText (_segments[static_cast<size_t>(i)].label, sb.toNearestInt(),
                             juce::Justification::centred, false);
             }
         }

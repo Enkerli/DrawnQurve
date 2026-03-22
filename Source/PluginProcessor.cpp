@@ -358,7 +358,7 @@ void DrawnCurveProcessor::finalizeCapture (int lane)
 
     auto* snap = new LaneSnapshot (_capture.finalize (ccNum, ch, minOut, maxOut, smooth, msgType));
     snap->noteVelocity = noteVel;
-    _laneSnaps[lane] = snap;
+    _laneSnaps[static_cast<size_t>(lane)] = snap;
 
     {
         juce::SpinLock::ScopedLockType lock (_engineLock);
@@ -370,7 +370,7 @@ void DrawnCurveProcessor::finalizeCapture (int lane)
 void DrawnCurveProcessor::updateLaneSnapshot (int lane)
 {
     if (lane < 0 || lane >= kMaxLanes) return;
-    const auto* existing = _laneSnaps[lane];
+    const auto* existing = _laneSnaps[static_cast<size_t>(lane)];
     if (! existing || ! existing->valid) return;   // nothing drawn yet — nothing to update
 
     const uint8_t ccNum  = static_cast<uint8_t> (
@@ -395,7 +395,7 @@ void DrawnCurveProcessor::updateLaneSnapshot (int lane)
     snap->messageType    = msgType;
     snap->noteVelocity   = noteVel;
 
-    _laneSnaps[lane] = snap;
+    _laneSnaps[static_cast<size_t>(lane)] = snap;
 
     // When switching TO Note mode, send Note Off for any CC/PB value in flight.
     // When switching FROM Note mode, the engine will naturally stop sending Note-Ons.
@@ -418,7 +418,7 @@ void DrawnCurveProcessor::clearSnapshot (int lane)
         _engine.clearSnapshot (lane);
         if (lane == 0) _capture.clear();   // capture session belongs to whichever lane is being drawn
     }
-    _laneSnaps[lane] = nullptr;
+    _laneSnaps[static_cast<size_t>(lane)] = nullptr;
 }
 
 void DrawnCurveProcessor::clearAllSnapshots()
@@ -471,7 +471,7 @@ bool DrawnCurveProcessor::isPlaying() const noexcept { return _engine.getPlaying
 bool DrawnCurveProcessor::hasCurve (int lane) const noexcept
 {
     if (lane < 0 || lane >= kMaxLanes) return false;
-    return _laneSnaps[lane] != nullptr && _laneSnaps[lane]->valid;
+    return _laneSnaps[static_cast<size_t>(lane)] != nullptr && _laneSnaps[static_cast<size_t>(lane)]->valid;
 }
 
 bool DrawnCurveProcessor::anyLaneHasCurve() const noexcept
@@ -486,15 +486,15 @@ float DrawnCurveProcessor::currentPhaseForLane (int l) const noexcept { return _
 
 std::array<float, 256> DrawnCurveProcessor::getCurveTable (int lane) const noexcept
 {
-    if (lane >= 0 && lane < kMaxLanes && _laneSnaps[lane] && _laneSnaps[lane]->valid)
-        return _laneSnaps[lane]->table;
+    if (lane >= 0 && lane < kMaxLanes && _laneSnaps[static_cast<size_t>(lane)] && _laneSnaps[static_cast<size_t>(lane)]->valid)
+        return _laneSnaps[static_cast<size_t>(lane)]->table;
     return {};
 }
 
 float DrawnCurveProcessor::curveDuration (int lane) const noexcept
 {
-    if (lane >= 0 && lane < kMaxLanes && _laneSnaps[lane] && _laneSnaps[lane]->valid)
-        return _laneSnaps[lane]->durationSeconds;
+    if (lane >= 0 && lane < kMaxLanes && _laneSnaps[static_cast<size_t>(lane)] && _laneSnaps[static_cast<size_t>(lane)]->valid)
+        return _laneSnaps[static_cast<size_t>(lane)]->durationSeconds;
     return 0.0f;
 }
 
@@ -577,7 +577,7 @@ void DrawnCurveProcessor::getStateInformation (juce::MemoryBlock& destData)
 
     for (int L = 0; L < kMaxLanes; ++L)
     {
-        const auto* snap = _laneSnaps[L];
+        const auto* snap = _laneSnaps[static_cast<size_t>(L)];
         if (snap && snap->valid)
         {
             const juce::String pfx = "L" + juce::String (L) + "_";
@@ -637,7 +637,7 @@ void DrawnCurveProcessor::setStateInformation (const void* data, int sizeInBytes
                     state.getProperty (pfx + "noteVel", 100)));
                 snap->valid = true;
 
-                _laneSnaps[L] = snap;
+                _laneSnaps[static_cast<size_t>(L)] = snap;
                 {
                     juce::SpinLock::ScopedLockType lock (_engineLock);
                     _engine.setSnapshot (L, snap);
@@ -670,7 +670,7 @@ void DrawnCurveProcessor::setStateInformation (const void* data, int sizeInBytes
                 snap->noteVelocity = static_cast<uint8_t> (static_cast<int> (state.getProperty ("noteVel", 100)));
                 snap->valid = true;
 
-                _laneSnaps[0] = snap;
+                _laneSnaps[0u] = snap;
                 {
                     juce::SpinLock::ScopedLockType lock (_engineLock);
                     _engine.setSnapshot (0, snap);
