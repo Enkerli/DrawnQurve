@@ -457,7 +457,8 @@ bool DrawnCurveProcessor::anyLaneHasCurve() const noexcept
     return false;
 }
 
-float DrawnCurveProcessor::currentPhase() const noexcept { return _engine.getCurrentPhase(); }
+float DrawnCurveProcessor::currentPhase()            const noexcept { return _engine.getCurrentPhase(); }
+float DrawnCurveProcessor::currentPhaseForLane (int l) const noexcept { return _engine.getCurrentPhaseForLane (l); }
 
 std::array<float, 256> DrawnCurveProcessor::getCurveTable (int lane) const noexcept
 {

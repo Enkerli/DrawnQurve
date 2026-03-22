@@ -89,8 +89,10 @@ public:
 
     // ── Query API (UI or render thread) ──────────────────────────────────────
     bool  getPlaying()      const;
-    /// Phase of lane 0 (or the first valid lane) — for UI playhead display.
+    /// Phase of the first valid playing lane — for backward-compat UI use.
     float getCurrentPhase() const;
+    /// Per-lane phase (0-1); returns 0 if the lane has no valid snapshot.
+    float getCurrentPhaseForLane (int lane) const;
 
     // ── Render-thread API ─────────────────────────────────────────────────────
     /**
@@ -112,7 +114,8 @@ private:
     std::array<std::atomic<bool>,                kMaxLanes> _laneEnabled;   ///< false = muted
 
     std::atomic<bool>  _isPlaying    { false };
-    std::atomic<float> _currentPhase { 0.0f  };
+    std::atomic<float> _currentPhase { 0.0f  };   ///< First valid lane's phase (compat)
+    std::array<std::atomic<float>, kMaxLanes> _lanePhases;  ///< Per-lane phase 0..1
 
     std::array<LaneRuntime, kMaxLanes> _runtimes;   ///< Render-thread only
 

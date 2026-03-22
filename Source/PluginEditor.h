@@ -90,7 +90,9 @@ private:
     int        _focusedLane     { 0     };
     int        _xDivisions      { 4 };
     int        _yDivisions      { 4 };
-    bool       _blinkOn         { true  };   ///< Toggled each timer tick to drive pause blink
+    bool       _blinkOn         { true  };   ///< Toggled by _blinkCounter to drive pause blink
+    int        _blinkCounter    { 0     };   ///< Incremented each timer tick; wraps at kBlinkPeriod
+    static constexpr int kBlinkPeriod = 12; ///< Timer ticks per blink half-cycle (~1.25 Hz at 30 Hz)
     juce::Path capturePath;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (CurveDisplay)

@@ -14,6 +14,7 @@ GestureEngine::GestureEngine()
         _noteOffNeeded[i].store(false,   std::memory_order_relaxed);
         _scalesPacked[i].store (0xFFF,   std::memory_order_relaxed);
         _laneEnabled[i].store  (true,    std::memory_order_relaxed);
+        _lanePhases[i].store   (0.0f,    std::memory_order_relaxed);
     }
 }
 
@@ -65,6 +66,7 @@ void GestureEngine::reset()
         }
         _runtimes[i].playheadSeconds = 0.0;
         _runtimes[i].smoothedValue   = 0.0f;
+        _lanePhases[i].store (0.0f, std::memory_order_relaxed);
     }
 
     _currentPhase.store (0.0f, std::memory_order_relaxed);
@@ -81,12 +83,17 @@ void GestureEngine::stopLane (int lane)
 void GestureEngine::resetLane (int lane)
 {
     if (lane < 0 || lane >= kMaxLanes) return;
-    // Rewind playhead and smoother.  Do NOT touch _noteOffNeeded or lastSentValue
+    // Rewind playhead.  Do NOT touch _noteOffNeeded or lastSentValue
     // so any pending Note Off still fires correctly in processLane.
     _runtimes[lane].playheadSeconds = 0.0;
-    _runtimes[lane].smoothedValue   = 0.0f;
-    if (lane == 0)
-        _currentPhase.store (0.0f, std::memory_order_relaxed);
+
+    // Pre-seed the smoother from the curve's value at phase 0 so that
+    // playback begins at the correct pitch/value without glissanding up
+    // from silence (which happened when smoothedValue started at 0.0).
+    const auto* snap = _snapshots[lane].load (std::memory_order_acquire);
+    _runtimes[lane].smoothedValue = (snap && snap->valid) ? sampleCurve (*snap, 0.0f) : 0.0f;
+
+    _lanePhases[lane].store (0.0f, std::memory_order_relaxed);
 }
 
 void GestureEngine::setLaneEnabled (int lane, bool enabled)
@@ -108,6 +115,12 @@ void GestureEngine::setScaleConfig (int lane, ScaleConfig config)
 
 bool  GestureEngine::getPlaying()      const { return _isPlaying.load (std::memory_order_acquire); }
 float GestureEngine::getCurrentPhase() const { return _currentPhase.load (std::memory_order_relaxed); }
+
+float GestureEngine::getCurrentPhaseForLane (int lane) const
+{
+    if (lane < 0 || lane >= kMaxLanes) return 0.0f;
+    return _lanePhases[lane].load (std::memory_order_relaxed);
+}
 
 // ---------------------------------------------------------------------------
 // Static utilities
@@ -226,9 +239,21 @@ void GestureEngine::processLane (int lane, uint32_t frameCount, double sampleRat
         phase = static_cast<float> (rt.playheadSeconds / effectiveDur);
     }
 
-    // Store phase from lane 0 (or first valid lane) for the UI playhead display.
-    if (lane == 0)
-        _currentPhase.store (phase, std::memory_order_relaxed);
+    // Store per-lane phase for the UI playhead.
+    _lanePhases[lane].store (phase, std::memory_order_relaxed);
+
+    // Also update _currentPhase from the lowest-indexed valid lane so the
+    // CurveDisplay always shows a moving playhead when anything is playing.
+    {
+        bool lowerValid = false;
+        for (int l = 0; l < lane; ++l)
+        {
+            const auto* s = _snapshots[l].load (std::memory_order_relaxed);
+            if (s && s->valid) { lowerValid = true; break; }
+        }
+        if (! lowerValid)
+            _currentPhase.store (phase, std::memory_order_relaxed);
+    }
 
     const float target = sampleCurve (*snap, phase);
 

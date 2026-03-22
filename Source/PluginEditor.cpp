@@ -278,24 +278,43 @@ void CurveDisplay::paint (juce::Graphics& g)
         g.restoreState();
     }
 
-    // ── Playhead ─────────────────────────────────────────────────────────────
+    // ── Playheads — one per lane that has a curve and is enabled ─────────────
+    // Each lane draws its own coloured dot on its curve.  The focused lane
+    // also draws a thin vertical line so the time position is clear.
+    // All lanes share the same speed ratio / direction, so their playheads
+    // may be at different X positions if their curves have different durations.
     if (proc.isPlaying() && proc.anyLaneHasCurve())
     {
-        const float phase = proc.currentPhase();
-        const float headX = plotX + phase * plotW;
-        const auto  col   = (_lightMode ? kLaneColourLight : kLaneColourDark)[_focusedLane];
+        const auto* colPalette = _lightMode ? kLaneColourLight : kLaneColourDark;
 
-        // Focused lane's dot on the playhead line.
-        g.setColour (T.playhead.withAlpha (0.75f));
-        g.drawVerticalLine (juce::roundToInt (headX), plotY, plotY + plotH);
-
-        if (proc.hasCurve (_focusedLane))
+        for (int L = 0; L < kMaxLanes; ++L)
         {
-            const auto table = proc.getCurveTable (_focusedLane);
+            if (! proc.hasCurve (L)) continue;
+
+            const float phase = proc.currentPhaseForLane (L);
+            const float headX = plotX + phase * plotW;
+            const auto  col   = colPalette[L];
+            const float alpha = (L == _focusedLane) ? 1.0f : 0.55f;
+
+            // Vertical line: only for the focused lane (cleaner when multiple lanes play)
+            if (L == _focusedLane)
+            {
+                g.setColour (T.playhead.withAlpha (0.65f));
+                g.drawVerticalLine (juce::roundToInt (headX), plotY, plotY + plotH);
+            }
+
+            // Dot at the curve's current value
+            const auto table = proc.getCurveTable (L);
             const int  idx   = juce::jlimit (0, 255, static_cast<int> (phase * 255.0f));
             const float headY = plotY + (1.0f - table[static_cast<size_t> (idx)]) * plotH;
-            g.setColour (col);
-            g.fillEllipse (headX - 5.0f, headY - 5.0f, 10.0f, 10.0f);
+            const float r = (L == _focusedLane) ? 5.0f : 3.5f;
+            g.setColour (col.withAlpha (alpha));
+            g.fillEllipse (headX - r, headY - r, r * 2.0f, r * 2.0f);
+
+            // Small lane-coloured tick on the left Y-axis so it's clear which
+            // lane is at which Y value even when curves overlap.
+            g.setColour (col.withAlpha (alpha * 0.8f));
+            g.fillRect (plotX - 5.0f, headY - 2.0f, 5.0f, 4.0f);
         }
     }
 
@@ -545,7 +564,11 @@ void CurveDisplay::mouseUp (const juce::MouseEvent& e)
 
 void CurveDisplay::timerCallback()
 {
-    _blinkOn = ! _blinkOn;
+    if (++_blinkCounter >= kBlinkPeriod)
+    {
+        _blinkCounter = 0;
+        _blinkOn = ! _blinkOn;
+    }
     repaint();
 }
 
@@ -638,6 +661,9 @@ DrawnCurveEditor::DrawnCurveEditor (DrawnCurveProcessor& p)
         juce::dontSendNotification);
     dirControl.onChange = [this] (int vis)
     {
+        // Direction change is locked in host-sync mode (host controls tempo/direction).
+        if (proc.apvts.getRawParameterValue (ParamID::syncEnabled)->load() > 0.5f)
+            return;
         if (auto* p = dynamic_cast<juce::AudioParameterChoice*> (
                           proc.apvts.getParameter (ParamID::playbackDirection)))
             *p = kDirVisToParam[vis];
@@ -1212,7 +1238,7 @@ void DrawnCurveEditor::updateLaneRow (int lane)
         juce::String detail = juce::String (kTypeNames[type]);
         if (type == 0)       detail += " " + juce::String (ccNum);
         else if (type == 3)  detail += "  Vel " + juce::String (vel);
-        detail += "  \xc2\xb7  Ch " + juce::String (ch);   // · (middle dot U+00B7)
+        detail += "  |  Ch " + juce::String (ch);
         if (! enabled) detail += "  [muted]";
         mappingDetailLabel.setText (detail, juce::dontSendNotification);
     }
@@ -1345,8 +1371,10 @@ void DrawnCurveEditor::onSyncToggled (bool isSync)
         speedSlider.setNumDecimalPlacesToDisplay (2);
     }
 
-    dirControl.setEnabled (! isSync);
-    dirControl.setAlpha   (isSync ? 0.55f : 1.0f);
+    // In sync mode, direction is determined by host so disable direction-change
+    // but keep the control interactive so tapping the current segment still
+    // toggles play/pause (onTap still fires; onChange is guarded in its lambda).
+    dirControl.setAlpha (isSync ? 0.65f : 1.0f);
     dirControl.repaint();
     applyTheme();
 }
