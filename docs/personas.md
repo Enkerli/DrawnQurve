@@ -1,5 +1,12 @@
 # DrawnCurve — User Personas
 
+> **Note (2026-03):** These five personas describe user *profiles*. The
+> [`ROADMAP.md`](../ROADMAP.md) uses complementary **playflow perspectives**
+> (Gesture Performer, Curve Builder, Harmony Navigator, Modulation Architect,
+> Playful Creator, System Builder) that describe *workflows* rather than people.
+> Both lenses are useful: personas for onboarding and mode design; playflows
+> for feature prioritisation. They overlap but are not identical.
+
 Five personas that represent the realistic breadth of DrawnCurve users.
 Each drives design decisions: which controls are visible by default, what
 language is used in labels, and what onboarding support is needed.

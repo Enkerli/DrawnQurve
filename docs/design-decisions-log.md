@@ -20,6 +20,108 @@ Each entry has:
 
 ---
 
+### 2026-03 | DECIDED | Multi-lane architecture shipped
+
+**Context**: Three independent lanes, each with its own curve table, output type,
+CC#, MIDI channel, range, smoothing, scale config, and mute state. A global routing
+matrix shows all three lanes at once.
+
+**Decision**: Implemented. Per-lane APVTS parameters use the prefix `lN_` (e.g.
+`l0_ccNumber`). Shared parameters (direction, speed, sync) remain unprefixed.
+`GestureEngine` runs all active lanes per `processBlock` call. Each lane has an
+independent `LaneSnapshot*` managed via the atomic-swap pattern.
+
+**Cross-reference**: `Source/PluginProcessor.h` (kMaxLanes, ParamID namespace);
+`Source/Engine/GestureEngine.cpp` (processLane loop).
+
+---
+
+### 2026-03 | DECIDED | Note-mode glissando root cause and fix
+
+**Context**: Playing a curve in Note mode with any smoothing > 0 produced a
+continuous pitch glide (glissando) rather than discrete note steps.
+
+**Root cause**: The note-detection code computed `rawNoteF` from `rt.smoothedValue`,
+which ramps continuously through all intermediate values between updates. Any
+smoothing caused the quantized pitch to change on every sample, producing rapid
+note-on/off pairs at every intermediate semitone.
+
+**Decision**: Note detection now uses `target` (the raw curve value, before the
+smoother) for pitch lookup. The smoother still updates internally each sample (to
+stay ready for a CC-mode switch) but its output is not used for note thresholding.
+Smoothing now affects only CC and Pitch Bend output; Note mode output is always
+crisply step-quantized.
+
+**Cross-reference**: `Source/Engine/GestureEngine.cpp` Note case in `processLane`.
+
+---
+
+### 2026-03 | DECIDED | Bitmask bit order: C = MSB, B = LSB
+
+**Context**: The 12-bit scale bitmask originally stored interval n in bit n
+(bit 0 = root, bit 11 = major seventh). This meant the displayed decimal value
+did not match a left-to-right reading of the pitch classes.
+
+**Decision**: Reversed. Bit 11 = C (root, MSB), bit 0 = B (LSB), so that the
+bitmask reads left-to-right as C C# D D# E F F# G G# A A# B. Example: chromatic
+= 0xFFF (4095), chromatic without B = 4094 = `0b111111111110`.
+
+**Implementation**: All engine bit tests changed from `(mask >> interval) & 1` to
+`(mask >> (11 - interval)) & 1`. All preset mask constants updated accordingly.
+
+**Cross-reference**: `Source/Engine/GestureEngine.cpp` (quantizeNote);
+`Source/PluginProcessor.cpp` (kScalePresetMasks).
+
+---
+
+### 2026-03 | DECIDED | Sync-mode pause latch
+
+**Context**: When the user manually paused playback while in host-sync mode, the
+next host transport event (stop or play) would override the user's pause state,
+restarting playback unexpectedly.
+
+**Decision**: Added `_userManualPauseInSync` atomic bool. Set to true when the
+user explicitly pauses in sync mode; cleared only when the host transitions from
+stopped to playing. `processBlock` checks this flag before allowing
+host-restart recovery to re-engage playback.
+
+**Cross-reference**: `Source/PluginProcessor.h/.cpp` (_userManualPauseInSync);
+`setPlaying()`.
+
+---
+
+### 2026-03 | DECIDED | Per-lane playheads in CurveDisplay
+
+**Context**: Only the first lane's playhead was displayed. With multi-lane
+architecture, users had no visual indication of where lanes 2 and 3 were in
+their cycles.
+
+**Decision**: `GestureEngine` writes per-lane phase to `_lanePhases[kMaxLanes]`
+atomics during each `processLane` call. `CurveDisplay::paint` loops all three
+lanes, drawing a filled circle at each lane's current X position (using its
+phase) and a tick on the Y axis. Each dot uses that lane's accent colour.
+
+**Cross-reference**: `Source/Engine/GestureEngine.hpp` (_lanePhases);
+`Source/PluginEditor.cpp` (CurveDisplay::paint).
+
+---
+
+### 2026-03 | DECIDED | updateLaneSnapshot without redraw
+
+**Context**: Changing per-lane parameters (CC#, channel, range, smoothing,
+velocity, message type) had no effect until the user drew a new curve,
+because parameter values were only baked into the snapshot at draw-time.
+
+**Decision**: `DrawnCurveProcessor::updateLaneSnapshot(lane)` clones the
+existing `LaneSnapshot`, writes fresh parameter values into it, and atomically
+swaps it into the engine. Called from `parameterChanged` listeners for all
+per-lane params. Message-type changes that switch output mode also call
+`engine.stopLane(lane)` to prevent orphaned notes.
+
+**Cross-reference**: `Source/PluginProcessor.cpp` (updateLaneSnapshot).
+
+---
+
 ### 2026-03 | DEFERRED | Bitmask-as-decimal input for custom scales
 
 **Context**: The custom scale bitmask (12-bit) could be exposed as a decimal number

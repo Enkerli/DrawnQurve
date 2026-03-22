@@ -86,7 +86,7 @@ private:
     DrawnCurveProcessor& proc;
     double     captureStartTime { 0.0   };
     bool       isCapturing      { false };
-    bool       _lightMode       { false };
+    bool       _lightMode       { true  };
     int        _focusedLane     { 0     };
     int        _xDivisions      { 4 };
     int        _yDivisions      { 4 };
@@ -108,7 +108,7 @@ public:
     void setLightMode (bool light) { _lightMode = light; repaint(); }
 
 private:
-    bool _lightMode { false };
+    bool _lightMode { true  };
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (HelpOverlay)
 };
 
@@ -299,7 +299,7 @@ private:
     static constexpr int kScaleLatticeH = 100;
 
     // ── Editor state ──────────────────────────────────────────────────────────
-    bool _lightMode    { false };
+    bool _lightMode    { true  };
     int  _focusedLane  { 0     };   ///< Which lane's shaping / notes are shown
 
     // Section background rects (set in resized, read in paint).

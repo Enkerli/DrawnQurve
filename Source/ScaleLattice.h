@@ -243,7 +243,8 @@ inline void ScaleLattice::mouseUp (const juce::MouseEvent& /*e*/)
         }
         else
         {
-            const uint16_t bit = static_cast<uint16_t> (1u << _nodes[static_cast<size_t> (_pressed)].pc);
+            // Bitmask convention: bit (11 - pc) = pitch class pc active.
+            const uint16_t bit = static_cast<uint16_t> (1u << (11 - _nodes[static_cast<size_t> (_pressed)].pc));
             _mask ^= bit;
             repaint();
             if (onMaskChanged) onMaskChanged (_mask);
@@ -268,7 +269,8 @@ inline void ScaleLattice::paint (juce::Graphics& g)
 
     for (const auto& n : _nodes)
     {
-        const bool active = ((_mask >> n.pc) & 1) != 0;
+        // Bitmask convention: bit (11 - pc) = pitch class pc active.
+        const bool active = ((_mask >> (11 - n.pc)) & 1) != 0;
         const bool isRoot = (n.pc == _root);
         const juce::Rectangle<float> circ (n.cx - n.r, n.cy - n.r,
                                             n.r * 2.0f, n.r * 2.0f);

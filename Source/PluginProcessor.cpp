@@ -502,16 +502,20 @@ float DrawnCurveProcessor::curveDuration (int lane) const noexcept
 // Scale quantization
 //==============================================================================
 
+// Bitmask convention: bit (11 - interval) = interval present in scale.
+// Bit 11 = root (interval 0 = C when root=C), bit 0 = major-7th (interval 11 = B).
+// Example: 0xFFF = 0b111111111111 = all 12 notes (Chromatic).
+//          0xAD5 = 0b101011010101 = C D E F G A B (Major from C).
 static constexpr uint16_t kScalePresetMasks[8] =
 {
-    0xFFF,   // 0 Chromatic
-    0xAB5,   // 1 Major
-    0x5AD,   // 2 Natural Minor
-    0x6AD,   // 3 Dorian
-    0x295,   // 4 Pentatonic Major
-    0x4A9,   // 5 Pentatonic Minor
-    0x4E9,   // 6 Blues
-    0x000,   // 7 Custom
+    0xFFF,   // 0 Chromatic       — all 12 intervals
+    0xAD5,   // 1 Major           — 0 2 4 5 7 9 11
+    0xB5A,   // 2 Natural Minor   — 0 2 3 5 7 8 10
+    0xB56,   // 3 Dorian          — 0 2 3 5 7 9 10
+    0xA94,   // 4 Pentatonic Maj  — 0 2 4 7 9
+    0x952,   // 5 Pentatonic Min  — 0 3 5 7 10
+    0x972,   // 6 Blues           — 0 3 5 6 7 10
+    0x000,   // 7 Custom          — stored in scaleMask param
 };
 
 ScaleConfig DrawnCurveProcessor::getScaleConfig (int /*lane*/) const noexcept

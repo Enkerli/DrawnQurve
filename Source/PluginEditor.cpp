@@ -104,10 +104,12 @@ static uint16_t calcAbsLatticeMask (DrawnCurveProcessor& proc, int /*lane*/)
         return static_cast<uint16_t> (proc.apvts.getRawParameterValue ("scaleMask")->load());
 
     const auto sc = proc.getScaleConfig (0);   // global; lane irrelevant
+    // Engine mask: bit (11 - interval) = interval present.
+    // Lattice mask: bit (11 - abs_pc) = absolute pitch class present.
     uint16_t abs  = 0;
     for (int i = 0; i < 12; ++i)
-        if ((sc.mask >> i) & 1)
-            abs |= static_cast<uint16_t> (1u << ((i + root) % 12));
+        if ((sc.mask >> (11 - i)) & 1)
+            abs |= static_cast<uint16_t> (1u << (11 - (i + root) % 12));
     return abs;
 }
 
@@ -135,16 +137,18 @@ void HelpOverlay::paint (juce::Graphics& g)
     struct Entry { const char* label; const char* desc; };
     static const Entry kEntries[] =
     {
-        { "CURVE AREA",  "Draw a curve with your finger. Time flows left to right; MIDI value top to bottom." },
-        { "Lane Focus",  "Select which lane (1-3) you are editing. Each lane routes independently." },
-        { "Play / Pause","Tap the active direction segment to toggle play/pause." },
+        { "CURVE AREA",  "Draw a curve with your finger or Pencil. Time flows left to right; MIDI value top to bottom. Each lane has its own curve." },
+        { "Lane 1/2/3",  "Select the active lane. Each lane routes independently to its own MIDI target. Coloured dots show each lane's playhead position." },
+        { "Direction",   "Forward, Reverse, or Ping-Pong playback. Tap the active segment to pause; tap again to resume. In SYNC mode, pause persists across host transport changes." },
         { "Clear",       "Erase ALL lane curves and stop playback." },
-        { "Target",      "CC / Channel Pressure / Pitch Bend / Note — per lane." },
-        { "Teach",       "Tap Teach on a lane to solo its output. Other lanes mute so a receiving synth can MIDI-Learn this controller. On CC lanes, also captures the CC# from incoming MIDI." },
+        { "!  (Panic)",  "Sends All Notes Off on every active channel. Use if notes get stuck." },
+        { "Target",      "CC / Channel Pressure / Pitch Bend / Note — set per lane in the routing matrix below the canvas." },
+        { "Teach",       "Tap Teach on a lane to solo its output. Other lanes mute so a synth can MIDI-Learn. On CC lanes, the next incoming CC message sets that lane's CC number." },
         { "Mute",        "Silence one lane without erasing its curve." },
-        { "FREE / SYNC", "Toggle host-tempo sync. FREE = manual speed; SYNC = follows host BPM, speed becomes Beats." },
-        { "Smooth",      "Output smoothing (0 = instant). Applied per focused lane." },
-        { "Range",       "Output range min/max. Applied per focused lane." },
+        { "Scale",       "In Note mode: choose a scale preset and root note. Use the 12 circles (C to B, left to right) to build a custom scale. Only active pitch classes are played." },
+        { "FREE / SYNC", "Toggle host-tempo sync. FREE = manual speed; SYNC = follows host BPM and transport; speed becomes loop length in Beats." },
+        { "Smooth",      "Output smoothing (0 = instant). Applied per focused lane. Affects CC and Pitch Bend; bypassed for note-change detection in Note mode." },
+        { "Range",       "Output range min/max per lane. In Note mode, shows the note name boundaries." },
         { "Y- / Y+",     "Decrease or increase horizontal grid lines." },
         { "X- / X+",     "Decrease or increase vertical grid lines." },
     };
@@ -365,7 +369,7 @@ void CurveDisplay::paint (juce::Graphics& g)
             for (int n = hiNote; n >= loNote; --n)
             {
                 const int interval = ((n % 12) - (int)sc.root + 12) % 12;
-                if ((sc.mask >> interval) & 1)
+                if ((sc.mask >> (11 - interval)) & 1)
                 {
                     const float norm = noteToNorm (n);
                     if (norm >= -0.05f && norm <= 1.05f)
@@ -661,19 +665,9 @@ DrawnCurveEditor::DrawnCurveEditor (DrawnCurveProcessor& p)
         juce::dontSendNotification);
     dirControl.onChange = [this] (int vis)
     {
-        // Direction change is locked in host-sync mode.
-        // Revert the visual to match the current param so control and state
-        // don't diverge; the user can still tap the active segment for play/pause.
-        if (proc.apvts.getRawParameterValue (ParamID::syncEnabled)->load() > 0.5f)
-        {
-            const int currentParam = static_cast<int> (
-                proc.apvts.getRawParameterValue (ParamID::playbackDirection)->load());
-            juce::MessageManager::callAsync ([this, currentParam] {
-                dirControl.setSelectedIndex (kDirParamToVis[currentParam],
-                                             juce::dontSendNotification);
-            });
-            return;
-        }
+        // Direction (Forward / PingPong / Reverse) is always user-controlled.
+        // Sync mode only affects speed/timing from the host BPM; it does not
+        // lock the looping direction.
         if (auto* p = dynamic_cast<juce::AudioParameterChoice*> (
                           proc.apvts.getParameter (ParamID::playbackDirection)))
             *p = kDirVisToParam[vis];
@@ -1043,7 +1037,8 @@ DrawnCurveEditor::DrawnCurveEditor (DrawnCurveProcessor& p)
     scaleNoneBtn.onClick = [this, applyMask]
     {
         const int root = static_cast<int> (proc.apvts.getRawParameterValue ("scaleRoot")->load());
-        applyMask (static_cast<uint16_t> (1u << root));
+        // Lattice convention: bit (11 - pc) = pitch class pc active.
+        applyMask (static_cast<uint16_t> (1u << (11 - root)));
     };
 
     addAndMakeVisible (scaleInvBtn);
@@ -1381,10 +1376,8 @@ void DrawnCurveEditor::onSyncToggled (bool isSync)
         speedSlider.setNumDecimalPlacesToDisplay (2);
     }
 
-    // In sync mode, direction is determined by host so disable direction-change
-    // but keep the control interactive so tapping the current segment still
-    // toggles play/pause (onTap still fires; onChange is guarded in its lambda).
-    dirControl.setAlpha (isSync ? 0.65f : 1.0f);
+    // Direction is always user-controlled; sync only affects speed/timing.
+    dirControl.setAlpha (1.0f);
     dirControl.repaint();
     applyTheme();
 }

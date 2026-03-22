@@ -1,13 +1,22 @@
 # DrawnCurve — Multilane & Note Mode Issues: Investigation & Plan
 
-## Codebase Reality Check
+> **Status (2026-03):** The investigation and implementation plan in this document
+> is substantially complete. Multi-lane architecture (Issues 3–6), note hysteresis
+> (Issue 2), and stuck-note handling (Issue 1) have all shipped. The Icon redesign
+> (Issue 7) is in progress. This file is retained as an audit trail.
+> For the current forward-looking roadmap, see [`ROADMAP.md`](ROADMAP.md).
 
-The current code is **entirely single-lane**:
-- One `GestureEngine`, one `GestureCaptureSession`, one `LaneSnapshot*`
-- All APVTS parameters (`messageType`, `midiChannel`, `ccNumber`, etc.) are global — one set for the whole plugin
-- The UI (`DrawnCurveEditor`) has one `CurveDisplay` and one row of controls
+---
 
-Multilane is what needs to be *built*. The issues described below are partly bugs in existing code and partly requirements for the multilane design.
+## Codebase Reality Check (original — now historical)
+
+~~The current code is **entirely single-lane**.~~
+
+**Current state (2026-03):** The plugin runs up to `kMaxLanes = 3` independent
+lanes. Each lane has its own `LaneSnapshot*`, per-lane APVTS parameters
+(`l0_ccNumber`, `l1_ccNumber`, etc.), scale config, and mute state.
+`GestureEngine` processes all active lanes per `processBlock` call.
+See `Source/PluginProcessor.h` for the full architecture.
 
 ---
 
@@ -235,19 +244,27 @@ On tap, expand a small floating panel (a JUCE `Component` with `setAlwaysOnTop(t
 
 ## Implementation Order
 
-For a single Xcode session targeting testable results:
+*(Status updated 2026-03. ✅ = shipped, ⚠️ = in progress / pending fix.)*
 
-| Priority | Task | Scope |
+| Priority | Task | Status |
 |---|---|---|
-| 1 | Fix stuck notes: preserve Note Off across `reset()` | GestureEngine.cpp (5 lines) |
-| 2 | Fix stuck notes on new curve: `setPlaying(false)` in `beginCapture()` | PluginProcessor.cpp (1 line) |
-| 3 | Add Panic button (all notes off) | PluginProcessor + PluginEditor |
-| 4 | Fix rapid pulse: note hysteresis in Note mode | GestureEngine.cpp + LaneRuntime |
-| 5 | Change default messageType to Note | PluginProcessor.cpp (1 char) |
-| 6 | Multilane data model + processor loop | PluginProcessor.h/.cpp |
-| 7 | Per-lane APVTS parameters | PluginProcessor.cpp |
-| 8 | LaneStrip UI component | PluginEditor.h/.cpp |
-| 9 | Pattern length sync (Lane 0 as master) | GestureEngine / PluginProcessor |
+| 1 | Fix stuck notes: preserve Note Off across `reset()` | ✅ |
+| 2 | Fix stuck notes on new curve: `setPlaying(false)` in `beginCapture()` | ✅ |
+| 3 | Add Panic button (all notes off) | ✅ |
+| 4 | Fix rapid pulse: note hysteresis in Note mode | ✅ |
+| 5 | Change default messageType to Note | ✅ |
+| 6 | Multilane data model + processor loop | ✅ |
+| 7 | Per-lane APVTS parameters | ✅ |
+| 8 | LaneStrip UI component (routing matrix) | ✅ |
+| 9 | Pattern length sync (Lane 0 as master) | ✅ |
+| 10 | Message type icons in SymbolLF | ⚠️ in progress |
+| — | Note-mode glissando fix (bypass smoother for note detection) | ✅ |
+| — | Per-lane playheads in CurveDisplay | ✅ |
+| — | Sync-mode pause latch (_userManualPauseInSync) | ✅ |
+| — | updateLaneSnapshot (hot-swap params without redraw) | ✅ |
+| — | Bitmask convention: C=MSB, B=LSB | ⚠️ pending |
+| — | Playback direction in sync mode (buttons non-functional) | ⚠️ pending |
+| — | AudioQueue -50 noise (skip probe, use session.sampleRate) | ⚠️ pending |
 | 10 | Message type icons in SymbolLF | PluginEditor.cpp |
 
 Items 1–5 can ship independently without the multilane refactor. Items 6–10 are the multilane overhaul.

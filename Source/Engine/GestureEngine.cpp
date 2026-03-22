@@ -135,7 +135,9 @@ int GestureEngine::quantizeNote (int rawNote, ScaleConfig sc, bool movingUp)
     const int pc       = rawNote % 12;
     const int interval = (pc - (int)sc.root + 12) % 12;
 
-    if ((sc.mask >> interval) & 1) return rawNote;
+    // Bitmask convention: bit (11 - interval) = interval present in scale.
+    // Bit 11 = root (interval 0), bit 0 = major-7th (interval 11).
+    if ((sc.mask >> (11 - interval)) & 1) return rawNote;
 
     int downNote = -1, upNote = -1;
 
@@ -144,13 +146,13 @@ int GestureEngine::quantizeNote (int rawNote, ScaleConfig sc, bool movingUp)
         if (downNote < 0 && rawNote - d >= 0)
         {
             const int di = (interval - d + 12) % 12;
-            if ((sc.mask >> di) & 1)
+            if ((sc.mask >> (11 - di)) & 1)
                 downNote = rawNote - d;
         }
         if (upNote < 0 && rawNote + d <= 127)
         {
             const int ui = (interval + d) % 12;
-            if ((sc.mask >> ui) & 1)
+            if ((sc.mask >> (11 - ui)) & 1)
                 upNote = rawNote + d;
         }
         if (downNote >= 0 && upNote >= 0) break;

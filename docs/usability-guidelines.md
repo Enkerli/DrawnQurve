@@ -228,40 +228,38 @@ Run this checklist for every PR that adds a user-visible feature.
 
 ## Specific Guidance for Known Upcoming Features
 
-### Multi-stroke (gaps within a single curve)
+### Segmented curves (gaps within a single curve)
 
-- **Definition**: The user lifts their finger/Pencil mid-draw and places it
-  again further along the X-axis. The result is a single logical curve with
-  one or more empty segments — think `V_______m____/` rather than a continuous line.
-- **Input model (two candidates; #ToBeTested)**:
-  1. Tap-and-hold a "multi-stroke" button in the toolbar while drawing each segment
-  2. Hold a software/hardware key modifier during each stroke
-- **Empty segment behaviour**: sections where no stroke was drawn produce no MIDI output
-  (silence/hold-last-value? → #ToBeTested) for that duration
-- **Mode**: Standard and Expert; Simple mode draws only continuous curves
-- **Implementation note**: requires `LaneSnapshot` to store a segment list rather than
-  a single 256-point table. Non-trivial architectural change; plan before implementation.
+*(Previously called "multi-stroke mode".)*
+
+- **Definition**: The user draws a curve in multiple non-continuous segments, creating
+  intentional silent gaps or held values within one loop cycle. Think `V_______m____/`
+  rather than a continuous line.
+- **Input model**: A **"Hold"** toggle button latches the recording session open even
+  after the finger or Pencil is lifted. While Hold is active, the curve stays flat at
+  the last captured value. Recording ends only when Hold is released or "Done" is tapped.
+- **Empty-gap behaviour**: flat-fill at the held value (not silence) for CC/PB;
+  note held (no note-off) during the gap for Note mode. #ToBeTested: whether silence
+  (value 0) or hold-last is more useful for each mode.
+- **Mode**: Standard and Expert; Simple mode draws only continuous curves.
+- **Implementation note**: the 256-point `LaneSnapshot` table is unchanged — the gap
+  is a flat region in the table, not a structural segment list. See `ROADMAP.md` C1/C2.
 
 ---
 
 ### Multi-lane (N curves → N targets)
 
-- **Definition**: Multiple independent curves displayed in parallel within the same
-  canvas area, each routed to a different MIDI target (different CC, channel, or
-  message type).
-- **Belongs in**: **Expert and Standard** modes only.
-  Simple mode: single curve only; lane selector hidden.
-- **Visual differentiation**:
-  - Primary: colour-coded (each lane gets a distinct accent colour)
-  - Secondary (accessibility): subtle texture or dash pattern on inactive lanes
-    so colour is not the only differentiator (#Accessibility)
-- **UI**: a horizontal lane strip above (or left of) the canvas — compact coloured
-  tabs or circles. Active lane's curve is full-opacity; inactive lanes are ghost traces.
-- **Each lane is independent**: own output mode, CC#, channel, scale config, range, direction.
-- **Real-time**: engine processes all active lanes per block.
-- **Preset**: lane count + all lane snapshots serialised; default is 1 lane (backwards compatible).
-- **Major change**: requires significant redesign of both `LaneSnapshot`, `GestureEngine`,
-  and the editor layout. Do not begin until multi-stroke is complete or scoped out.
+**Status: SHIPPED as of 2026-03 (3 lanes).**
+
+- **What was built**: Three independent lanes, each with its own curve, output type,
+  CC#, MIDI channel, range, smoothing, scale config, and mute state. A routing matrix
+  below the canvas shows all three lanes. Per-lane coloured playhead dots are drawn in
+  `CurveDisplay`. `GestureEngine` processes all active lanes per `processBlock` call.
+- **Belongs in**: Standard and Expert modes. Simple mode: single lane only (not yet gated).
+- **Visual differentiation**: colour-coded lane accents. Inactive lanes shown as faint
+  ghost traces. Colour-only differentiation is an accessibility gap — see `ROADMAP.md` Q1.
+- **Still upcoming**: per-lane direction, per-lane speed/sync, per-lane play/pause,
+  phase offset, phase sync, "All Lanes" master. See `ROADMAP.md` section VII.
 
 ---
 
@@ -283,14 +281,6 @@ Run this checklist for every PR that adds a user-visible feature.
   labels on the Y-axis when Note mode is active.
 
 ---
-
-### Multi-lane (N curves → N targets)
-
-  *(moved here from above — see separate entry)*
-
----
-
-### Named CC labels (user-defined)
 
 ### Named CC labels (user-defined)
 

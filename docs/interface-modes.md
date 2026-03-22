@@ -1,5 +1,9 @@
 # DrawnCurve — Interface Modes
 
+> **See also**: [`ROADMAP.md`](../ROADMAP.md) for the full feature roadmap and
+> playflow-based prioritisation. [`docs/personas.md`](personas.md) for detailed
+> user profiles that map to the tiers below.
+
 ## Design Premise: Continuous Disclosure
 
 > **Note (2026-03): The tier model below describes aspiration, not a lock.**
