@@ -222,8 +222,13 @@ private:
     double               _timerSampleRate     { 44100.0 };
 
     // ── Host-sync atomics ─────────────────────────────────────────────────────
-    std::atomic<bool>  _hostWasPlaying      { false };
-    std::atomic<float> _effectiveSpeedRatio { 1.0f  };
+    std::atomic<bool>  _hostWasPlaying        { false };
+    std::atomic<float> _effectiveSpeedRatio   { 1.0f  };
+    /// Set by the UI when user manually pauses while in sync mode.
+    /// Prevents host play-state transitions from overriding the user's pause.
+    /// Cleared automatically when the host transitions from stopped → playing
+    /// (i.e. the user re-presses play in the DAW, so the plugin resumes).
+    std::atomic<bool>  _userManualPauseInSync { false };
 
     void hiResTimerCallback() override;
 

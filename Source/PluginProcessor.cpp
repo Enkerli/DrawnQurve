@@ -215,6 +215,10 @@ void DrawnCurveProcessor::processBlock (juce::AudioBuffer<float>& buffer,
                                                                        std::memory_order_acq_rel);
                 if (hostNowPlaying && ! wasPlaying)
                 {
+                    // Host just started — clear the user-pause latch so the
+                    // plugin resumes with the transport (pressing Play in the
+                    // DAW is an explicit intent to restart).
+                    _userManualPauseInSync.store (false, std::memory_order_release);
                     juce::SpinLock::ScopedLockType lock (_engineLock);
                     _engine.reset();
                     _engine.setPlaying (true);
@@ -222,6 +226,15 @@ void DrawnCurveProcessor::processBlock (juce::AudioBuffer<float>& buffer,
                 else if (! hostNowPlaying && wasPlaying)
                 {
                     _engine.setPlaying (false);
+                }
+                else if (hostNowPlaying && wasPlaying
+                         && ! _engine.getPlaying()
+                         && ! _userManualPauseInSync.load (std::memory_order_acquire))
+                {
+                    // Engine was paused by something other than the user (e.g. audio
+                    // session bounce re-set _hostWasPlaying).  Restart to stay in sync.
+                    juce::SpinLock::ScopedLockType lock (_engineLock);
+                    _engine.setPlaying (true);
                 }
 
                 if (auto bpmOpt = pos->getBpm())
@@ -434,8 +447,19 @@ void DrawnCurveProcessor::sendPanic()
 void DrawnCurveProcessor::setPlaying (bool on)
 {
     _engine.setPlaying (on);
-    if (on) startTimer (kTimerIntervalMs);
-    else    stopTimer();
+    if (on)
+    {
+        _userManualPauseInSync.store (false, std::memory_order_release);
+        startTimer (kTimerIntervalMs);
+    }
+    else
+    {
+        // Record that the user explicitly paused so sync code won't override it.
+        const bool isSync = apvts.getRawParameterValue (ParamID::syncEnabled)->load() > 0.5f;
+        if (isSync)
+            _userManualPauseInSync.store (true, std::memory_order_release);
+        stopTimer();
+    }
 }
 
 bool DrawnCurveProcessor::isPlaying() const noexcept { return _engine.getPlaying(); }

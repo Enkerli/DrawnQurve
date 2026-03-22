@@ -306,21 +306,19 @@ void GestureEngine::processLane (int lane, uint32_t frameCount, double sampleRat
         }
         case MessageType::Note:
         {
-            // Midpoint dead-zone hysteresis.
-            //
-            // Problem with the previous approach: movingUp was derived from
-            // lastSentValue, which oscillates when quantizeNote alternates
-            // between two adjacent scale notes.  That causes movingUp to
-            // flip each block, making quantizeNote oscillate forever.
-            //
-            // Fix: derive movingUp from rawNoteF vs committed (float), then
-            // only commit the candidate when rawNoteF has clearly crossed the
-            // midpoint between committed and candidate by ≥ kClearance.
-            // Once committed is -1 (first note), skip the dead-zone check.
+            // Use the RAW curve value (target), NOT the smoother output, for
+            // note detection.  The smoother ramps continuously between values
+            // which causes it to traverse multiple note boundaries during the
+            // attack phase — the classic "glissando from note 0" bug.
+            // Smoothing is intentionally bypassed here: in Note mode the
+            // output is quantised to discrete semitones anyway, so a
+            // continuous ramp only creates unwanted glissando artefacts.
+            // The smoother state (rt.smoothedValue) is still updated above so
+            // that any future switch to a continuous-output mode is seamless.
 
             constexpr float kClearance = 0.35f;   // semitones past midpoint required to commit
 
-            const float rawNoteF  = ranged * 127.0f;
+            const float rawNoteF  = (snap->minOut + target * (snap->maxOut - snap->minOut)) * 127.0f;
             const int   committed = rt.lastSentValue;
             const ScaleConfig sc  = unpackScale (_scalesPacked[lane].load (std::memory_order_acquire));
 

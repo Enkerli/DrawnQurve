@@ -661,9 +661,19 @@ DrawnCurveEditor::DrawnCurveEditor (DrawnCurveProcessor& p)
         juce::dontSendNotification);
     dirControl.onChange = [this] (int vis)
     {
-        // Direction change is locked in host-sync mode (host controls tempo/direction).
+        // Direction change is locked in host-sync mode.
+        // Revert the visual to match the current param so control and state
+        // don't diverge; the user can still tap the active segment for play/pause.
         if (proc.apvts.getRawParameterValue (ParamID::syncEnabled)->load() > 0.5f)
+        {
+            const int currentParam = static_cast<int> (
+                proc.apvts.getRawParameterValue (ParamID::playbackDirection)->load());
+            juce::MessageManager::callAsync ([this, currentParam] {
+                dirControl.setSelectedIndex (kDirParamToVis[currentParam],
+                                             juce::dontSendNotification);
+            });
             return;
+        }
         if (auto* p = dynamic_cast<juce::AudioParameterChoice*> (
                           proc.apvts.getParameter (ParamID::playbackDirection)))
             *p = kDirVisToParam[vis];
