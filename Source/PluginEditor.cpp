@@ -146,6 +146,7 @@ void HelpOverlay::paint (juce::Graphics& g)
         { "Mute",        "Silence one lane without erasing its curve." },
         { "Scale",       "In Note mode: choose a scale preset and root note. Use the 12 circles (C to B, left to right) to build a custom scale. Only active pitch classes are played." },
         { "FREE / SYNC", "Toggle host-tempo sync. FREE = manual speed; SYNC = follows host BPM and transport; speed becomes loop length in Beats." },
+        { u8"\u21ba",    "Restart all lane playheads to their start positions simultaneously. In free mode, re-aligns lanes that have drifted due to different loop lengths. Respects per-lane phase offset." },
         { "Smooth",      "Output smoothing (0 = instant). Applied per focused lane. Affects CC and Pitch Bend; bypassed for note-change detection in Note mode." },
         { "Range",       "Output range min/max per lane. In Note mode, shows the note name boundaries." },
         { "Y- / Y+",     "Decrease or increase horizontal grid lines." },
@@ -611,6 +612,10 @@ DrawnCurveEditor::DrawnCurveEditor (DrawnCurveProcessor& p)
     addAndMakeVisible (panicButton);
     panicButton.onClick = [this] { proc.sendPanic(); };
 
+    addAndMakeVisible (restartBtn);
+    restartBtn.setTooltip ("Restart all lane playheads. In free mode, re-aligns lanes that have drifted apart.");
+    restartBtn.onClick = [this] { proc.restartAllLanes(); };
+
     addAndMakeVisible (themeButton);
     themeButton.onClick = [this]
     {
@@ -928,7 +933,7 @@ DrawnCurveEditor::DrawnCurveEditor (DrawnCurveProcessor& p)
         {
             const bool isOneShot =
                 proc.apvts.getRawParameterValue (laneParam (L, "loopMode"))->load() > 0.5f;
-            laneLoopBtn[static_cast<size_t>(L)].setButtonText (isOneShot ? "1x" : u8"\u221E");
+            laneLoopBtn[static_cast<size_t>(L)].setButtonText (isOneShot ? "1" : u8"\u221E");
         }
         laneLoopBtn[static_cast<size_t>(L)].onClick = [this, L]
         {
@@ -937,7 +942,7 @@ DrawnCurveEditor::DrawnCurveEditor (DrawnCurveProcessor& p)
             {
                 const bool nowOneShot = ! pLoop->get();
                 *pLoop = nowOneShot;
-                laneLoopBtn[static_cast<size_t>(L)].setButtonText (nowOneShot ? "1x" : u8"\u221E");
+                laneLoopBtn[static_cast<size_t>(L)].setButtonText (nowOneShot ? "1" : u8"\u221E");
                 // Re-bake so the running snapshot picks up the new mode immediately.
                 proc.updateLaneSnapshot (L);
             }
@@ -1336,11 +1341,9 @@ void DrawnCurveEditor::parameterChanged (const juce::String& paramID, float)
             proc.updateLaneSnapshot (L);
             juce::MessageManager::callAsync ([this, L] {
                 updateLaneRow (L);
-                if (L == _focusedLane)
-                {
-                    updateScaleVisibility();
-                    applyTheme();
-                }
+                updateScaleVisibility();
+                resized();   // recompute canvas height (anyNote may have changed)
+                applyTheme();
             });
             return;
         }
@@ -1358,7 +1361,7 @@ void DrawnCurveEditor::parameterChanged (const juce::String& paramID, float)
             juce::MessageManager::callAsync ([this, L] {
                 const bool isOneShot =
                     proc.apvts.getRawParameterValue (laneParam (L, "loopMode"))->load() > 0.5f;
-                laneLoopBtn[static_cast<size_t>(L)].setButtonText (isOneShot ? "1x" : u8"\u221E");
+                laneLoopBtn[static_cast<size_t>(L)].setButtonText (isOneShot ? "1" : u8"\u221E");
                 applyTheme();
             });
             return;
@@ -1561,7 +1564,7 @@ void DrawnCurveEditor::applyTheme()
         l->setColour (juce::Label::textColourId, dimText);
 
     // Utility buttons
-    for (auto* b : { &playButton, &clearButton, &panicButton, &themeButton, &helpButton,
+    for (auto* b : { &playButton, &clearButton, &panicButton, &themeButton, &restartBtn, &helpButton,
                      &tickYMinusBtn, &tickYPlusBtn, &tickXMinusBtn, &tickXPlusBtn })
     {
         b->setColour (juce::TextButton::buttonColourId,  btnBg);
@@ -1821,7 +1824,9 @@ void DrawnCurveEditor::resized()
         ts.removeFromTop (4);
 
         auto row = ts.removeFromTop (paramRowH);
-        syncButton.setBounds (row.removeFromLeft (52).withSizeKeepingCentre (52, 32));
+        syncButton .setBounds (row.removeFromLeft (44).withSizeKeepingCentre (44, 32));
+        row.removeFromLeft (4);
+        restartBtn .setBounds (row.removeFromLeft (28).withSizeKeepingCentre (28, 28));
         row.removeFromLeft (4);
         speedLabel .setBounds (row.removeFromTop (paramLabelH));
         speedSlider.setBounds (row);
@@ -1913,8 +1918,15 @@ void DrawnCurveEditor::resized()
     // LEFT COLUMN
     // ══════════════════════════════════════════════════════════════════════════
 
-    const bool isNote = (static_cast<int> (
-        proc.apvts.getRawParameterValue (laneParam (_focusedLane, "msgType"))->load()) == 3);
+    // Reserve space for the note editor whenever ANY lane is in Note mode,
+    // not just the focused lane.  This prevents the canvas from expanding
+    // over a visible scale lattice when the user focuses a CC lane while
+    // another lane is in Note mode.
+    bool anyNoteMode = false;
+    for (int L = 0; L < kMaxLanes; ++L)
+        anyNoteMode |= (static_cast<int> (
+            proc.apvts.getRawParameterValue (laneParam (L, "msgType"))->load()) == 3);
+    const bool isNote = anyNoteMode;
 
     // ── Note editor strip (pink, bottom of left col) ──────────────────────────
     static constexpr int kNoteEditorH = 4 + scaleRowH + pad + kScaleLatticeH + 2;

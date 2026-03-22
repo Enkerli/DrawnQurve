@@ -193,6 +193,12 @@ public:
     /// true if the given lane is currently waiting for a CC message.
     bool isTeachPending (int lane) const noexcept;
 
+    // ── Playback control ──────────────────────────────────────────────────────
+    /// Restart all lane playheads simultaneously from their phaseOffset start
+    /// positions, preserving the current direction and playing state.
+    /// Call from the UI thread (via button click) to re-synchronise drifted lanes.
+    void restartAllLanes();
+
     // ── MIDI Panic ────────────────────────────────────────────────────────────
     /// Schedule an All Notes Off + brute-force Note Off sweep on all channels.
     /// Safe to call from any thread; executes on the next processBlock.

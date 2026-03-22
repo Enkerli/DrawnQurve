@@ -463,6 +463,14 @@ void DrawnCurveProcessor::clearAllSnapshots()
 // MIDI Panic
 //==============================================================================
 
+void DrawnCurveProcessor::restartAllLanes()
+{
+    const auto dir = static_cast<PlaybackDirection> (
+        static_cast<int> (apvts.getRawParameterValue (ParamID::playbackDirection)->load()));
+    juce::SpinLock::ScopedLockType lock (_engineLock);
+    _engine.resetForDirection (dir);
+}
+
 void DrawnCurveProcessor::sendPanic()
 {
     _panicNeeded.store (true, std::memory_order_release);
