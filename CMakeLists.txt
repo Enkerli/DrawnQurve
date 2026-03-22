@@ -53,6 +53,25 @@ juce_add_plugin(DrawnCurve
     EDITOR_WANTS_KEYBOARD_FOCUS FALSE
     COPY_PLUGIN_AFTER_BUILD     FALSE
     MICROPHONE_PERMISSION_ENABLED FALSE
+    # Declare all four orientations for the Standalone host app.
+    # AUv3 extensions inherit orientation from the host; this key is for the
+    # standalone wrapper only, but JUCE merges it into all format plists.
+    PLIST_TO_MERGE "
+        <key>UISupportedInterfaceOrientations</key>
+        <array>
+            <string>UIInterfaceOrientationPortrait</string>
+            <string>UIInterfaceOrientationPortraitUpsideDown</string>
+            <string>UIInterfaceOrientationLandscapeLeft</string>
+            <string>UIInterfaceOrientationLandscapeRight</string>
+        </array>
+        <key>UISupportedInterfaceOrientations~ipad</key>
+        <array>
+            <string>UIInterfaceOrientationPortrait</string>
+            <string>UIInterfaceOrientationPortraitUpsideDown</string>
+            <string>UIInterfaceOrientationLandscapeLeft</string>
+            <string>UIInterfaceOrientationLandscapeRight</string>
+        </array>
+    "
 )
 
 # ── Symbol font binary data (currently disabled) ──────────────────────────────
@@ -102,10 +121,13 @@ target_compile_definitions(DrawnCurve
         JUCE_USE_CURL=0
         JUCE_VST3_CAN_REPLACE_VST2=0
         JUCE_DISPLAY_SPLASH_SCREEN=0
-        # Note: the Standalone app crashes on iOS because JUCE tries to open
-        # RemoteIO with 0 audio channels (JUCE 8 bug for MIDI effects).
-        # This is harmless — iOS registers the AUv3 extension from the bundle
-        # at install time, before the Standalone ever runs.  Ignore the crash.
+        # Known JUCE 8.x issue: the Standalone wrapper tries to open RemoteIO
+        # with 2 audio channels even for IS_MIDI_EFFECT plugins (0 audio buses).
+        # AURemoteIO returns error 561015905 and logs to console; plugin audio
+        # is never used, so the error is harmless.  The AUv3 extension loads
+        # correctly in real hosts (AUM, Cubasis, etc.) without this error.
+        # CA Event launch-measurement failures in the same log are also benign
+        # sandbox artefacts and cannot be suppressed from our code.
 )
 
 target_link_libraries(DrawnCurve
