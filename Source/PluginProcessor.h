@@ -134,6 +134,10 @@ public:
     void getStateInformation (juce::MemoryBlock& destData)       override;
     void setStateInformation (const void* data, int sizeInBytes) override;
 
+    /// How many lanes are currently active / visible (1..kMaxLanes).
+    /// Persisted in state; defaults to 1 so new instances start with a single lane.
+    int activeLaneCount { 1 };
+
     // ── Parameters ────────────────────────────────────────────────────────────
     /// Public so the editor can add listeners and read raw values directly.
     juce::AudioProcessorValueTreeState apvts;

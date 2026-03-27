@@ -136,6 +136,7 @@ static const juce::Colour kLaneColourLight[kMaxLanes] =
     juce::Colour (0xff7A4CFF),   // Lane 0 — purple (primary note lane)
     juce::Colour (0xff2D9D74),   // Lane 1 — teal green (expression / CC)
     juce::Colour (0xffD9822B),   // Lane 2 — warm orange (counterline / note)
+    juce::Colour (0xff0891B2),   // Lane 3 — cyan blue (extra modulation)
 };
 
 /// Lane colours (dark mode).
@@ -144,6 +145,7 @@ static const juce::Colour kLaneColourDark[kMaxLanes] =
     juce::Colour (0xffA78BFA),   // Lane 0 — violet light
     juce::Colour (0xff34D399),   // Lane 1 — emerald
     juce::Colour (0xffFB923C),   // Lane 2 — orange light
+    juce::Colour (0xff22D3EE),   // Lane 3 — cyan light
 };
 
 //==============================================================================
@@ -370,6 +372,9 @@ private:
     /// Click → setFocusedLane(L).
     std::array<juce::TextButton, kMaxLanes> laneSelectBtn;
 
+    /// "+" button that appears below the last active lane row when more lanes are available.
+    juce::TextButton addLaneBtn;
+
     // ── Notes editor — family browser (visible in Note mode) ─────────────────
 
     // Family tab bar — one button per dcScale family.
@@ -560,7 +565,13 @@ private:
 
     void updateMsgTypeButtons();      // kept for backward compat, delegates to lane row
     void updateLaneRow      (int lane);   ///< Refresh target/detail/channel display for one lane
-    void updateAllLaneRows  ();           ///< Refresh all three lane rows
+    void updateAllLaneRows  ();           ///< Refresh all active lane rows
+
+    /// Rebuild laneFocusCtrl segments to match proc.activeLaneCount.
+    void updateLaneFocusCtrl();
+
+    /// Increment proc.activeLaneCount (up to kMaxLanes), refresh layout.
+    void addLane();
     void updateScaleVisibility();
     void setActiveFamily (int familyIdx);     ///< Populate subfamily chips for the chosen family.
     void addRecentMask   (uint16_t relMask);  ///< Push rel mask to recent history; refresh if tab active.

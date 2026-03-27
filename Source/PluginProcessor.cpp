@@ -82,8 +82,8 @@ juce::AudioProcessorValueTreeState::ParameterLayout DrawnCurveProcessor::createP
     static const juce::StringArray kMsgTypeChoices { "CC", "Channel Pressure", "Pitch Bend", "Note" };
 
     // Lane-specific defaults to give each lane a distinct starting CC.
-    static const int kDefaultCC[kMaxLanes]  = { 74, 1, 11 };
-    static const int kDefaultCh[kMaxLanes]  = { 1, 1, 1   };
+    static const int kDefaultCC[kMaxLanes]  = { 74, 1, 11, 10 };   // filter, mod, expression, pan
+    static const int kDefaultCh[kMaxLanes]  = { 1, 1, 1, 1 };
 
     for (int L = 0; L < kMaxLanes; ++L)
     {
@@ -790,6 +790,7 @@ void DrawnCurveProcessor::getStateInformation (juce::MemoryBlock& destData)
 
     // Increment when making breaking schema changes.
     state.setProperty ("stateVersion", 2, nullptr);
+    state.setProperty ("activeLaneCount", activeLaneCount, nullptr);
 
     for (int L = 0; L < kMaxLanes; ++L)
     {
@@ -825,6 +826,10 @@ void DrawnCurveProcessor::setStateInformation (const void* data, int sizeInBytes
     // Retrieve version for possible future migration logic.
     const int stateVersion = static_cast<int> (state.getProperty ("stateVersion", 1));
     // Future upgrades can branch based on stateVersion to migrate old state formats.
+
+    // Restore active lane count (clamped; 0 → 1 as safe minimum).
+    activeLaneCount = juce::jlimit (1, kMaxLanes,
+                          (int) state.getProperty ("activeLaneCount", 1));
 
     updateAllLaneScales();
 
@@ -866,6 +871,13 @@ void DrawnCurveProcessor::setStateInformation (const void* data, int sizeInBytes
             }
         }
     }
+
+    // If state pre-dates activeLaneCount (e.g. stateVersion < 3), ensure activeLaneCount
+    // is at least large enough to expose every lane that has a curve.
+    if (! state.hasProperty ("activeLaneCount"))
+        for (int L = 0; L < kMaxLanes; ++L)
+            if (hasCurve (L))
+                activeLaneCount = juce::jmax (activeLaneCount, L + 1);
 
     // Backward compat: single-lane v1 presets stored table under "tableData" (no prefix).
     // If lane 0 has no curve from the loop above, try the old keys.

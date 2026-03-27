@@ -25,7 +25,7 @@
  * ratio, so lanes recorded at different durations loop at their natural rates.
  */
 
-static constexpr int kMaxLanes = 3;
+static constexpr int kMaxLanes = 4;
 
 // ---------------------------------------------------------------------------
 /**

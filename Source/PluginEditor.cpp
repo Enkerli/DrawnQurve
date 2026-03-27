@@ -234,11 +234,12 @@ void CurveDisplay::paint (juce::Graphics& g)
     // Stroke types per lane: solid / dashed / dot-dash.
     // Draw unfocused lanes first (at 40 % opacity), focused lane on top.
     static const float kDashLen[kMaxLanes][4] = {
-        { 0, 0, 0, 0 },          // lane 0: solid (ignored)
-        { 10.0f, 5.0f, 0, 0 },   // lane 1: dashed
-        { 2.0f, 4.0f, 10.0f, 4.0f }, // lane 2: dot-dash
+        { 0, 0, 0, 0 },                  // lane 0: solid (ignored)
+        { 10.0f, 5.0f, 0, 0 },           // lane 1: long dash
+        { 2.0f, 4.0f, 10.0f, 4.0f },     // lane 2: dot-dash
+        { 5.0f, 3.0f, 5.0f, 3.0f },      // lane 3: short double-dash
     };
-    static const int kDashCount[kMaxLanes] = { 0, 2, 4 };
+    static const int kDashCount[kMaxLanes] = { 0, 2, 4, 4 };
 
     for (int pass = 0; pass < 2; ++pass)
     {
@@ -868,17 +869,17 @@ DrawnCurveEditor::DrawnCurveEditor (DrawnCurveProcessor& p)
     tickXPlusBtn .onClick = [this] { curveDisplay.setXDivisions (curveDisplay.getXDivisions() + 1); };
 
     // ── Lane focus selector ───────────────────────────────────────────────────
-    laneFocusCtrl.setSegments ({
-        { "l1", "1", "Lane 1" },
-        { "l2", "2", "Lane 2" },
-        { "l3", "3", "Lane 3" },
-    });
-    laneFocusCtrl.setSelectedIndex (0, juce::dontSendNotification);
+    updateLaneFocusCtrl();   // builds segments from proc.activeLaneCount
     laneFocusCtrl.onChange = [this] (int idx)
     {
         setFocusedLane (idx);
     };
     addAndMakeVisible (laneFocusCtrl);
+
+    // ── Add-lane button ───────────────────────────────────────────────────────
+    addLaneBtn.setButtonText ("+");
+    addLaneBtn.onClick = [this] { addLane(); };
+    addAndMakeVisible (addLaneBtn);
 
     // ── Shaping sliders ───────────────────────────────────────────────────────
     setupSlider (smoothingSlider, smoothingLabel, "Smooth");
@@ -1536,7 +1537,7 @@ void DrawnCurveEditor::setFocusedLane (int lane)
         setPerLaneVisible (true);
     }
 
-    _focusedLane = juce::jlimit (0, kMaxLanes - 1, lane);
+    _focusedLane = juce::jlimit (0, proc.activeLaneCount - 1, lane);
     curveDisplay.setFocusedLane (_focusedLane);
     laneFocusCtrl.setSelectedIndex (_focusedLane, juce::dontSendNotification);
     bindShapingToLane (_focusedLane);
@@ -1545,6 +1546,29 @@ void DrawnCurveEditor::setFocusedLane (int lane)
 #endif
     updateScaleVisibility();
     updateLaneRow (_focusedLane);
+    repaint();
+}
+
+void DrawnCurveEditor::updateLaneFocusCtrl()
+{
+    std::vector<SegmentedControl::Segment> segs;
+    for (int L = 0; L < proc.activeLaneCount; ++L)
+        segs.push_back ({ "l" + juce::String (L + 1),
+                          juce::String (L + 1),
+                          "Lane " + juce::String (L + 1) });
+    laneFocusCtrl.setSegments (std::move (segs));
+    laneFocusCtrl.setSelectedIndex (
+        juce::jlimit (0, proc.activeLaneCount - 1, _focusedLane),
+        juce::dontSendNotification);
+}
+
+void DrawnCurveEditor::addLane()
+{
+    if (proc.activeLaneCount >= kMaxLanes) return;
+    ++proc.activeLaneCount;
+    updateLaneFocusCtrl();
+    resized();
+    applyTheme();
     repaint();
 }
 
@@ -1671,7 +1695,7 @@ void DrawnCurveEditor::updateLaneRow (int lane)
 
 void DrawnCurveEditor::updateAllLaneRows()
 {
-    for (int L = 0; L < kMaxLanes; ++L)
+    for (int L = 0; L < proc.activeLaneCount; ++L)
         updateLaneRow (L);
 }
 
@@ -2268,6 +2292,10 @@ void DrawnCurveEditor::applyTheme()
                                   isOneShot ? dimText : laneCol);
     }
 
+    // Add-lane button: subdued "+" appearance
+    addLaneBtn.setColour (juce::TextButton::buttonColourId, btnBg);
+    addLaneBtn.setColour (juce::TextButton::textColourOffId, dimText);
+
     // Scale controls
     scaleLabel.setColour (juce::Label::textColourId, dimText);
 
@@ -2347,7 +2375,7 @@ void DrawnCurveEditor::paint (juce::Graphics& g)
     {
         const auto* laneColours = _lightMode ? kLaneColourLight : kLaneColourDark;
 
-        for (int L = 0; L < kMaxLanes; ++L)
+        for (int L = 0; L < proc.activeLaneCount; ++L)
         {
             const int rowY = _matrixRowOrigin.getY() + L * _matrixRowStride;
 
@@ -2671,31 +2699,65 @@ void DrawnCurveEditor::resized()
         // ── Routing matrix (immediately below sliders) ─────────────────────
         fp.removeFromTop (8);    // gap before matrix rows
 
-        // Matrix rows — record origin for paint() dot positions
+        // Matrix rows — record origin for paint() dot positions.
+        // Only lay out active lanes; hide / zero-bound inactive ones.
         _matrixRowOrigin = fp.getTopLeft();
         _matrixRowStride = matRowH + 3;
 
         for (int L = 0; L < kMaxLanes; ++L)
         {
-            auto row = fp.removeFromTop (matRowH);
-            fp.removeFromTop (3);
+            const bool active = (L < proc.activeLaneCount);
 
-            // Dot column: reserve space (dot drawn in paint()) + invisible focus button
-            auto dotCol = row.removeFromLeft (matDotW + matInnerGap);
-            laneSelectBtn[static_cast<size_t> (L)].setBounds (
-                dotCol.removeFromLeft (matDotW).withSizeKeepingCentre (matDotW, matDotW));
+            laneTypeBtn    [static_cast<size_t>(L)].setVisible (active);
+            laneDetailLabel[static_cast<size_t>(L)].setVisible (active);
+            laneChannelLabel[static_cast<size_t>(L)].setVisible (active);
+            laneTeachBtn   [static_cast<size_t>(L)].setVisible (active);
+            laneMuteBtn    [static_cast<size_t>(L)].setVisible (active);
+            laneSelectBtn  [static_cast<size_t>(L)].setVisible (active);
 
-            laneTypeBtn[static_cast<size_t>(L)].setBounds (row.removeFromLeft (matTargetW));
-            row.removeFromLeft (matInnerGap);
-            laneDetailLabel[static_cast<size_t>(L)].setBounds (row.removeFromLeft (matDetailW));
-            row.removeFromLeft (matInnerGap);
-            laneChannelLabel[static_cast<size_t>(L)].setBounds (row.removeFromLeft (matChanW));
-            row.removeFromLeft (matInnerGap);
-            laneTeachBtn[static_cast<size_t>(L)].setBounds (row.removeFromLeft (matTeachW));
-            row.removeFromLeft (matInnerGap);
-            laneMuteBtn[static_cast<size_t>(L)].setBounds (row.removeFromLeft (matMuteW));
+            if (active)
+            {
+                auto row = fp.removeFromTop (matRowH);
+                fp.removeFromTop (3);
+
+                // Dot column: space for painted dot + transparent focus button
+                auto dotCol = row.removeFromLeft (matDotW + matInnerGap);
+                laneSelectBtn[static_cast<size_t> (L)].setBounds (
+                    dotCol.removeFromLeft (matDotW).withSizeKeepingCentre (matDotW, matDotW));
+
+                laneTypeBtn    [static_cast<size_t>(L)].setBounds (row.removeFromLeft (matTargetW));
+                row.removeFromLeft (matInnerGap);
+                laneDetailLabel[static_cast<size_t>(L)].setBounds (row.removeFromLeft (matDetailW));
+                row.removeFromLeft (matInnerGap);
+                laneChannelLabel[static_cast<size_t>(L)].setBounds (row.removeFromLeft (matChanW));
+                row.removeFromLeft (matInnerGap);
+                laneTeachBtn   [static_cast<size_t>(L)].setBounds (row.removeFromLeft (matTeachW));
+                row.removeFromLeft (matInnerGap);
+                laneMuteBtn    [static_cast<size_t>(L)].setBounds (row.removeFromLeft (matMuteW));
+            }
+            else
+            {
+                laneTypeBtn    [static_cast<size_t>(L)].setBounds ({});
+                laneDetailLabel[static_cast<size_t>(L)].setBounds ({});
+                laneChannelLabel[static_cast<size_t>(L)].setBounds ({});
+                laneTeachBtn   [static_cast<size_t>(L)].setBounds ({});
+                laneMuteBtn    [static_cast<size_t>(L)].setBounds ({});
+                laneSelectBtn  [static_cast<size_t>(L)].setBounds ({});
+            }
         }
-        // mappingDetailLabel removed — info is already visible in the matrix rows above.
+
+        // "Add lane" button below the last active row (hidden when at max capacity)
+        if (proc.activeLaneCount < kMaxLanes && fp.getHeight() >= 24)
+        {
+            fp.removeFromTop (4);
+            addLaneBtn.setBounds (fp.removeFromTop (24).removeFromLeft (24));
+            addLaneBtn.setVisible (true);
+        }
+        else
+        {
+            addLaneBtn.setBounds ({});
+            addLaneBtn.setVisible (false);
+        }
     }
 
     // ══════════════════════════════════════════════════════════════════════════
