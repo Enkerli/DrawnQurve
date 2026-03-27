@@ -5,22 +5,21 @@
  *
  * DrawnCurveEditor — JUCE AudioProcessorEditor for DrawnCurve AUv3.
  *
- * UI Layout (640 × 700 px)
+ * UI Layout (800 × 760 px)
  * ────────────────────────
- *   Utility bar (28 px)  : Theme toggle · Help button
- *   ┌──────────────────────────────────┬───────────────────────┐
- *   │  Left column (376 px)            │  Right column (244 px)│
- *   │                                  │  Transport (94 px)    │
- *   │  Canvas + Y/X density steppers   │  Shaping  (132 px)    │
- *   │                                  │    Lane focus selector│
- *   │                                  │    Smooth             │
- *   │                                  │    Range              │
- *   │                                  │  Routing matrix(148px)│
- *   │                                  │    header row         │
- *   │                                  │    lane × 3 rows      │
- *   │                                  │    mapping detail     │
- *   │  [Note editor — Note mode only]  │                       │
- *   └──────────────────────────────────┴───────────────────────┘
+ *   Utility bar (36 px)  : Sync · ≡LaneSync · FREE/speed · | ♯/♭ · Clear · Panic · Theme · ?
+ *   ┌─────────────────────────────────────┬──────────────────────────┐
+ *   │  Stage panel (476 px)               │  Right rail (296 px)     │
+ *   │  Canvas + Y/X density steppers      │  FOCUSED LANE (full)     │
+ *   │                                     │    Lane selector 1/2/3   │
+ *   │                                     │    Direction             │
+ *   │                                     │    Speed (per-lane) ×    │
+ *   │                                     │    Range                 │
+ *   │                                     │    Smooth / Phase        │
+ *   │                                     │    ── LANES ──           │
+ *   │                                     │    ∞/1  Matrix rows      │
+ *   └─────────────────────────────────────┴──────────────────────────┘
+ *   Musical zone — full width (44 px collapsed / 268 px expanded)
  */
 
 #include <array>
@@ -134,17 +133,17 @@ private:
 /// Lane colours (light mode).  Index = lane number.
 static const juce::Colour kLaneColourLight[kMaxLanes] =
 {
-    juce::Colour (0xff28261F),   // Lane 0 — warm near-black
-    juce::Colour (0xff7C3AED),   // Lane 1 — violet
-    juce::Colour (0xff0B6E4F),   // Lane 2 — forest green
+    juce::Colour (0xff7A4CFF),   // Lane 0 — purple (primary note lane)
+    juce::Colour (0xff2D9D74),   // Lane 1 — teal green (expression / CC)
+    juce::Colour (0xffD9822B),   // Lane 2 — warm orange (counterline / note)
 };
 
 /// Lane colours (dark mode).
 static const juce::Colour kLaneColourDark[kMaxLanes] =
 {
-    juce::Colour (0xffE0E0E0),   // Lane 0 — light grey
-    juce::Colour (0xffA78BFA),   // Lane 1 — violet light
-    juce::Colour (0xff34D399),   // Lane 2 — emerald
+    juce::Colour (0xffA78BFA),   // Lane 0 — violet light
+    juce::Colour (0xff34D399),   // Lane 1 — emerald
+    juce::Colour (0xffFB923C),   // Lane 2 — orange light
 };
 
 //==============================================================================
@@ -331,10 +330,17 @@ private:
     juce::TextButton tickXPlusBtn  { "X+" };
 
     // ── Shared speed slider + attachment ─────────────────────────────────────
-    juce::Slider speedSlider;
+    juce::Slider speedSlider;      ///< Global speed — always in utility bar
     juce::Label  speedLabel;
     using Attach = juce::AudioProcessorValueTreeState::SliderAttachment;
     std::unique_ptr<Attach> speedAttach;
+
+    // ── Per-lane speed slider (focused lane panel, below direction control) ───
+#if defined(DC_HAVE_PER_LANE_PLAYBACK_PARAMS)
+    juce::Slider laneSpeedSlider;  ///< Per-lane speed multiplier
+    juce::Label  laneSpeedLabel;
+    std::unique_ptr<Attach> laneSpeedAttach;
+#endif
 
     // ── Shaping panel — per focused lane ─────────────────────────────────────
     SegmentedControl laneFocusCtrl;   ///< Lane 1 | Lane 2 | Lane 3
@@ -359,6 +365,10 @@ private:
 
     /// One-line detail text below the matrix rows: e.g. "CC 74 · Ch 1"
     juce::Label mappingDetailLabel;
+
+    /// Transparent hit-area buttons drawn over lane colour dots in the matrix.
+    /// Click → setFocusedLane(L).
+    std::array<juce::TextButton, kMaxLanes> laneSelectBtn;
 
     // ── Notes editor — family browser (visible in Note mode) ─────────────────
 
@@ -507,13 +517,26 @@ private:
     /// Persists across tab switches so re-visiting a family restores the last mode used.
     std::array<int, dcScale::kNumFamilies> _lastModePerFamily {};   // default = 0 (first mode)
 
-    // Section background rects (set in resized, read in paint).
-    juce::Rectangle<int> _secTransport;
-    juce::Rectangle<int> _secShaping;
-    juce::Rectangle<int> _secRouting;
-    juce::Rectangle<int> _secNotes;
+    // Panel rects (set in resized, read in paint).
+    juce::Rectangle<int> _stagePanel;
+    juce::Rectangle<int> _globalPanel;
+    juce::Rectangle<int> _focusedLanePanel;
+    juce::Rectangle<int> _lanesPanel;
+    juce::Rectangle<int> _musicalPanel;
+    /// Top-left of first matrix row (used by paint() to draw lane colour dots).
+    juce::Point<int>     _matrixRowOrigin;
+    int                  _matrixRowStride { 35 };  ///< px per matrix row (matRowH=32 + 3 gap)
 
-    bool _showingAllLanes { false };   ///< true when the "*" (All Lanes) tab is active.
+    // Legacy aliases still referenced by parameterChanged / updateScaleVisibility.
+    juce::Rectangle<int>& _secTransport   = _globalPanel;
+    juce::Rectangle<int>& _secShaping     = _focusedLanePanel;
+    juce::Rectangle<int>& _secRouting     = _lanesPanel;
+    juce::Rectangle<int>  _secNotes;   // kept for note-editor layout in resized()
+
+    bool _showingAllLanes  { false };   ///< true when the "*" (All Lanes) tab is active.
+    bool _musicalExpanded  { false };   ///< true when the musical zone is expanded
+
+    juce::TextButton musicalToggleBtn;  ///< collapses / expands the musical zone
 
 #if defined(DC_HAVE_PER_LANE_PLAYBACK_PARAMS)
     /// Rebind speed slider + direction control to lane-specific params (lane ≥ 0)

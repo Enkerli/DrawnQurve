@@ -13,6 +13,7 @@
 struct Theme
 {
     juce::Colour background;
+    juce::Colour stageBg;
     juce::Colour gridLine;
     juce::Colour curve;
     juce::Colour capture;
@@ -21,32 +22,37 @@ struct Theme
     juce::Colour hint;
     juce::Colour border;
     juce::Colour panelBg;
+    juce::Colour panelBorder;
 };
 
 static const Theme kDark
 {
-    juce::Colour { 0xff12121f },
-    juce::Colour { 0x18ffffff },
-    juce::Colour { 0xff00e5ff },
-    juce::Colour { 0xffff6b35 },
-    juce::Colour { 0xffffffff },
-    juce::Colour { 0xff00e5ff },
-    juce::Colour { 0x66ffffff },
-    juce::Colour { 0x33ffffff },
-    juce::Colour { 0xff1c1c2e },
+    /* background  */ juce::Colour { 0xff12121f },
+    /* stageBg     */ juce::Colour { 0xff0a0a15 },
+    /* gridLine    */ juce::Colour { 0x18ffffff },
+    /* curve       */ juce::Colour { 0xff00e5ff },
+    /* capture     */ juce::Colour { 0xffff6b35 },
+    /* playhead    */ juce::Colour { 0xffffffff },
+    /* playheadDot */ juce::Colour { 0xff00e5ff },
+    /* hint        */ juce::Colour { 0x66ffffff },
+    /* border      */ juce::Colour { 0x33ffffff },
+    /* panelBg     */ juce::Colour { 0xff1c1c2e },
+    /* panelBorder */ juce::Colour { 0x28ffffff },
 };
 
 static const Theme kLight
 {
-    juce::Colour { 0xffF5F2ED },
-    juce::Colour { 0x14000000 },
-    juce::Colour { 0xff0B6E4F },
-    juce::Colour { 0xffD95C3A },
-    juce::Colour { 0xff28261F },
-    juce::Colour { 0xff0B6E4F },
-    juce::Colour { 0x99000000 },
-    juce::Colour { 0x1E000000 },
-    juce::Colour { 0xffFDFCFA },
+    /* background  */ juce::Colour { 0xffF5F2EB },
+    /* stageBg     */ juce::Colour { 0xffEFEBE2 },
+    /* gridLine    */ juce::Colour { 0x14000000 },
+    /* curve       */ juce::Colour { 0xff7A4CFF },
+    /* capture     */ juce::Colour { 0xffD95C3A },
+    /* playhead    */ juce::Colour { 0xff2d2b27 },
+    /* playheadDot */ juce::Colour { 0xff7A4CFF },
+    /* hint        */ juce::Colour { 0x99000000 },
+    /* border      */ juce::Colour { 0x1E000000 },
+    /* panelBg     */ juce::Colour { 0xffFCFBF7 },
+    /* panelBorder */ juce::Colour { 0xffDDD6CA },
 };
 
 //==============================================================================
@@ -55,39 +61,43 @@ static const Theme kLight
 
 namespace Layout
 {
-    static constexpr int editorW  = 640;
-    static constexpr int editorH  = 700;
-    static constexpr int pad      = 6;
-    static constexpr int colGap   = 8;
-    static constexpr int rightColW = 244;
-    static constexpr int utilityRowH = 28;
+    static constexpr int editorW  = 800;
+    static constexpr int editorH  = 760;
+    static constexpr int pad      = 8;
+    static constexpr int colGap   = 12;
+    static constexpr int rightColW = 296;
+    static constexpr int utilityRowH = 36;   // taller to fit sync controls + speed slider
+    static constexpr int panelRadius = 14;   // rounded corner radius for right-rail panels
+    static constexpr int panelPad    = 10;   // inner padding inside panels
 
-    // Right column sections
-    static constexpr int transportH   = 0;     // transport section removed; sync moved to shaping row
-    static constexpr int shapingH     = 228;   // laneFocus(28)+gap(4)+dirSpeed(44)+gap(4)+smooth(44)+gap(4)+range(44)+gap(4)+phase(44)+margins(8)
-    static constexpr int routingMatH  = 148;   // header(16)+3×row(28)+gaps(2×3=6)+gap(4)+detail(28)+margins(8) = 148
+    // Musical zone (bottom, full width)
+    static constexpr int musicalCollapsedH = 44;
+    static constexpr int musicalExpandedH  = 4 + 30 + 4 + 68 + 4 + 28 + 4 + 100 + 4 + 14 + 8;  // = 268
 
-    // Left column
+    // lanesPanelH removed — LANES matrix is now inside the focused lane panel.
+
+    // Stage column inner
+    // Left column density steppers
     static constexpr int yStepperW  = 28;
     static constexpr int xStepperH  = 28;
-    // Note editor — family browser strip heights
+
+    // Note editor / musical zone — family browser strip heights
     static constexpr int kFamilyBarH    = 30;   // family tab row
     static constexpr int kSubfamilyRowH = 68;   // mode-chip row (name + dot preview)
     static constexpr int kActionRowH    = 28;   // ↻ ● ○ ◑ ◆ + status labels
 
     static constexpr int paramLabelH  = 14;
     static constexpr int paramSliderH = 30;
-    static constexpr int paramRowH    = paramLabelH + paramSliderH;  // 44
 
-    // Routing matrix row geometry (fits 244 px column)
-    // dot(12)+gap(4)+target(72)+gap(4)+detail(36)+gap(4)+chan(26)+gap(4)+teach(36)+gap(4)+mute(24) = 226 + margins(8) = 234 < 244
-    static constexpr int matRowH     = 28;
+    // Routing matrix row geometry (fits 296px right column)
+    // dot(12)+gap(4)+target(80)+gap(4)+detail(40)+gap(4)+chan(28)+gap(4)+teach(40)+gap(4)+mute(28) = 248 + margins(10*2) = 268 < 296
+    static constexpr int matRowH     = 32;
     static constexpr int matDotW     = 12;
-    static constexpr int matTargetW  = 72;
-    static constexpr int matDetailW  = 36;  // was 28 (+8)
-    static constexpr int matChanW    = 26;  // was 22 (+4)
-    static constexpr int matTeachW   = 36;  // was 32 (+4)
-    static constexpr int matMuteW    = 24;  // was 20 (+4)
+    static constexpr int matTargetW  = 80;
+    static constexpr int matDetailW  = 40;
+    static constexpr int matChanW    = 28;
+    static constexpr int matTeachW   = 40;
+    static constexpr int matMuteW    = 28;
     static constexpr int matInnerGap = 4;
 }
 
@@ -429,7 +439,9 @@ void CurveDisplay::paint (juce::Graphics& g)
             g.setColour (T.hint);
             const int lblW = juce::roundToInt (kAxisMarginL) - 2, lblH = 12;
             int lastGridLabelY = -100;
-            for (int i = 0; i <= _yDivisions; ++i)
+            // Iterate top→bottom so the highest-value label is drawn first and the
+            // overlap guard correctly skips labels that crowd the ones already placed.
+            for (int i = _yDivisions; i >= 0; --i)
             {
                 const float norm  = (float)i / (float)_yDivisions;
                 const int   yPx   = juce::roundToInt ((1.0f - norm) * plotH);
@@ -519,9 +531,55 @@ void CurveDisplay::paint (juce::Graphics& g)
         }
     }
 
-    // ── Border ────────────────────────────────────────────────────────────────
-    g.setColour (T.border);
-    g.drawRect (getLocalBounds().toFloat(), 1.0f);
+    // ── Musical context badge (top-right pill) ────────────────────────────────
+    // Shows "♪ C Dorian" for the focused lane in Note mode.
+    {
+        const auto msgParamIDForBadge = laneParam (_focusedLane, "msgType");
+        const bool isNoteBadge = (static_cast<int> (
+            proc.apvts.getRawParameterValue (msgParamIDForBadge)->load()) == 3);
+
+        if (isNoteBadge && proc.hasCurve (_focusedLane))
+        {
+            // Root name
+            const int root = static_cast<int> (proc.apvts.getRawParameterValue ("scaleRoot")->load());
+            static const char* kNoteNamesSharpB[] = {"C","C\u266f","D","D\u266f","E","F","F\u266f","G","G\u266f","A","A\u266f","B"};
+            static const char* kNoteNamesFlatB [] = {"C","D\u266d","D","E\u266d","E","F","G\u266d","G","A\u266d","A","B\u266d","B"};
+            const auto* noteNames = _useFlats ? kNoteNamesFlatB : kNoteNamesSharpB;
+            const juce::String rootName = juce::String::fromUTF8 (noteNames[root % 12]);
+
+            // Scale name: derive relative mask first (scaleMask in APVTS is always absolute),
+            // then recognise.  This mirrors the logic in DrawnCurveEditor::updateScaleStatus().
+            const int mode = static_cast<int> (proc.apvts.getRawParameterValue ("scaleMode")->load());
+            const uint16_t absMask = static_cast<uint16_t> (
+                proc.apvts.getRawParameterValue ("scaleMask")->load());
+            const uint16_t relMask = (mode < 7)
+                ? proc.getScaleConfig (_focusedLane).mask   // already relative for presets
+                : dcScale::pcsRotate (absMask, root);       // abs → rel for custom
+
+            const auto id = dcScale::pcsRecognise (relMask);
+            juce::String modeName = (relMask == 0x0FFF) ? "Chrom." : "Custom";
+            if (id.exact && id.family >= 0 && id.family < (int)dcScale::kNumFamilies)
+                modeName = juce::String::fromUTF8 (dcScale::kFamilies[id.family].modes[id.mode].name);
+
+            const juce::String kNote = juce::String::charToString (juce::juce_wchar (0x266a));
+            const juce::String badgeText = kNote + " " + rootName + " " + modeName;
+
+            const float badgeH = 20.0f;
+            const float badgeW = juce::jmin (w - plotX - 8.0f,
+                                             static_cast<float> (badgeText.length() * 8 + 20));
+            // Position below the duration label (which sits at y≈2..14) to avoid overlap.
+            const juce::Rectangle<float> badge (w - badgeW - 6.0f, 18.0f, badgeW, badgeH);
+
+            const juce::Colour pillBg   = (_lightMode ? juce::Colour (0xd0ffffff) : juce::Colour (0xd0121220));
+            const juce::Colour pillText = (_lightMode ? juce::Colour (0xff2d2b27) : juce::Colour (0xccffffff));
+
+            g.setColour (pillBg);
+            g.fillRoundedRectangle (badge, badgeH * 0.5f);
+            g.setColour (pillText);
+            g.setFont (juce::Font (juce::FontOptions{}.withHeight (11.0f)));
+            g.drawText (badgeText, badge.toNearestInt(), juce::Justification::centred, false);
+        }
+    }
 }
 
 // ── Touch / mouse ─────────────────────────────────────────────────────────────
@@ -676,11 +734,21 @@ DrawnCurveEditor::DrawnCurveEditor (DrawnCurveProcessor& p)
         if (helpOverlay.isVisible()) helpOverlay.toFront (false);
     };
 
-    // ── Speed slider (shaping section — contextual, bound in bindPlaybackToLane) ─
+    // ── Global speed slider (utility bar — always bound to global speed param) ─
     setupSlider (speedSlider, speedLabel, "FREE");
+    speedSlider.setTextBoxStyle (juce::Slider::TextBoxRight, false, 42, 18);
     speedSlider.setTextValueSuffix ("x");
     speedSlider.setNumDecimalPlacesToDisplay (2);
     // speedAttach is set by bindPlaybackToLane() called at end of constructor.
+
+#if defined(DC_HAVE_PER_LANE_PLAYBACK_PARAMS)
+    // ── Per-lane speed slider (focused lane panel) ─────────────────────────────
+    setupSlider (laneSpeedSlider, laneSpeedLabel, "Speed");
+    laneSpeedSlider.setTextBoxStyle (juce::Slider::TextBoxRight, false, 42, 18);
+    laneSpeedSlider.setTextValueSuffix ("x");
+    laneSpeedSlider.setNumDecimalPlacesToDisplay (2);
+    // laneSpeedAttach set by bindShapingToLane() called below.
+#endif
 
     // ── Direction control (shaping section — contextual) ──────────────────────
     dirControl.setSegments ({
@@ -801,15 +869,13 @@ DrawnCurveEditor::DrawnCurveEditor (DrawnCurveProcessor& p)
 
     // ── Lane focus selector ───────────────────────────────────────────────────
     laneFocusCtrl.setSegments ({
-        { "l1",  "1", "Lane 1" },
-        { "l2",  "2", "Lane 2" },
-        { "l3",  "3", "Lane 3" },
-        { "all", "*", "All Lanes" },
+        { "l1", "1", "Lane 1" },
+        { "l2", "2", "Lane 2" },
+        { "l3", "3", "Lane 3" },
     });
     laneFocusCtrl.setSelectedIndex (0, juce::dontSendNotification);
     laneFocusCtrl.onChange = [this] (int idx)
     {
-        if (idx == kMaxLanes) { setFocusedLane (-1); return; }
         setFocusedLane (idx);
     };
     addAndMakeVisible (laneFocusCtrl);
@@ -841,17 +907,13 @@ DrawnCurveEditor::DrawnCurveEditor (DrawnCurveProcessor& p)
     phaseOffsetSlider.setTextValueSuffix ("%");
     phaseOffsetSlider.setNumDecimalPlacesToDisplay (0);
 
-    // One-shot toggle (inline with lane focus selector in shaping panel)
-    addAndMakeVisible (oneShotBtn);
-    oneShotBtn.setClickingTogglesState (false);   // we manage state manually via bindShapingToLane
-    // Use charToString to build the infinity glyph from its codepoint — avoids
-    // any source-file encoding ambiguity with u8 string literals.
-    oneShotBtn.setButtonText (juce::String::charToString (juce::juce_wchar (0x221E)));  // ∞ = loop
+    // oneShotBtn is now unused (loop mode is per-lane in the matrix); keep constructed
+    // but do not add to visible hierarchy.
 
     // Lane sync toggle — locks all looping lane playheads to the same phase.
-    // Visible only in the "All Lanes" (*) tab.  Symbol U+2261 "≡" (identical-to,
-    // three equal lines) suggests all lanes running at the same rate.
-    addChildComponent (laneSyncBtn);   // starts hidden; setFocusedLane(-1) makes it visible
+    // Lives in the GLOBAL panel alongside the host-sync toggle.
+    // Symbol U+2261 "≡" (identical-to, three equal lines) suggests all lanes in lock-step.
+    addAndMakeVisible (laneSyncBtn);
     laneSyncBtn.setClickingTogglesState (true);
     laneSyncBtn.setButtonText (juce::String::charToString (juce::juce_wchar (0x2261)));  // ≡
     laneSyncBtn.setToggleState (proc.getLanesSynced(), juce::dontSendNotification);
@@ -1018,14 +1080,26 @@ DrawnCurveEditor::DrawnCurveEditor (DrawnCurveProcessor& p)
             }
         };
 
-        // Mute button
-        laneMuteBtn[static_cast<size_t>(L)].setLookAndFeel (&_muteDrawLF);
+        // Loop / one-shot toggle (replaces the old mute button)
+        // ∞ = loop (default), 1 = one-shot
+        {
+            static const juce::String kLoop = juce::String::charToString (juce::juce_wchar (0x221E));
+            const bool isOneShot = proc.apvts.getRawParameterValue (laneParam (L, "loopMode"))->load() > 0.5f;
+            laneMuteBtn[static_cast<size_t>(L)].setLookAndFeel (&_symbolLF);
+            laneMuteBtn[static_cast<size_t>(L)].setButtonText (isOneShot ? "1" : kLoop);
+        }
         addAndMakeVisible (laneMuteBtn[static_cast<size_t>(L)]);
         laneMuteBtn[static_cast<size_t>(L)].onClick = [this, L]
         {
-            if (auto* pEnabled = dynamic_cast<juce::AudioParameterBool*> (
-                              proc.apvts.getParameter (laneParam (L, "enabled"))))
-                *pEnabled = ! (pEnabled->get());
+            static const juce::String kLoop = juce::String::charToString (juce::juce_wchar (0x221E));
+            if (auto* pLoop = dynamic_cast<juce::AudioParameterBool*> (
+                                  proc.apvts.getParameter (laneParam (L, "loopMode"))))
+            {
+                const bool nowOneShot = ! pLoop->get();
+                *pLoop = nowOneShot;
+                laneMuteBtn[static_cast<size_t>(L)].setButtonText (nowOneShot ? "1" : kLoop);
+                proc.updateLaneSnapshot (L);
+            }
             applyTheme();
         };
 
@@ -1046,10 +1120,19 @@ DrawnCurveEditor::DrawnCurveEditor (DrawnCurveProcessor& p)
     proc.apvts.addParameterListener ("scaleRoot", this);
     proc.apvts.addParameterListener ("scaleMask", this);
 
-    // Mapping detail label
-    mappingDetailLabel.setFont (juce::Font (juce::FontOptions{}.withHeight (10.0f)));
-    mappingDetailLabel.setJustificationType (juce::Justification::centredLeft);
-    addAndMakeVisible (mappingDetailLabel);
+    // mappingDetailLabel was removed (info is already visible in the matrix rows above it).
+
+    // ── Lane colour-dot focus selectors ───────────────────────────────────────
+    // Transparent hit-area buttons positioned over the lane colour dots in the
+    // routing matrix.  Tapping a dot switches the focused lane.
+    for (int L = 0; L < kMaxLanes; ++L)
+    {
+        auto& btn = laneSelectBtn[static_cast<size_t> (L)];
+        btn.setButtonText ({});
+        btn.setOpaque (false);
+        addAndMakeVisible (btn);
+        btn.onClick = [this, L] { setFocusedLane (L); };
+    }
 
     updateAllLaneRows();
 
@@ -1328,6 +1411,21 @@ DrawnCurveEditor::DrawnCurveEditor (DrawnCurveProcessor& p)
     addAndMakeVisible (maskLabel);
     updateScaleStatus();
 
+    // ── Musical zone toggle ───────────────────────────────────────────────────
+    musicalToggleBtn.setLookAndFeel (&_symbolLF);
+    {
+        const juce::String kMusDown = juce::String::charToString (juce::juce_wchar (0x25BC));  // ▼ (large solid)
+        const juce::String kMusUp   = juce::String::charToString (juce::juce_wchar (0x25B2));  // ▲ (large solid)
+        musicalToggleBtn.setButtonText (kMusDown);
+        addAndMakeVisible (musicalToggleBtn);
+        musicalToggleBtn.onClick = [this, kMusDown, kMusUp]
+        {
+            _musicalExpanded = ! _musicalExpanded;
+            musicalToggleBtn.setButtonText (_musicalExpanded ? kMusUp : kMusDown);
+            updateScaleVisibility();
+        };
+    }
+
     // ── Curve display + help overlay ──────────────────────────────────────────
     addAndMakeVisible (curveDisplay);
     addChildComponent (helpOverlay);
@@ -1429,24 +1527,12 @@ void DrawnCurveEditor::setFocusedLane (int lane)
     };
 
     if (lane < 0)
-    {
-        // ── All Lanes (*) tab ─────────────────────────────────────────────────
-        _showingAllLanes = true;
-        laneFocusCtrl.setSelectedIndex (kMaxLanes, juce::dontSendNotification);
-        setPerLaneVisible (false);
-        laneSyncBtn.setVisible (true);
-#if defined(DC_HAVE_PER_LANE_PLAYBACK_PARAMS)
-        bindPlaybackToLane (-1);
-#endif
-        repaint();
-        return;
-    }
+        return;   // no * tab — ignore out-of-range calls
 
     // ── Individual lane tab ───────────────────────────────────────────────────
     if (_showingAllLanes)
     {
         _showingAllLanes = false;
-        laneSyncBtn.setVisible (false);
         setPerLaneVisible (true);
     }
 
@@ -1472,27 +1558,24 @@ void DrawnCurveEditor::bindShapingToLane (int lane)
     phaseOffsetAttach.reset();
     phaseOffsetAttach = std::make_unique<Attach> (proc.apvts, laneParam (lane, "phaseOffset"), phaseOffsetSlider);
 
+#if defined(DC_HAVE_PER_LANE_PLAYBACK_PARAMS)
+    // Per-lane speed multiplier attachment
+    laneSpeedAttach.reset();
+    laneSpeedAttach = std::make_unique<Attach> (proc.apvts, laneParam (lane, ParamID::laneSpeedMul), laneSpeedSlider);
+    laneSpeedSlider.setNormalisableRange (juce::NormalisableRange<double> (0.25, 4.0));
+    // Disable per-lane speed when host sync is on (global SYNC slider controls all lanes)
+    const bool isSyncing = proc.apvts.getRawParameterValue (ParamID::syncEnabled)->load() > 0.5f;
+    laneSpeedSlider.setEnabled (! isSyncing);
+    laneSpeedSlider.setAlpha  (isSyncing ? 0.4f : 1.0f);
+#endif
+
     // Range slider — no APVTS attachment for two-value sliders; set directly.
     rangeSlider.setMinValue (proc.apvts.getRawParameterValue (laneParam (lane, "minOutput"))->load(),
                              juce::dontSendNotification);
     rangeSlider.setMaxValue (proc.apvts.getRawParameterValue (laneParam (lane, "maxOutput"))->load(),
                              juce::dontSendNotification);
     updateRangeLabel();
-
-    // One-shot toggle
-    const bool isOneShot = proc.apvts.getRawParameterValue (laneParam (lane, "loopMode"))->load() > 0.5f;
-    static const juce::String kLoopSym = juce::String::charToString (juce::juce_wchar (0x221E)); // ∞
-    oneShotBtn.setButtonText (isOneShot ? "1" : kLoopSym);
-    oneShotBtn.onClick = [this, lane] {
-        if (auto* pLoop = dynamic_cast<juce::AudioParameterBool*>(
-                              proc.apvts.getParameter (laneParam (lane, "loopMode")))) {
-            static const juce::String kLoop = juce::String::charToString (juce::juce_wchar (0x221E));
-            const bool nowOneShot = ! pLoop->get();
-            *pLoop = nowOneShot;
-            oneShotBtn.setButtonText (nowOneShot ? "1" : kLoop);
-            proc.updateLaneSnapshot (lane);
-        }
-    };
+    // Loop mode is now per-lane in the matrix rows (laneMuteBtn repurposed); no shared oneShotBtn binding needed.
 }
 
 //==============================================================================
@@ -1503,19 +1586,12 @@ void DrawnCurveEditor::bindShapingToLane (int lane)
 
 void DrawnCurveEditor::bindPlaybackToLane (int lane)
 {
-    const bool isSyncing = proc.apvts.getRawParameterValue (ParamID::syncEnabled)->load() > 0.5f;
+    // The global speedSlider in the utility bar is always bound to the global
+    // playbackSpeed / syncBeats param via onSyncToggled() — do NOT rebind it here.
+    // This function only rebinds the direction control to the correct per-lane param.
 
     if (lane >= 0 && lane < kMaxLanes)
     {
-        // Per-lane mode: bind speed to this lane's multiplier param.
-        if (! isSyncing)
-        {
-            speedAttach.reset();
-            speedAttach = std::make_unique<Attach> (
-                proc.apvts, laneParam (lane, ParamID::laneSpeedMul), speedSlider);
-        }
-
-        // Direction: read lane param and rebind onChange.
         const int dir = static_cast<int> (
             proc.apvts.getRawParameterValue (laneParam (lane, ParamID::laneDirection))->load());
         dirControl.setSelectedIndex (kDirParamToVis[juce::jlimit (0, 2, dir)],
@@ -1529,14 +1605,6 @@ void DrawnCurveEditor::bindPlaybackToLane (int lane)
     }
     else
     {
-        // Global ("all lanes") mode: bind speed to the shared playbackSpeed param.
-        if (! isSyncing)
-        {
-            speedAttach.reset();
-            speedAttach = std::make_unique<Attach> (
-                proc.apvts, ParamID::playbackSpeed, speedSlider);
-        }
-
         const int dir = static_cast<int> (
             proc.apvts.getRawParameterValue (ParamID::playbackDirection)->load());
         dirControl.setSelectedIndex (kDirParamToVis[juce::jlimit (0, 2, dir)],
@@ -1566,7 +1634,7 @@ void DrawnCurveEditor::updateLaneRow (int lane)
         proc.apvts.getRawParameterValue (laneParam (lane, "noteVelocity"))->load());
     const int ch    = static_cast<int> (
         proc.apvts.getRawParameterValue (laneParam (lane, "midiChannel"))->load());
-    const bool enabled = proc.apvts.getRawParameterValue (laneParam (lane, "enabled"))->load() > 0.5f;
+    const bool isOneShot = proc.apvts.getRawParameterValue (laneParam (lane, "loopMode"))->load() > 0.5f;
 
     // Detail: CC# for CC, velocity for Note, "—" for PB/Aft
     juce::String detailText;
@@ -1590,24 +1658,15 @@ void DrawnCurveEditor::updateLaneRow (int lane)
     laneTeachBtn[static_cast<size_t>(lane)].setEnabled (true);
     laneTeachBtn[static_cast<size_t>(lane)].setAlpha (1.0f);
 
-    // Mute button
-    laneMuteBtn[static_cast<size_t>(lane)].setButtonText (enabled ? "ON" : "mute");
-
-    // Mapping detail panel (for focused lane only)
-    if (lane == _focusedLane)
+    // Loop / one-shot toggle button (previously the mute button)
     {
-        static const char* kTypeNames[] = { "CC", "Aft", "PB", "Note" };
-        juce::String detail = juce::String (kTypeNames[type]);
-        if (type == 0)       detail += " " + juce::String (ccNum);
-        else if (type == 3)  detail += "  Vel " + juce::String (vel);
-        detail += "  |  Ch " + juce::String (ch);
-        if (! enabled) detail += "  [muted]";
-        mappingDetailLabel.setText (detail, juce::dontSendNotification);
-
-        // Message type affects how the range slider values are labelled (CC 0-127,
-        // PB ±8192, note names).  Refresh the label whenever the focused row changes.
-        updateRangeLabel();
+        static const juce::String kLoop = juce::String::charToString (juce::juce_wchar (0x221E));
+        laneMuteBtn[static_cast<size_t>(lane)].setButtonText (isOneShot ? "1" : kLoop);
     }
+
+    // Refresh range label if this is the focused lane (type affects label format)
+    if (lane == _focusedLane)
+        updateRangeLabel();
 }
 
 void DrawnCurveEditor::updateAllLaneRows()
@@ -1703,16 +1762,10 @@ void DrawnCurveEditor::parameterChanged (const juce::String& paramID, float)
         if (paramID == laneParam (L, "loopMode"))
         {
             proc.updateLaneSnapshot (L);
-            if (L == _focusedLane)
-            {
-                juce::MessageManager::callAsync ([this] {
-                    const bool isOneShot = proc.apvts.getRawParameterValue (
-                        laneParam (_focusedLane, "loopMode"))->load() > 0.5f;
-                    static const juce::String kLoop = juce::String::charToString (juce::juce_wchar (0x221E));
-                    oneShotBtn.setButtonText (isOneShot ? "1" : kLoop);
-                    applyTheme();
-                });
-            }
+            juce::MessageManager::callAsync ([this, L] {
+                updateLaneRow (L);   // refreshes per-lane loop button text in matrix
+                applyTheme();
+            });
             return;
         }
 
@@ -1761,6 +1814,9 @@ void DrawnCurveEditor::parameterChanged (const juce::String& paramID, float)
 
 void DrawnCurveEditor::onSyncToggled (bool isSync)
 {
+    // ── Utility-bar global speed slider ───────────────────────────────────────
+    // Always bound to the GLOBAL speed param (syncBeats when syncing,
+    // playbackSpeed when free).  Never rebound to a per-lane param.
     speedAttach.reset();
     if (isSync)
     {
@@ -1785,24 +1841,23 @@ void DrawnCurveEditor::onSyncToggled (bool isSync)
     }
     else
     {
-#if defined(DC_HAVE_PER_LANE_PLAYBACK_PARAMS)
-        bindPlaybackToLane (_showingAllLanes ? -1 : _focusedLane);
-        const juce::String speedID = _showingAllLanes
-            ? ParamID::playbackSpeed
-            : laneParam (_focusedLane, ParamID::laneSpeedMul);
-        speedSlider.setNormalisableRange (juce::NormalisableRange<double> (0.25, 4.0));
-        speedSlider.setValue (proc.apvts.getRawParameterValue (speedID)->load(),
-                              juce::dontSendNotification);
-#else
+        // FREE mode: bind utility bar slider to GLOBAL playbackSpeed (not per-lane).
         speedAttach = std::make_unique<Attach> (proc.apvts, ParamID::playbackSpeed, speedSlider);
         speedSlider.setNormalisableRange (juce::NormalisableRange<double> (0.25, 4.0));
         speedSlider.setValue (proc.apvts.getRawParameterValue (ParamID::playbackSpeed)->load(),
                               juce::dontSendNotification);
-#endif
         speedLabel.setText ("FREE", juce::dontSendNotification);
         speedSlider.setTextValueSuffix ("x");
         speedSlider.setNumDecimalPlacesToDisplay (2);
     }
+
+#if defined(DC_HAVE_PER_LANE_PLAYBACK_PARAMS)
+    // ── Per-lane speed slider — enabled only in FREE mode ─────────────────────
+    laneSpeedSlider.setEnabled (! isSync);
+    laneSpeedSlider.setAlpha  (isSync ? 0.4f : 1.0f);
+    // Rebind direction control to current focused lane.
+    bindPlaybackToLane (_showingAllLanes ? -1 : _focusedLane);
+#endif
 
     // Direction is always user-controlled; sync only affects speed/timing.
     dirControl.setAlpha (1.0f);
@@ -1823,18 +1878,27 @@ void DrawnCurveEditor::updateScaleVisibility()
         if (static_cast<int> (proc.apvts.getRawParameterValue (laneParam (L, "msgType"))->load()) == 3)
             { anyNote = true; break; }
 
-    scaleLabel    .setVisible (anyNote);
-    maskLabel     .setVisible (anyNote);
-    scaleLattice  .setVisible (anyNote);
+    // Musical toggle button: visible whenever any note lane is active.
+    musicalToggleBtn.setVisible (anyNote);
+
+    // Musical zone detail controls: only visible when anyNote AND zone is expanded.
+    const bool showDetail = anyNote && _musicalExpanded;
+
+    scaleLabel    .setVisible (showDetail);
+    maskLabel     .setVisible (showDetail);
+    scaleLattice  .setVisible (showDetail);
+    // scaleNotationBtn lives in the utility bar — visible whenever any Note lane is active.
     scaleNotationBtn.setVisible (anyNote);
-    scaleRotateBtn  .setVisible (anyNote);
-    scaleAllBtn     .setVisible (anyNote);
-    scaleNoneBtn  .setVisible (anyNote);
-    scaleInvBtn   .setVisible (anyNote);
-    scaleRootBtn  .setVisible (anyNote);
-    for (auto& b : familyBtns) b.setVisible (anyNote);
-    recentFamilyBtn.setVisible (anyNote);
+    scaleRotateBtn  .setVisible (showDetail);
+    scaleAllBtn     .setVisible (showDetail);
+    scaleNoneBtn  .setVisible (showDetail);
+    scaleInvBtn   .setVisible (showDetail);
+    scaleRootBtn  .setVisible (showDetail);
+    for (auto& b : familyBtns) b.setVisible (showDetail);
+    recentFamilyBtn.setVisible (showDetail);
     // Subfamily chips are individually shown/hidden by setActiveFamily().
+    if (! showDetail)
+        for (auto& b : subfamilyBtns) b.setVisible (false);
 
     if (anyNote)
     {
@@ -1842,6 +1906,8 @@ void DrawnCurveEditor::updateScaleVisibility()
         scaleLattice.setRoot (static_cast<int> (
             proc.apvts.getRawParameterValue ("scaleRoot")->load()));
         updateScaleStatus();
+        if (showDetail)
+            setActiveFamily (_activeFamilyIdx);   // refresh chip visibility
     }
 
     resized();
@@ -2011,6 +2077,9 @@ void DrawnCurveEditor::updateRangeLabel()
         rangeLabel.setText (juce::String (lo) + " - " + juce::String (hi),
                             juce::dontSendNotification);
     }
+
+    // Repaint so the collapsed musical summary chip reflects the updated range text.
+    repaint();
 }
 
 void DrawnCurveEditor::updateScaleStatus()
@@ -2059,16 +2128,20 @@ void DrawnCurveEditor::applyTheme()
 {
     const bool light = _lightMode;
 
-    const juce::Colour textCol  = light ? juce::Colour (0xff28261F) : juce::Colours::white;
-    const juce::Colour dimText  = light ? juce::Colour (0xff706D64) : juce::Colours::lightgrey;
-    const juce::Colour tbBg     = light ? juce::Colour (0xffFDFCFA) : juce::Colour (0xff252538);
-    const juce::Colour tbLine   = light ? juce::Colour (0x1EC9C5B5) : juce::Colour (0x33ffffff);
-    const juce::Colour accent   = light ? juce::Colour (0xff0B6E4F) : juce::Colour (0xff00e5ff);
-    const juce::Colour btnBg    = light ? juce::Colour (0xffF0EFE7) : juce::Colour (0xff333355);
-    const juce::Colour btnText  = light ? juce::Colour (0xff28261F) : juce::Colours::white;
+    const juce::Colour textCol  = light ? juce::Colour (0xff2d2b27) : juce::Colours::white;
+    const juce::Colour dimText  = light ? juce::Colour (0xff7a766d) : juce::Colours::lightgrey;
+    const juce::Colour tbBg     = light ? juce::Colour (0xffFCFBF7) : juce::Colour (0xff252538);
+    const juce::Colour tbLine   = light ? juce::Colour (0xffDDD6CA) : juce::Colour (0x33ffffff);
+    const juce::Colour accent   = light ? kLaneColourLight[0] : kLaneColourDark[0];   // purple
+    const juce::Colour btnBg    = light ? juce::Colour (0xffF0EDE5) : juce::Colour (0xff333355);
+    const juce::Colour btnText  = light ? juce::Colour (0xff2d2b27) : juce::Colours::white;
 
     // Sliders
-    for (auto* s : { &smoothingSlider, &speedSlider, &phaseOffsetSlider })
+    for (auto* s : { &smoothingSlider, &speedSlider, &phaseOffsetSlider
+#if defined(DC_HAVE_PER_LANE_PLAYBACK_PARAMS)
+                   , &laneSpeedSlider
+#endif
+                   })
     {
         s->setColour (juce::Slider::textBoxTextColourId,       textCol);
         s->setColour (juce::Slider::textBoxBackgroundColourId, tbBg);
@@ -2081,16 +2154,36 @@ void DrawnCurveEditor::applyTheme()
     rangeSlider.setColour (juce::Slider::trackColourId,      accent.withAlpha (0.45f));
     rangeSlider.setColour (juce::Slider::backgroundColourId, tbBg);
 
-    for (auto* l : { &smoothingLabel, &rangeLabel, &speedLabel, &phaseOffsetLabel })
+    for (auto* l : { &smoothingLabel, &rangeLabel, &speedLabel, &phaseOffsetLabel
+#if defined(DC_HAVE_PER_LANE_PLAYBACK_PARAMS)
+                   , &laneSpeedLabel
+#endif
+                   })
         l->setColour (juce::Label::textColourId, dimText);
 
     // clearButton is a dcui::IconButton
     clearButton.setBaseColour (light ? juce::Colour (0xff706D64) : juce::Colours::lightgrey);
 
+    // Musical toggle button
+    musicalToggleBtn.setColour (juce::TextButton::buttonColourId,  btnBg);
+    musicalToggleBtn.setColour (juce::TextButton::textColourOffId, dimText);
+
+    // Lane select buttons — transparent hit areas over the colour dots
+    for (auto& b : laneSelectBtn)
+    {
+        b.setColour (juce::TextButton::buttonColourId,  juce::Colours::transparentBlack);
+        b.setColour (juce::TextButton::buttonOnColourId, juce::Colours::transparentBlack);
+        b.setColour (juce::TextButton::textColourOffId,  juce::Colours::transparentBlack);
+    }
+
+    // Scale notation button (in utility bar) — styled like regular utility buttons
+    scaleNotationBtn.setColour (juce::TextButton::buttonColourId,  btnBg);
+    scaleNotationBtn.setColour (juce::TextButton::textColourOffId, btnText);
+
     // Utility buttons
     for (auto* b : { &playButton, &panicButton, &themeButton, &helpButton,
                      &tickYMinusBtn, &tickYPlusBtn, &tickXMinusBtn, &tickXPlusBtn,
-                     &oneShotBtn, &laneSyncBtn })
+                     &laneSyncBtn })
     {
         b->setColour (juce::TextButton::buttonColourId,  btnBg);
         b->setColour (juce::TextButton::textColourOffId, btnText);
@@ -2098,7 +2191,7 @@ void DrawnCurveEditor::applyTheme()
 
     // Lane sync button — accent when active to make its state obvious
     {
-        const auto syncAccent = light ? juce::Colour (0xff0B6E4F) : juce::Colour (0xff34D399);
+        const auto syncAccent = light ? kLaneColourLight[1] : kLaneColourDark[1];   // teal
         laneSyncBtn.setColour (juce::TextButton::buttonOnColourId,  syncAccent.withAlpha (0.22f));
         laneSyncBtn.setColour (juce::TextButton::textColourOnId,    syncAccent);
     }
@@ -2109,12 +2202,12 @@ void DrawnCurveEditor::applyTheme()
     panicButton.setColour (juce::TextButton::textColourOffId,
                            light ? juce::Colour (0xffC0392B) : juce::Colour (0xffFF6B6B));
 
-    // Direction control — violet accent
-    dirControl.bgColour     = light ? juce::Colour (0xffEDE8FF) : btnBg;
-    dirControl.activeColour = light ? juce::Colour (0xff8B5CF6) : juce::Colour (0xff2979ff);
-    dirControl.labelColour  = light ? juce::Colour (0xff6D28D9) : juce::Colours::lightgrey;
-    dirControl.activeLabel  = juce::Colours::white;
-    dirControl.borderColour = light ? juce::Colour (0x28000000) : juce::Colour (0x33ffffff);
+    // Direction control — purple accent matching Lane 0 colour
+    dirControl.bgColour     = light ? juce::Colour (0xffEFE7FF) : btnBg;
+    dirControl.activeColour = light ? juce::Colour (0xffffffff) : juce::Colour (0xff2979ff);
+    dirControl.labelColour  = light ? juce::Colour (0xff6746d9) : juce::Colours::lightgrey;
+    dirControl.activeLabel  = light ? juce::Colour (0xff6746d9) : juce::Colours::white;
+    dirControl.borderColour = light ? juce::Colour (0xffDDD2FF) : juce::Colour (0x33ffffff);
     dirControl.repaint();
 
     // Lane focus control — active segment uses lane colour (lanes) or neutral accent (*).
@@ -2125,11 +2218,11 @@ void DrawnCurveEditor::applyTheme()
         const auto activeLabelCol = (activeLaneCol.getBrightness() > 0.55f)
                                     ? juce::Colour (0xdd1a1a1a)
                                     : juce::Colours::white;
-        laneFocusCtrl.bgColour     = light ? juce::Colour (0xffF0EFE7) : btnBg;
+        laneFocusCtrl.bgColour     = light ? juce::Colour (0xffF0EDE5) : btnBg;
         laneFocusCtrl.activeColour = activeLaneCol;
         laneFocusCtrl.labelColour  = dimText;
         laneFocusCtrl.activeLabel  = activeLabelCol;
-        laneFocusCtrl.borderColour = light ? juce::Colour (0x28000000) : juce::Colour (0x33ffffff);
+        laneFocusCtrl.borderColour = light ? juce::Colour (0xffDDD6CA) : juce::Colour (0x33ffffff);
         laneFocusCtrl.repaint();
     }
 
@@ -2145,21 +2238,19 @@ void DrawnCurveEditor::applyTheme()
     // Routing matrix rows
     for (int L = 0; L < kMaxLanes; ++L)
     {
-        const bool enabled = proc.apvts.getRawParameterValue (laneParam (L, "enabled"))->load() > 0.5f;
-        const bool isFocused = (L == _focusedLane);
-        const auto laneCol = light ? kLaneColourLight[L] : kLaneColourDark[L];
-        const float rowAlpha = enabled ? 1.0f : 0.45f;
+        const auto laneCol   = light ? kLaneColourLight[L] : kLaneColourDark[L];
+        const bool isOneShot = proc.apvts.getRawParameterValue (laneParam (L, "loopMode"))->load() > 0.5f;
 
-        laneTypeBtn[static_cast<size_t>(L)].setColour (juce::TextButton::buttonColourId,  laneCol.withAlpha (0.18f * rowAlpha));
+        laneTypeBtn[static_cast<size_t>(L)].setColour (juce::TextButton::buttonColourId,  laneCol.withAlpha (0.18f));
         laneTypeBtn[static_cast<size_t>(L)].setColour (juce::TextButton::textColourOffId, laneCol);
 
         for (auto* lbl : { &laneDetailLabel[static_cast<size_t>(L)], &laneChannelLabel[static_cast<size_t>(L)] })
         {
-            lbl->setColour (juce::Label::textColourId,       enabled ? textCol : dimText);
-            lbl->setColour (juce::Label::backgroundColourId, tbBg.withAlpha (rowAlpha));
+            lbl->setColour (juce::Label::textColourId,       textCol);
+            lbl->setColour (juce::Label::backgroundColourId, tbBg);
             lbl->setColour (juce::Label::outlineColourId,    tbLine);
             lbl->setColour (juce::Label::textWhenEditingColourId, textCol);
-            lbl->setAlpha (rowAlpha);
+            lbl->setAlpha (1.0f);
         }
 
         // Teach button: glows amber while pending
@@ -2170,22 +2261,12 @@ void DrawnCurveEditor::applyTheme()
         laneTeachBtn[static_cast<size_t>(L)].setColour (juce::TextButton::textColourOffId,
                                    teaching ? juce::Colours::white : btnText);
 
-        // Mute button: uses lane colour when active
+        // Loop / one-shot button: loop = accent tint, one-shot = neutral
         laneMuteBtn[static_cast<size_t>(L)].setColour (juce::TextButton::buttonColourId,
-                                  enabled ? laneCol.withAlpha (0.85f) : btnBg);
+                                  isOneShot ? btnBg : laneCol.withAlpha (0.18f));
         laneMuteBtn[static_cast<size_t>(L)].setColour (juce::TextButton::textColourOffId,
-                                  enabled ? juce::Colours::white : dimText);
-
-        // Selected row indicator: slightly different background
-        if (isFocused)
-        {
-            // The selected row highlight is drawn in paint() via the _secRouting panel.
-            // Here we just ensure the controls have full opacity.
-        }
+                                  isOneShot ? dimText : laneCol);
     }
-
-    // Mapping detail label
-    mappingDetailLabel.setColour (juce::Label::textColourId, dimText);
 
     // Scale controls
     scaleLabel.setColour (juce::Label::textColourId, dimText);
@@ -2202,7 +2283,7 @@ void DrawnCurveEditor::applyTheme()
     scaleLattice.colRootText     = light ? juce::Colour (0xff92400E)     : juce::Colours::black;
     scaleLattice.repaint();
 
-    for (auto* b : { &scaleNotationBtn, &scaleRotateBtn, &scaleAllBtn, &scaleNoneBtn, &scaleInvBtn, &scaleRootBtn })
+    for (auto* b : { &scaleRotateBtn, &scaleAllBtn, &scaleNoneBtn, &scaleInvBtn, &scaleRootBtn })
     {
         b->setColour (juce::TextButton::buttonColourId,  btnBg);
         b->setColour (juce::TextButton::textColourOffId, btnText);
@@ -2227,76 +2308,150 @@ void DrawnCurveEditor::applyTheme()
 
 void DrawnCurveEditor::paint (juce::Graphics& g)
 {
+    using namespace Layout;
     const Theme& T = _lightMode ? kLight : kDark;
-    g.fillAll (T.panelBg);
 
-    if (_lightMode)
+    // ── Background ────────────────────────────────────────────────────────────
+    g.fillAll (T.background);
+
+    // ── Panel drawing helper ──────────────────────────────────────────────────
+    auto drawPanel = [&] (juce::Rectangle<int> r, juce::Colour fill,
+                          juce::Colour border, float radius)
     {
-        auto drawPanel = [&] (juce::Rectangle<int> r, juce::Colour fill, juce::Colour border)
+        if (r.isEmpty()) return;
+        g.setColour (fill);
+        g.fillRoundedRectangle (r.toFloat(), radius);
+        g.setColour (border);
+        g.drawRoundedRectangle (r.toFloat().reduced (0.5f), radius, 1.0f);
+    };
+
+    const juce::Colour panelFill   = T.panelBg;
+    const juce::Colour panelBorder = T.panelBorder;
+    const float kR = static_cast<float> (panelRadius);
+
+    // ── Stage panel ───────────────────────────────────────────────────────────
+    drawPanel (_stagePanel, T.stageBg, panelBorder, kR + 4.0f);
+
+    // ── Right-rail panels ─────────────────────────────────────────────────────
+    drawPanel (_globalPanel,       panelFill, panelBorder, kR);
+    drawPanel (_focusedLanePanel,  panelFill, panelBorder, kR);
+    drawPanel (_lanesPanel,        panelFill, panelBorder, kR);
+    drawPanel (_musicalPanel,      panelFill, panelBorder, kR);
+
+    const juce::Colour eyebrowCol = T.hint;
+
+    // ── Routing matrix: dots + focused-row highlight ──────────────────────────
+    // Matrix is now embedded inside the focused lane panel. Use _matrixRowOrigin
+    // (set in resized) to locate each row.
+    if (! _focusedLanePanel.isEmpty() && _matrixRowOrigin != juce::Point<int>{})
+    {
+        const auto* laneColours = _lightMode ? kLaneColourLight : kLaneColourDark;
+
+        for (int L = 0; L < kMaxLanes; ++L)
         {
-            if (r.isEmpty()) return;
-            g.setColour (fill);
-            g.fillRoundedRectangle (r.toFloat(), 8.0f);
-            g.setColour (border);
-            g.drawRoundedRectangle (r.toFloat().reduced (0.5f), 8.0f, 1.0f);
-        };
+            const int rowY = _matrixRowOrigin.getY() + L * _matrixRowStride;
 
-        drawPanel (_secTransport, juce::Colour (0xffFBF7FF), juce::Colour (0xffE6D7FF));  // violet
-        drawPanel (_secShaping,   juce::Colour (0xffFFFCF2), juce::Colour (0xffF8E7A8));  // amber
-        drawPanel (_secRouting,   juce::Colour (0xffF6FFF8), juce::Colour (0xffD3F2DD));  // green
-        drawPanel (_secNotes,     juce::Colour (0xffFFF7FB), juce::Colour (0xffF8D6EC));  // pink
-
-        // Routing matrix: header labels + focused-row highlight + lane-colour dots
-        if (! _secRouting.isEmpty())
-        {
-            using namespace Layout;
-            const int headerH = 16;
-            const int rs_x    = _secRouting.getX() + 4;
-            const int rs_top  = _secRouting.getY() + 4;
-
-            // ── Header labels ─────────────────────────────────────────────────
+            // Focused-row highlight
+            if (L == _focusedLane)
             {
-                g.setColour (juce::Colour (0xff706D64));
-                g.setFont (juce::Font (juce::FontOptions{}.withHeight (9.0f)));
-                int hx = rs_x + matDotW + matInnerGap;
-                const int hy = rs_top, hh = headerH;
-                g.drawFittedText ("Type", hx, hy, matTargetW, hh,
-                                  juce::Justification::centredLeft, 1);
-                hx += matTargetW + matInnerGap;
-                g.drawFittedText ("Det", hx, hy, matDetailW, hh,
-                                  juce::Justification::centredLeft, 1);
-                hx += matDetailW + matInnerGap;
-                g.drawFittedText ("Ch", hx, hy, matChanW, hh,
-                                  juce::Justification::centredLeft, 1);
-                hx += matChanW + matInnerGap;
-                g.drawFittedText ("Teach", hx, hy, matTeachW, hh,
-                                  juce::Justification::centredLeft, 1);
-                hx += matTeachW + matInnerGap;
-                g.drawFittedText ("On", hx, hy, matMuteW, hh,
-                                  juce::Justification::centredLeft, 1);
+                const auto focusLaneCol = laneColours[_focusedLane];
+                g.setColour (focusLaneCol.withAlpha (0.10f));
+                g.fillRoundedRectangle (juce::Rectangle<int> (
+                    _focusedLanePanel.getX() + 4, rowY,
+                    _focusedLanePanel.getWidth() - 8, matRowH).toFloat(), 5.0f);
             }
 
-            // ── Focused-row highlight ─────────────────────────────────────────
-            const int rowY = rs_top + headerH + _focusedLane * (matRowH + 2);
-            const auto rowR = juce::Rectangle<int> (
-                _secRouting.getX() + 3, rowY,
-                _secRouting.getWidth() - 6, matRowH);
-            g.setColour (juce::Colour (0xff0B6E4F).withAlpha (0.08f));
-            g.fillRoundedRectangle (rowR.toFloat(), 4.0f);
+            // Lane colour dot
+            const float cx = static_cast<float> (_matrixRowOrigin.getX() + matDotW / 2);
+            const float cy = static_cast<float> (rowY + matRowH / 2);
+            const float r  = 5.0f;
+            g.setColour (laneColours[L]);
+            g.fillEllipse (cx - r, cy - r, r * 2.0f, r * 2.0f);
 
-            // ── Lane-colour dots ──────────────────────────────────────────────
-            const auto* laneColours = _lightMode ? kLaneColourLight : kLaneColourDark;
-            for (int L = 0; L < kMaxLanes; ++L)
+            // Add-card dashed outline for lanes with no curve
+            if (! proc.hasCurve (L))
             {
-                const int dotY    = rs_top + headerH + L * (matRowH + 2);
-                const float cx    = static_cast<float> (rs_x + matDotW / 2);
-                const float cy    = static_cast<float> (dotY + matRowH / 2);
-                const float r     = 4.0f;
-                g.setColour (laneColours[L]);
-                g.fillEllipse (cx - r, cy - r, r * 2.0f, r * 2.0f);
+                const auto typeBtn = laneTypeBtn[static_cast<size_t>(L)].getBounds();
+                if (! typeBtn.isEmpty())
+                {
+                    const auto cardRow = juce::Rectangle<int> (
+                        typeBtn.getX() - 4, rowY,
+                        _focusedLanePanel.getRight() - typeBtn.getX() - panelPad + 4, matRowH);
+                    g.setColour (laneColours[L].withAlpha (0.25f));
+                    const float dash[] = { 5.0f, 4.0f };
+                    juce::Path dashedRect;
+                    dashedRect.addRoundedRectangle (cardRow.toFloat().reduced (0.5f), 5.0f);
+                    juce::Path dashed;
+                    juce::PathStrokeType stroke (1.0f);
+                    stroke.createDashedStroke (dashed, dashedRect, dash, 2);
+                    g.fillPath (dashed);
+                }
             }
         }
     }
+
+    // ── Musical collapsed summary text ────────────────────────────────────────
+    if (! _musicalPanel.isEmpty() && ! _musicalExpanded)
+    {
+        // Show current scale + range summary
+        bool anyNote = false;
+        for (int L = 0; L < kMaxLanes; ++L)
+            anyNote |= (static_cast<int> (proc.apvts.getRawParameterValue (
+                laneParam (L, "msgType"))->load()) == 3);
+
+        if (anyNote)
+        {
+            const auto inner = _musicalPanel.reduced (panelPad, 0)
+                                            .withHeight (musicalCollapsedH);
+
+            // Scale summary chip
+            const juce::String scaleSummary = scaleLabel.getText();
+            const juce::Colour chipCol = _lightMode ? juce::Colour (0xffF3EEFF)
+                                                    : juce::Colour (0xff2a1f4a);
+            const juce::Colour chipBorder = _lightMode ? juce::Colour (0xffCCBFFF)
+                                                       : juce::Colour (0xff5a4a9a);
+            const juce::Colour chipText = _lightMode ? juce::Colour (0xff5e40bf)
+                                                     : juce::Colour (0xffA78BFA);
+
+            float x = static_cast<float> (inner.getX() + 8);
+            const float y = static_cast<float> (inner.getCentreY() - 11);
+            const float chipH = 22.0f;
+
+            // Scale chip
+            {
+                const float chipW = juce::jmin (110.0f, static_cast<float> (scaleSummary.length() * 9 + 20));
+                const juce::Rectangle<float> chip (x, y, chipW, chipH);
+                g.setColour (chipCol);
+                g.fillRoundedRectangle (chip, 11.0f);
+                g.setColour (chipBorder);
+                g.drawRoundedRectangle (chip.reduced (0.5f), 11.0f, 1.0f);
+                g.setColour (chipText);
+                g.setFont (DrawnCurveLookAndFeel::makeFont (12.0f));
+                g.drawText (scaleSummary, chip.toNearestInt(),
+                            juce::Justification::centred, false);
+                x += chipW + 8.0f;
+            }
+
+            // Range chip
+            {
+                const juce::String rangeSummary = rangeLabel.getText();
+                if (rangeSummary.isNotEmpty())
+                {
+                    const float chipW = juce::jmin (100.0f, static_cast<float> (rangeSummary.length() * 8 + 20));
+                    const juce::Rectangle<float> chip (x, y, chipW, chipH);
+                    g.setColour (panelFill);
+                    g.fillRoundedRectangle (chip, 11.0f);
+                    g.setColour (panelBorder);
+                    g.drawRoundedRectangle (chip.reduced (0.5f), 11.0f, 1.0f);
+                    g.setColour (eyebrowCol);
+                    g.setFont (DrawnCurveLookAndFeel::makeFont (12.0f));
+                    g.drawText (rangeSummary, chip.toNearestInt(),
+                                juce::Justification::centred, false);
+                }
+            }
+        }
+    }
+
 }
 
 //==============================================================================
@@ -2309,242 +2464,271 @@ void DrawnCurveEditor::resized()
 
     auto area = getLocalBounds().reduced (pad);
 
-    // ── Utility bar ───────────────────────────────────────────────────────────
+    // ── Utility / global bar ──────────────────────────────────────────────────
+    // Full-width bar: left = global controls (sync, lane-sync, speed);
+    //                 right = utility buttons (clear, panic, theme, help)
     {
         auto row = area.removeFromTop (utilityRowH);
-        themeButton.setBounds (row.removeFromRight (28));   // single glyph ☾/☀
-        row.removeFromRight (pad);
-        helpButton .setBounds (row.removeFromRight (28));
-        row.removeFromRight (pad);
-        panicButton.setBounds (row.removeFromRight (22));
+
+        // Right side: utility buttons
+        themeButton     .setBounds (row.removeFromRight (32).withSizeKeepingCentre (32, 28));
+        row.removeFromRight (4);
+        helpButton      .setBounds (row.removeFromRight (28).withSizeKeepingCentre (28, 28));
+        row.removeFromRight (4);
+        panicButton     .setBounds (row.removeFromRight (28).withSizeKeepingCentre (28, 28));
+        row.removeFromRight (4);
+        clearButton     .setBounds (row.removeFromRight (44).withSizeKeepingCentre (44, 28));
+        row.removeFromRight (6);
+        // ♯/♭ notation toggle — shown to the right of the speed controls
+        scaleNotationBtn.setBounds (row.removeFromRight (28).withSizeKeepingCentre (28, 28));
+        row.removeFromRight (6);   // visual separator gap
+
+        // Left side: sync toggle + lane-sync toggle + speed label + speed slider
+        syncButton .setBounds (row.removeFromLeft (38).withSizeKeepingCentre (38, 28));
+        row.removeFromLeft (4);
+        laneSyncBtn.setBounds (row.removeFromLeft (38).withSizeKeepingCentre (38, 28));
+        row.removeFromLeft (8);
+        speedLabel .setBounds (row.removeFromLeft (36).withSizeKeepingCentre (36, 14));
+        speedSlider.setBounds (row.removeFromLeft (180));
     }
     area.removeFromTop (pad);
 
-    // ── Two-column split ──────────────────────────────────────────────────────
-    auto rightCol = area.removeFromRight (rightColW);
-    area.removeFromRight (colGap);
-    auto leftCol  = area;
-
-    // ══════════════════════════════════════════════════════════════════════════
-    // RIGHT COLUMN
-    // ══════════════════════════════════════════════════════════════════════════
-
-    // ── Transport section removed; sync button is now in the shaping row ─────
-    _secTransport = rightCol.removeFromTop (transportH);  // zero-size
-    rightCol.removeFromTop (pad);
-
-    // ── Shaping section (amber) ───────────────────────────────────────────────
-    _secShaping = rightCol.removeFromTop (shapingH);
-    {
-        auto ss = _secShaping.reduced (4);
-
-        // Lane focus selector + one-shot toggle (inline in same row).
-        // One-shot is per-lane; laneSyncBtn lives in the All Lanes tab (below).
-        {
-            auto focusRow = ss.removeFromTop (28);
-            oneShotBtn.setBounds (focusRow.removeFromRight (28));
-            focusRow.removeFromRight (4);
-            laneFocusCtrl.setBounds (focusRow);
-        }
-        ss.removeFromTop (4);
-
-        // Direction + Sync + Speed row — global controls always visible.
-        {
-            auto row = ss.removeFromTop (paramRowH);
-            // Sync button on the right.
-            syncButton.setBounds (row.removeFromRight (44).withSizeKeepingCentre (44, 32));
-            row.removeFromRight (4);
-            // Direction segmented control on the left.
-            dirControl.setBounds (row.removeFromLeft (90));
-            row.removeFromLeft (4);
-            // Speed: label on top, slider below in remaining space.
-            speedLabel .setBounds (row.removeFromTop (paramLabelH));
-            speedSlider.setBounds (row);
-        }
-        ss.removeFromTop (4);
-
-        // Smooth — per-lane, visible in lane tabs.
-        // laneSyncBtn is given the SAME bounds so it occupies this slot in the All Lanes tab.
-        {
-            auto row = ss.removeFromTop (paramRowH);
-            laneSyncBtn.setBounds (row);                    // All Lanes tab occupant
-            smoothingLabel .setBounds (row.removeFromTop (paramLabelH));
-            smoothingSlider.setBounds (row);
-        }
-        ss.removeFromTop (4);
-
-        // Range
-        {
-            auto row = ss.removeFromTop (paramRowH);
-            rangeLabel .setBounds (row.removeFromTop (paramLabelH));
-            rangeSlider.setBounds (row);
-        }
-        ss.removeFromTop (4);
-
-        // Phase offset
-        {
-            auto row = ss.removeFromTop (paramRowH);
-            phaseOffsetLabel .setBounds (row.removeFromTop (paramLabelH));
-            phaseOffsetSlider.setBounds (row);
-        }
-    }
-    rightCol.removeFromTop (pad);
-
-    // ── Routing matrix section (green) ───────────────────────────────────────
-    _secRouting = rightCol.removeFromTop (routingMatH);
-    {
-        auto rs = _secRouting.reduced (4);
-        rs.removeFromTop (4);   // top margin inside panel
-
-        // Header row (label text painted; no JUCE component)
-        rs.removeFromTop (16);
-
-        // Three lane rows
-        for (int L = 0; L < kMaxLanes; ++L)
-        {
-            auto row = rs.removeFromTop (matRowH);
-            rs.removeFromTop (2);   // gap between rows
-
-            // Lane dot is drawn in paint() — skip its space
-            row.removeFromLeft (matDotW + matInnerGap);
-
-            // Target type
-            laneTypeBtn[static_cast<size_t>(L)].setBounds (row.removeFromLeft (matTargetW));
-            row.removeFromLeft (matInnerGap);
-
-            // Detail
-            laneDetailLabel[static_cast<size_t>(L)].setBounds (row.removeFromLeft (matDetailW));
-            row.removeFromLeft (matInnerGap);
-
-            // Channel
-            laneChannelLabel[static_cast<size_t>(L)].setBounds (row.removeFromLeft (matChanW));
-            row.removeFromLeft (matInnerGap);
-
-            // Teach
-            laneTeachBtn[static_cast<size_t>(L)].setBounds (row.removeFromLeft (matTeachW));
-            row.removeFromLeft (matInnerGap);
-
-            // Mute
-            laneMuteBtn[static_cast<size_t>(L)].setBounds (row.removeFromLeft (matMuteW));
-        }
-
-        rs.removeFromTop (4);
-        // Mapping detail panel
-        mappingDetailLabel.setBounds (rs.removeFromTop (28));
-    }
-
-    // ══════════════════════════════════════════════════════════════════════════
-    // LEFT COLUMN
-    // ══════════════════════════════════════════════════════════════════════════
-
-    // Reserve space for the note editor whenever ANY lane is in Note mode,
-    // not just the focused lane.  This prevents the canvas from expanding
-    // over a visible scale lattice when the user focuses a CC lane while
-    // another lane is in Note mode.
+    // ── Determine musical zone height ─────────────────────────────────────────
     bool anyNoteMode = false;
     for (int L = 0; L < kMaxLanes; ++L)
         anyNoteMode |= (static_cast<int> (
             proc.apvts.getRawParameterValue (laneParam (L, "msgType"))->load()) == 3);
-    const bool isNote = anyNoteMode;
 
-    // ── Note editor strip (pink, bottom of left col) ──────────────────────────
-    static constexpr int kNoteEditorH = 4 + kFamilyBarH + 4 + kSubfamilyRowH + 4
-                                          + kActionRowH + 4 + kScaleLatticeH + 2;  // = 244
+    // Always reserve at least musicalCollapsedH so the stage height stays stable
+    // regardless of whether a note lane is active.
+    const int musicalH = anyNoteMode
+        ? (_musicalExpanded ? musicalExpandedH : musicalCollapsedH)
+        : musicalCollapsedH;
 
-    if (isNote)
+    // ── Musical zone (bottom, full width) ─────────────────────────────────────
+    if (musicalH > 0)
     {
-        leftCol.removeFromBottom (pad);
-        _secNotes = leftCol.removeFromBottom (kNoteEditorH);
-        leftCol.removeFromBottom (pad);
-
-        auto ne = _secNotes;
-        ne.removeFromTop (4);
-
-        // ── Family tab bar (8 named families + 1 "Recent" tab = 9 total) ────────
-        {
-            auto fRow = ne.removeFromTop (kFamilyBarH);
-            const int N    = dcScale::kNumFamilies + 1;   // +1 for Recent
-            const int btnW = (fRow.getWidth() - (N - 1)) / N;
-            for (int f = 0; f < dcScale::kNumFamilies; ++f)
-            {
-                familyBtns[static_cast<size_t>(f)].setBounds (fRow.removeFromLeft (btnW));
-                fRow.removeFromLeft (1);
-            }
-            recentFamilyBtn.setBounds (fRow.removeFromLeft (btnW));
-        }
-        ne.removeFromTop (4);
-
-        // ── Subfamily chip row ────────────────────────────────────────────────
-        {
-            auto sRow = ne.removeFromTop (kSubfamilyRowH);
-            const int N = _numSubfamilyChips;
-            if (N > 0)
-            {
-                const int chipW = (sRow.getWidth() - (N - 1) * 2) / N;
-                for (int i = 0; i < kMaxModes; ++i)
-                {
-                    if (i < N)
-                    {
-                        subfamilyBtns[static_cast<size_t>(i)].setBounds (sRow.removeFromLeft (chipW));
-                        if (i < N - 1) sRow.removeFromLeft (2);
-                    }
-                    else
-                    {
-                        subfamilyBtns[static_cast<size_t>(i)].setBounds ({});
-                    }
-                }
-            }
-        }
-        ne.removeFromTop (4);
-
-        // ── Action row: ↻ ● ○ ◑ ◆  [spacer]  [mode-name] [decimal] ──────────
-        {
-            auto aRow = ne.removeFromTop (kActionRowH);
-            // Right side first (labels)
-            maskLabel .setBounds (aRow.removeFromRight (52).withSizeKeepingCentre (52, 20));
-            aRow.removeFromRight (3);
-            scaleLabel.setBounds (aRow.removeFromRight (84).withSizeKeepingCentre (84, 14));
-            aRow.removeFromRight (8);
-            // Left side (action buttons)
-            scaleNotationBtn.setBounds (aRow.removeFromLeft (28)); aRow.removeFromLeft (4);
-            scaleRotateBtn  .setBounds (aRow.removeFromLeft (28)); aRow.removeFromLeft (6);
-            scaleAllBtn     .setBounds (aRow.removeFromLeft (28)); aRow.removeFromLeft (2);
-            scaleNoneBtn    .setBounds (aRow.removeFromLeft (28)); aRow.removeFromLeft (2);
-            scaleInvBtn     .setBounds (aRow.removeFromLeft (28)); aRow.removeFromLeft (2);
-            scaleRootBtn    .setBounds (aRow.removeFromLeft (28));
-        }
-        ne.removeFromTop (4);
-
-        // ── Scale lattice: full width ─────────────────────────────────────────
-        scaleLattice.setBounds (ne.removeFromTop (kScaleLatticeH));
+        area.removeFromBottom (pad);
+        _musicalPanel = area.removeFromBottom (musicalH);
+        area.removeFromBottom (pad);
     }
     else
     {
-        _secNotes = {};
+        _musicalPanel = {};
     }
 
-    // ── Y-density stepper ─────────────────────────────────────────────────────
-    auto yStepCol = leftCol.removeFromLeft (yStepperW);
-    leftCol.removeFromLeft (3);
+    // ── Musical toggle button + zone detail ──────────────────────────────────
+    if (! _musicalPanel.isEmpty())
     {
-        const int btnH = 28, yMid = yStepCol.getCentreY();
-        tickYPlusBtn .setBounds (yStepCol.getX(), yMid - btnH - 2, yStepperW, btnH);
-        tickYMinusBtn.setBounds (yStepCol.getX(), yMid + 2,        yStepperW, btnH);
+        if (anyNoteMode)
+        {
+            // Collapsed strip: small triangle button at far right of the panel strip
+            const auto toggleRect = _musicalPanel
+                                        .withHeight (musicalCollapsedH)
+                                        .withTrimmedLeft (_musicalPanel.getWidth() - 32)
+                                        .reduced (4, 8);
+            musicalToggleBtn.setBounds (toggleRect);
+            musicalToggleBtn.setVisible (true);
+        }
+        else
+        {
+            // No note lanes — hide toggle, leave strip as quiet empty panel
+            musicalToggleBtn.setBounds ({});
+        }
+
+        if (anyNoteMode && _musicalExpanded)
+        {
+            auto ne = _musicalPanel;
+            ne.removeFromTop (musicalCollapsedH);   // skip the summary header strip
+            ne.removeFromTop (4);
+
+            // ── Family tab bar — toggle button shares this row ────────────────
+            {
+                auto fRow = ne.removeFromTop (kFamilyBarH);
+                // Reserve space for the collapse (▴) button at the right end
+                musicalToggleBtn.setBounds (fRow.removeFromRight (28));
+                fRow.removeFromRight (4);
+                const int N    = dcScale::kNumFamilies + 1;
+                const int btnW = (fRow.getWidth() - (N - 1)) / N;
+                for (int f = 0; f < dcScale::kNumFamilies; ++f)
+                {
+                    familyBtns[static_cast<size_t>(f)].setBounds (fRow.removeFromLeft (btnW));
+                    fRow.removeFromLeft (1);
+                }
+                recentFamilyBtn.setBounds (fRow.removeFromLeft (btnW));
+            }
+            ne.removeFromTop (4);
+
+            // ── Subfamily chip row ─────────────────────────────────────────────
+            {
+                auto sRow = ne.removeFromTop (kSubfamilyRowH);
+                const int N = _numSubfamilyChips;
+                if (N > 0)
+                {
+                    const int chipW = (sRow.getWidth() - (N - 1) * 2) / N;
+                    for (int i = 0; i < kMaxModes; ++i)
+                    {
+                        if (i < N)
+                        {
+                            subfamilyBtns[static_cast<size_t>(i)].setBounds (sRow.removeFromLeft (chipW));
+                            if (i < N - 1) sRow.removeFromLeft (2);
+                        }
+                        else { subfamilyBtns[static_cast<size_t>(i)].setBounds ({}); }
+                    }
+                }
+            }
+            ne.removeFromTop (4);
+
+            // ── Action row ────────────────────────────────────────────────────
+            {
+                auto aRow = ne.removeFromTop (kActionRowH);
+                maskLabel .setBounds (aRow.removeFromRight (52).withSizeKeepingCentre (52, 20));
+                aRow.removeFromRight (3);
+                scaleLabel.setBounds (aRow.removeFromRight (84).withSizeKeepingCentre (84, 14));
+                aRow.removeFromRight (8);
+                // scaleNotationBtn has moved to the utility bar (global section)
+                scaleRotateBtn.setBounds (aRow.removeFromLeft (28)); aRow.removeFromLeft (6);
+                scaleAllBtn   .setBounds (aRow.removeFromLeft (28)); aRow.removeFromLeft (2);
+                scaleNoneBtn  .setBounds (aRow.removeFromLeft (28)); aRow.removeFromLeft (2);
+                scaleInvBtn   .setBounds (aRow.removeFromLeft (28)); aRow.removeFromLeft (2);
+                scaleRootBtn  .setBounds (aRow.removeFromLeft (28));
+            }
+            ne.removeFromTop (4);
+
+            // ── Scale lattice: full width ──────────────────────────────────────
+            scaleLattice.setBounds (ne.removeFromTop (kScaleLatticeH));
+            _secNotes = _musicalPanel;
+        }
+        else
+        {
+            // Zone is collapsed (or no note lanes): explicitly clear component bounds
+            // so previously-expanded components don't paint over the stage canvas.
+            scaleLattice.setBounds ({});
+            for (auto& b : familyBtns)    b.setBounds ({});
+            recentFamilyBtn.setBounds ({});
+            for (auto& b : subfamilyBtns) b.setBounds ({});
+            scaleRotateBtn.setBounds ({});
+            scaleAllBtn   .setBounds ({});
+            scaleNoneBtn  .setBounds ({});
+            scaleInvBtn   .setBounds ({});
+            scaleRootBtn  .setBounds ({});
+            scaleLabel    .setBounds ({});
+            maskLabel     .setBounds ({});
+        }
     }
 
-    // ── X-density stepper + Clear ─────────────────────────────────────────────
-    leftCol.removeFromBottom (3);
+    // ── Two-column split (main area) ──────────────────────────────────────────
+    auto rightCol = area.removeFromRight (rightColW);
+    area.removeFromRight (colGap);
+    auto stageCol = area;
+
+    // ══════════════════════════════════════════════════════════════════════════
+    // RIGHT RAIL — single panel containing focused-lane controls + routing matrix
+    // Global controls (sync, lane sync, speed) live in the utility bar above.
+    // ══════════════════════════════════════════════════════════════════════════
+    _globalPanel = {};
+    _lanesPanel  = {};   // merged into focused lane panel — drawn there in paint()
+
+    // ── Single FOCUSED LANE panel (full right rail) ───────────────────────────
+    _focusedLanePanel = rightCol;
     {
-        auto row = leftCol.removeFromBottom (xStepperH);
-        tickXMinusBtn.setBounds (row.removeFromLeft (28));
-        row.removeFromLeft (4);
-        tickXPlusBtn .setBounds (row.removeFromLeft (28));
-        row.removeFromLeft (8);
-        clearButton.setBounds (row.removeFromLeft (52));
+        auto fp = _focusedLanePanel.reduced (panelPad);
+        fp.removeFromTop (8);    // top padding
+
+        // Lane focus selector (1 / 2 / 3)
+        {
+            auto focusRow = fp.removeFromTop (28);
+            laneFocusCtrl.setBounds (focusRow);
+        }
+        fp.removeFromTop (6);
+
+        // Direction segmented control (full width)
+        dirControl.setBounds (fp.removeFromTop (40));
+        fp.removeFromTop (6);
+
+#if defined(DC_HAVE_PER_LANE_PLAYBACK_PARAMS)
+        // Per-lane speed multiplier (before range)
+        laneSpeedLabel .setBounds (fp.removeFromTop (paramLabelH));
+        laneSpeedSlider.setBounds (fp.removeFromTop (paramSliderH));
+        fp.removeFromTop (4);
+#endif
+
+        // Range
+        rangeLabel .setBounds (fp.removeFromTop (paramLabelH));
+        rangeSlider.setBounds (fp.removeFromTop (paramSliderH + 4));
+        fp.removeFromTop (4);
+
+        // Smooth
+        smoothingLabel .setBounds (fp.removeFromTop (paramLabelH));
+        smoothingSlider.setBounds (fp.removeFromTop (paramSliderH));
+        fp.removeFromTop (4);
+
+        // Phase offset
+        phaseOffsetLabel .setBounds (fp.removeFromTop (paramLabelH));
+        phaseOffsetSlider.setBounds (fp.removeFromTop (paramSliderH));
+        fp.removeFromTop (8);
+
+        // ── Routing matrix (immediately below sliders) ─────────────────────
+        fp.removeFromTop (8);    // gap before matrix rows
+
+        // Matrix rows — record origin for paint() dot positions
+        _matrixRowOrigin = fp.getTopLeft();
+        _matrixRowStride = matRowH + 3;
+
+        for (int L = 0; L < kMaxLanes; ++L)
+        {
+            auto row = fp.removeFromTop (matRowH);
+            fp.removeFromTop (3);
+
+            // Dot column: reserve space (dot drawn in paint()) + invisible focus button
+            auto dotCol = row.removeFromLeft (matDotW + matInnerGap);
+            laneSelectBtn[static_cast<size_t> (L)].setBounds (
+                dotCol.removeFromLeft (matDotW).withSizeKeepingCentre (matDotW, matDotW));
+
+            laneTypeBtn[static_cast<size_t>(L)].setBounds (row.removeFromLeft (matTargetW));
+            row.removeFromLeft (matInnerGap);
+            laneDetailLabel[static_cast<size_t>(L)].setBounds (row.removeFromLeft (matDetailW));
+            row.removeFromLeft (matInnerGap);
+            laneChannelLabel[static_cast<size_t>(L)].setBounds (row.removeFromLeft (matChanW));
+            row.removeFromLeft (matInnerGap);
+            laneTeachBtn[static_cast<size_t>(L)].setBounds (row.removeFromLeft (matTeachW));
+            row.removeFromLeft (matInnerGap);
+            laneMuteBtn[static_cast<size_t>(L)].setBounds (row.removeFromLeft (matMuteW));
+        }
+        // mappingDetailLabel removed — info is already visible in the matrix rows above.
     }
 
-    // ── Curve display ─────────────────────────────────────────────────────────
-    curveDisplay.setBounds (leftCol);
+    // ══════════════════════════════════════════════════════════════════════════
+    // STAGE COLUMN
+    // ══════════════════════════════════════════════════════════════════════════
+
+    _stagePanel = stageCol;
+    {
+        auto sc = stageCol.reduced (6);   // inner padding
+
+        // laneFocusCtrl is placed in the FOCUSED LANE panel (right rail); no placement here.
+
+        // Y-density stepper (left edge of canvas)
+        auto yStepCol = sc.removeFromLeft (yStepperW);
+        sc.removeFromLeft (3);
+        {
+            const int btnH = 28, yMid = yStepCol.getCentreY();
+            tickYPlusBtn .setBounds (yStepCol.getX(), yMid - btnH - 2, yStepperW, btnH);
+            tickYMinusBtn.setBounds (yStepCol.getX(), yMid + 2,        yStepperW, btnH);
+        }
+
+        // X-density stepper (bottom edge of canvas)
+        sc.removeFromBottom (3);
+        {
+            auto row = sc.removeFromBottom (xStepperH);
+            tickXMinusBtn.setBounds (row.removeFromLeft (28));
+            row.removeFromLeft (4);
+            tickXPlusBtn .setBounds (row.removeFromLeft (28));
+        }
+
+        // Curve display fills remaining stage area
+        curveDisplay.setBounds (sc);
+    }
 
     // ── Help overlay ──────────────────────────────────────────────────────────
     helpOverlay.setBounds (getLocalBounds());
