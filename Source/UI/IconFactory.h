@@ -46,7 +46,6 @@ class IconFactory
 public:
     static juce::Path createIcon (IconType type, juce::Rectangle<float> bounds, const IconStyle& style = {})
     {
-        using Rect = juce::Rectangle<float>;
         auto b = bounds.reduced (bounds.getWidth() * 0.08f, bounds.getHeight() * 0.08f);
 
         switch (type)
@@ -186,7 +185,6 @@ private:
 
         juce::Path arc;
         auto r = size * 0.28f;
-        auto arcRect = juce::Rectangle<float> (r * 2.0f, r * 2.0f).withCentre (c);
         arc.addCentredArc (c.x, c.y, r, r, 0.0f, juce::MathConstants<float>::pi * 0.20f,
                            juce::MathConstants<float>::pi * 1.72f, true);
         p.addPath (arc);
@@ -198,6 +196,7 @@ private:
 
     static juce::Path makeLengthSync (juce::Rectangle<float> b, const IconStyle& s)
     {
+        juce::ignoreUnused (s);
         juce::Path p;
         auto size = std::min (b.getWidth(), b.getHeight());
         auto c = b.getCentre();
@@ -268,6 +267,7 @@ private:
 
     static juce::Path makeMute (juce::Rectangle<float> b, const IconStyle& s)
     {
+        juce::ignoreUnused (s);
         juce::Path p;
         auto size = std::min (b.getWidth(), b.getHeight());
         auto c = b.getCentre();
@@ -329,6 +329,7 @@ private:
 
     static juce::Path makeGridX (juce::Rectangle<float> b, const IconStyle& s)
     {
+        juce::ignoreUnused (s);
         juce::Path p;
         auto w = b.getWidth();
         auto h = b.getHeight();
@@ -351,6 +352,7 @@ private:
 
     static juce::Path makeGridY (juce::Rectangle<float> b, const IconStyle& s)
     {
+        juce::ignoreUnused (s);
         juce::Path p;
         auto w = b.getWidth();
         auto h = b.getHeight();

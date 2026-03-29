@@ -38,7 +38,7 @@ static std::atomic<uint64_t> gSnapshotReplacements      { 0 };
 static void dbgLogCountersIfNeeded()
 {
     static juce::int64 lastLogMs = 0;
-    const juce::int64 now = juce::Time::getMillisecondCounterHiRes();
+    const juce::int64 now = static_cast<juce::int64> (juce::Time::getMillisecondCounterHiRes());
 
     if (now - lastLogMs >= 5000)
     {
@@ -236,7 +236,9 @@ static inline PlaybackDirection laneEffectiveDirection (const juce::AudioProcess
 //==============================================================================
 // Internal helper for potential future per-lane scale support.
 // Currently, all lanes use the global scale config.
-static inline bool useGlobalScaleForLane(int /*lane*/) { return true; } // TODO: replace with per-lane parameter when introduced.
+#if 0 // TODO: replace with per-lane parameter when introduced.
+static inline bool useGlobalScaleForLane(int /*lane*/) { return true; }
+#endif
 
 ScaleConfig DrawnCurveProcessor::getScaleConfig (int /*lane*/) const noexcept
 {
@@ -963,7 +965,7 @@ void DrawnCurveProcessor::setStateInformation (const void* data, int sizeInBytes
 
     // Retrieve version for possible future migration logic.
     const int stateVersion = static_cast<int> (state.getProperty ("stateVersion", 1));
-    // Future upgrades can branch based on stateVersion to migrate old state formats.
+    juce::ignoreUnused (stateVersion); // Future upgrades can branch based on stateVersion to migrate old state formats.
 
     // Restore active lane count (clamped; 0 → 1 as safe minimum).
     activeLaneCount = juce::jlimit (1, kMaxLanes,

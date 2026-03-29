@@ -842,12 +842,16 @@ private:
     // ── Standalone MIDI output ─────────────────────────────────────────────────
     /// Button shown in the utility bar (standalone only); label = device name or "MIDI Out".
     juce::TextButton midiOutBtn { "MIDI Out" };
-    /// Virtual MIDI source port — always active in standalone so other apps see "DrawnCurve".
+    /// Virtual MIDI source port — created once on standalone launch, kept alive so other apps
+    /// retain their connection.  Muted/unmuted via _virtualPortMuted (stops sending, not destroyed).
     std::unique_ptr<juce::MidiOutput> _virtualMidiPort;
+    bool _virtualPortMuted { false };
     /// Optional direct-target device (user picks from popup; nullptr = virtual port only).
     std::unique_ptr<juce::MidiOutput> _standaloneOut;
     /// Show a PopupMenu of available MIDI output devices.
     void showMidiOutputPicker();
+    /// Update button label to reflect current virtual port + direct target state.
+    void updateMidiOutBtnText();
 
     // ── Private helpers ───────────────────────────────────────────────────────
     void setupSlider (juce::Slider& s, juce::Label& l,

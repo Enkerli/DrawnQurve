@@ -1272,10 +1272,10 @@ void CurveDisplay::paint (juce::Graphics& g)
                                           || proc.getLanePaused (_focusedLane));
     if (lanePausedForDisplay)
     {
-        const auto laneCol = (_lightMode ? kLaneColourLight : kLaneColourDark)[_focusedLane];
+        const auto pauseLaneCol = (_lightMode ? kLaneColourLight : kLaneColourDark)[_focusedLane];
 
         // Faint tint to darken the plot while paused
-        g.setColour (laneCol.withAlpha (0.08f));
+        g.setColour (pauseLaneCol.withAlpha (0.08f));
         g.fillRect (plot);
 
         // Blinking pause bars drawn as two filled rounded rectangles
@@ -1287,7 +1287,7 @@ void CurveDisplay::paint (juce::Graphics& g)
             const float barW =  7.0f;
             const float gap  =  5.0f;   // gap between the two bars
 
-            g.setColour (laneCol.withAlpha (0.55f));
+            g.setColour (pauseLaneCol.withAlpha (0.55f));
             g.fillRoundedRectangle (cx - gap * 0.5f - barW, cy - barH * 0.5f, barW, barH, 2.5f);
             g.fillRoundedRectangle (cx + gap * 0.5f,        cy - barH * 0.5f, barW, barH, 2.5f);
         }
@@ -1515,14 +1515,14 @@ DrawnCurveEditor::DrawnCurveEditor (DrawnCurveProcessor& p)
         if (sync)
         {
             const float beats = juce::jlimit (1.0f, 32.0f, v);
-            if (auto* p = proc.apvts.getParameter (ParamID::syncBeats))
-                p->setValueNotifyingHost (p->convertTo0to1 (beats));
+            if (auto* pSync = proc.apvts.getParameter (ParamID::syncBeats))
+                pSync->setValueNotifyingHost (pSync->convertTo0to1 (beats));
         }
         else
         {
             const float spd = juce::jlimit (0.25f, 4.0f, v);
-            if (auto* p = proc.apvts.getParameter (ParamID::playbackSpeed))
-                p->setValueNotifyingHost (p->convertTo0to1 (spd));
+            if (auto* pSpeed = proc.apvts.getParameter (ParamID::playbackSpeed))
+                pSpeed->setValueNotifyingHost (pSpeed->convertTo0to1 (spd));
         }
     };
 
@@ -1681,8 +1681,8 @@ DrawnCurveEditor::DrawnCurveEditor (DrawnCurveProcessor& p)
         const int n = juce::jlimit (2, 24, curveDisplay.getYDivisions() - 1);
         curveDisplay.setYDivisions (n);
         refreshTickLabels();
-        if (auto* p = proc.apvts.getParameter (laneParam (_focusedLane, ParamID::yDivisions)))
-            p->setValueNotifyingHost (p->convertTo0to1 (static_cast<float> (n)));
+        if (auto* param = proc.apvts.getParameter (laneParam (_focusedLane, ParamID::yDivisions)))
+            param->setValueNotifyingHost (param->convertTo0to1 (static_cast<float> (n)));
         proc.updateLaneSnapshot (_focusedLane);
     };
     tickYPlusBtn.onClick = [this]
@@ -1690,8 +1690,8 @@ DrawnCurveEditor::DrawnCurveEditor (DrawnCurveProcessor& p)
         const int n = juce::jlimit (2, 24, curveDisplay.getYDivisions() + 1);
         curveDisplay.setYDivisions (n);
         refreshTickLabels();
-        if (auto* p = proc.apvts.getParameter (laneParam (_focusedLane, ParamID::yDivisions)))
-            p->setValueNotifyingHost (p->convertTo0to1 (static_cast<float> (n)));
+        if (auto* param = proc.apvts.getParameter (laneParam (_focusedLane, ParamID::yDivisions)))
+            param->setValueNotifyingHost (param->convertTo0to1 (static_cast<float> (n)));
         proc.updateLaneSnapshot (_focusedLane);
     };
     tickXMinusBtn.onClick = [this]
@@ -1699,8 +1699,8 @@ DrawnCurveEditor::DrawnCurveEditor (DrawnCurveProcessor& p)
         const int n = juce::jlimit (2, 32, curveDisplay.getXDivisions() - 1);
         curveDisplay.setXDivisions (n);
         refreshTickLabels();
-        if (auto* p = proc.apvts.getParameter (laneParam (_focusedLane, ParamID::xDivisions)))
-            p->setValueNotifyingHost (p->convertTo0to1 (static_cast<float> (n)));
+        if (auto* param = proc.apvts.getParameter (laneParam (_focusedLane, ParamID::xDivisions)))
+            param->setValueNotifyingHost (param->convertTo0to1 (static_cast<float> (n)));
         proc.updateLaneSnapshot (_focusedLane);
     };
     tickXPlusBtn.onClick = [this]
@@ -1708,8 +1708,8 @@ DrawnCurveEditor::DrawnCurveEditor (DrawnCurveProcessor& p)
         const int n = juce::jlimit (2, 32, curveDisplay.getXDivisions() + 1);
         curveDisplay.setXDivisions (n);
         refreshTickLabels();
-        if (auto* p = proc.apvts.getParameter (laneParam (_focusedLane, ParamID::xDivisions)))
-            p->setValueNotifyingHost (p->convertTo0to1 (static_cast<float> (n)));
+        if (auto* param = proc.apvts.getParameter (laneParam (_focusedLane, ParamID::xDivisions)))
+            param->setValueNotifyingHost (param->convertTo0to1 (static_cast<float> (n)));
         proc.updateLaneSnapshot (_focusedLane);
     };
 
@@ -1744,20 +1744,20 @@ DrawnCurveEditor::DrawnCurveEditor (DrawnCurveProcessor& p)
         };
         for (int i = 0; i < kNumXStepPresets; ++i)
         {
-            xStepPresetBtns[i].setLookAndFeel (&_presetBtnLF);
-            xStepPresetBtns[i].setButtonText (juce::String::fromUTF8 (kLabels[i]));
+            xStepPresetBtns[static_cast<size_t>(i)].setLookAndFeel (&_presetBtnLF);
+            xStepPresetBtns[static_cast<size_t>(i)].setButtonText (juce::String::fromUTF8 (kLabels[i]));
             const float mult = kMults[i];
-            xStepPresetBtns[i].onClick = [this, mult]
+            xStepPresetBtns[static_cast<size_t>(i)].onClick = [this, mult]
             {
                 const float beats = proc.apvts.getRawParameterValue (ParamID::syncBeats)->load();
                 const int   divs  = juce::jlimit (2, 32, juce::roundToInt (beats * mult));
                 curveDisplay.setXDivisions (divs);
                 refreshTickLabels();
-                if (auto* p = proc.apvts.getParameter (laneParam (_focusedLane, ParamID::xDivisions)))
-                    p->setValueNotifyingHost (p->convertTo0to1 (static_cast<float> (divs)));
+                if (auto* param = proc.apvts.getParameter (laneParam (_focusedLane, ParamID::xDivisions)))
+                    param->setValueNotifyingHost (param->convertTo0to1 (static_cast<float> (divs)));
                 proc.updateLaneSnapshot (_focusedLane);
             };
-            addAndMakeVisible (xStepPresetBtns[i]);
+            addAndMakeVisible (xStepPresetBtns[static_cast<size_t>(i)]);
         }
     }
 
@@ -1767,17 +1767,17 @@ DrawnCurveEditor::DrawnCurveEditor (DrawnCurveProcessor& p)
         static constexpr int kDurs[kNumSyncBeatsPresets] = { 1, 3, 4, 8, 16, 32 };
         for (int i = 0; i < kNumSyncBeatsPresets; ++i)
         {
-            syncBeatsPresetBtns[i].setLookAndFeel (&_presetBtnLF);
-            syncBeatsPresetBtns[i].setButtonText (juce::String (kDurs[i]));
+            syncBeatsPresetBtns[static_cast<size_t>(i)].setLookAndFeel (&_presetBtnLF);
+            syncBeatsPresetBtns[static_cast<size_t>(i)].setButtonText (juce::String (kDurs[i]));
             const int dur = kDurs[i];
-            syncBeatsPresetBtns[i].onClick = [this, dur]
+            syncBeatsPresetBtns[static_cast<size_t>(i)].onClick = [this, dur]
             {
-                if (auto* p = proc.apvts.getParameter (ParamID::syncBeats))
-                    p->setValueNotifyingHost (p->convertTo0to1 (static_cast<float> (dur)));
+                if (auto* param = proc.apvts.getParameter (ParamID::syncBeats))
+                    param->setValueNotifyingHost (param->convertTo0to1 (static_cast<float> (dur)));
                 speedSlider.setValue (dur, juce::dontSendNotification);
                 refreshTickLabels();
             };
-            addAndMakeVisible (syncBeatsPresetBtns[i]);
+            addAndMakeVisible (syncBeatsPresetBtns[static_cast<size_t>(i)]);
         }
     }
 
@@ -1787,21 +1787,21 @@ DrawnCurveEditor::DrawnCurveEditor (DrawnCurveProcessor& p)
         static constexpr int kOcts[kNumYOctavePresets] = { 8, 4, 3, 2, 1 };
         for (int i = 0; i < kNumYOctavePresets; ++i)
         {
-            yOctavePresetBtns[i].setLookAndFeel (&_presetBtnLF);
-            yOctavePresetBtns[i].setButtonText (juce::String (kOcts[i]));
+            yOctavePresetBtns[static_cast<size_t>(i)].setLookAndFeel (&_presetBtnLF);
+            yOctavePresetBtns[static_cast<size_t>(i)].setButtonText (juce::String (kOcts[i]));
             const int oct = kOcts[i];
-            yOctavePresetBtns[i].onClick = [this, oct]
+            yOctavePresetBtns[static_cast<size_t>(i)].onClick = [this, oct]
             {
                 const float newMax = juce::jmin (1.0f, oct * 12.0f / 127.0f);
-                if (auto* p = proc.apvts.getParameter (laneParam (_focusedLane, ParamID::minOutput)))
-                    p->setValueNotifyingHost (0.0f);
-                if (auto* p = proc.apvts.getParameter (laneParam (_focusedLane, ParamID::maxOutput)))
-                    p->setValueNotifyingHost (newMax);
+                if (auto* pMin = proc.apvts.getParameter (laneParam (_focusedLane, ParamID::minOutput)))
+                    pMin->setValueNotifyingHost (0.0f);
+                if (auto* pMax = proc.apvts.getParameter (laneParam (_focusedLane, ParamID::maxOutput)))
+                    pMax->setValueNotifyingHost (newMax);
                 updateRangeSlider();
                 proc.updateLaneSnapshot (_focusedLane);
                 refreshTickLabels();
             };
-            addAndMakeVisible (yOctavePresetBtns[i]);
+            addAndMakeVisible (yOctavePresetBtns[static_cast<size_t>(i)]);
         }
     }
 
@@ -1810,21 +1810,21 @@ DrawnCurveEditor::DrawnCurveEditor (DrawnCurveProcessor& p)
         static constexpr int kNoteSteps[kNumYNoteStepPresets] = { 1, 2, 3, 4, 5 };
         for (int i = 0; i < kNumYNoteStepPresets; ++i)
         {
-            yNoteStepPresetBtns[i].setLookAndFeel (&_presetBtnLF);
-            yNoteStepPresetBtns[i].setButtonText (juce::String (kNoteSteps[i]));
+            yNoteStepPresetBtns[static_cast<size_t>(i)].setLookAndFeel (&_presetBtnLF);
+            yNoteStepPresetBtns[static_cast<size_t>(i)].setButtonText (juce::String (kNoteSteps[i]));
             const int step = kNoteSteps[i];
-            yNoteStepPresetBtns[i].onClick = [this, step]
+            yNoteStepPresetBtns[static_cast<size_t>(i)].onClick = [this, step]
             {
                 const float minOut = proc.apvts.getRawParameterValue (laneParam (_focusedLane, ParamID::minOutput))->load();
                 const float maxOut = proc.apvts.getRawParameterValue (laneParam (_focusedLane, ParamID::maxOutput))->load();
                 const int divs = juce::jlimit (2, 24, juce::roundToInt ((maxOut - minOut) * 127.0f / step));
                 curveDisplay.setYDivisions (divs);
-                if (auto* p = proc.apvts.getParameter (laneParam (_focusedLane, ParamID::yDivisions)))
-                    p->setValueNotifyingHost (p->convertTo0to1 (static_cast<float> (divs)));
+                if (auto* param = proc.apvts.getParameter (laneParam (_focusedLane, ParamID::yDivisions)))
+                    param->setValueNotifyingHost (param->convertTo0to1 (static_cast<float> (divs)));
                 proc.updateLaneSnapshot (_focusedLane);
                 refreshTickLabels();
             };
-            addAndMakeVisible (yNoteStepPresetBtns[i]);
+            addAndMakeVisible (yNoteStepPresetBtns[static_cast<size_t>(i)]);
         }
     }
 
@@ -1833,21 +1833,21 @@ DrawnCurveEditor::DrawnCurveEditor (DrawnCurveProcessor& p)
         static constexpr int kDozens[kNumYDozenPresets] = { 72, 60, 48, 36, 24, 12 };
         for (int i = 0; i < kNumYDozenPresets; ++i)
         {
-            yDozenPresetBtns[i].setLookAndFeel (&_presetBtnLF);
-            yDozenPresetBtns[i].setButtonText (juce::String (kDozens[i]));
+            yDozenPresetBtns[static_cast<size_t>(i)].setLookAndFeel (&_presetBtnLF);
+            yDozenPresetBtns[static_cast<size_t>(i)].setButtonText (juce::String (kDozens[i]));
             const int val = kDozens[i];
-            yDozenPresetBtns[i].onClick = [this, val]
+            yDozenPresetBtns[static_cast<size_t>(i)].onClick = [this, val]
             {
                 const float newMax = juce::jmin (1.0f, val / 127.0f);
-                if (auto* p = proc.apvts.getParameter (laneParam (_focusedLane, ParamID::minOutput)))
-                    p->setValueNotifyingHost (0.0f);
-                if (auto* p = proc.apvts.getParameter (laneParam (_focusedLane, ParamID::maxOutput)))
-                    p->setValueNotifyingHost (newMax);
+                if (auto* pMin = proc.apvts.getParameter (laneParam (_focusedLane, ParamID::minOutput)))
+                    pMin->setValueNotifyingHost (0.0f);
+                if (auto* pMax = proc.apvts.getParameter (laneParam (_focusedLane, ParamID::maxOutput)))
+                    pMax->setValueNotifyingHost (newMax);
                 updateRangeSlider();
                 proc.updateLaneSnapshot (_focusedLane);
                 refreshTickLabels();
             };
-            addAndMakeVisible (yDozenPresetBtns[i]);
+            addAndMakeVisible (yDozenPresetBtns[static_cast<size_t>(i)]);
         }
     }
 
@@ -1856,21 +1856,21 @@ DrawnCurveEditor::DrawnCurveEditor (DrawnCurveProcessor& p)
         static constexpr int kCCSteps[kNumYCCStepPresets] = { 1, 2, 3, 4, 6 };
         for (int i = 0; i < kNumYCCStepPresets; ++i)
         {
-            yCCStepPresetBtns[i].setLookAndFeel (&_presetBtnLF);
-            yCCStepPresetBtns[i].setButtonText (juce::String (kCCSteps[i]));
+            yCCStepPresetBtns[static_cast<size_t>(i)].setLookAndFeel (&_presetBtnLF);
+            yCCStepPresetBtns[static_cast<size_t>(i)].setButtonText (juce::String (kCCSteps[i]));
             const int step = kCCSteps[i];
-            yCCStepPresetBtns[i].onClick = [this, step]
+            yCCStepPresetBtns[static_cast<size_t>(i)].onClick = [this, step]
             {
                 const float minOut = proc.apvts.getRawParameterValue (laneParam (_focusedLane, ParamID::minOutput))->load();
                 const float maxOut = proc.apvts.getRawParameterValue (laneParam (_focusedLane, ParamID::maxOutput))->load();
                 const int divs = juce::jlimit (2, 24, juce::roundToInt ((maxOut - minOut) * 127.0f / step));
                 curveDisplay.setYDivisions (divs);
-                if (auto* p = proc.apvts.getParameter (laneParam (_focusedLane, ParamID::yDivisions)))
-                    p->setValueNotifyingHost (p->convertTo0to1 (static_cast<float> (divs)));
+                if (auto* param = proc.apvts.getParameter (laneParam (_focusedLane, ParamID::yDivisions)))
+                    param->setValueNotifyingHost (param->convertTo0to1 (static_cast<float> (divs)));
                 proc.updateLaneSnapshot (_focusedLane);
                 refreshTickLabels();
             };
-            addAndMakeVisible (yCCStepPresetBtns[i]);
+            addAndMakeVisible (yCCStepPresetBtns[static_cast<size_t>(i)]);
         }
     }
 
@@ -1882,23 +1882,23 @@ DrawnCurveEditor::DrawnCurveEditor (DrawnCurveProcessor& p)
         static constexpr const char* kPBLabels[kNumYPBRangePresets] = { "4k", "3k", "2k", "1k" };
         for (int i = 0; i < kNumYPBRangePresets; ++i)
         {
-            yPBRangePresetBtns[i].setLookAndFeel (&_presetBtnLF);
-            yPBRangePresetBtns[i].setButtonText (kPBLabels[i]);
+            yPBRangePresetBtns[static_cast<size_t>(i)].setLookAndFeel (&_presetBtnLF);
+            yPBRangePresetBtns[static_cast<size_t>(i)].setButtonText (kPBLabels[i]);
             const int k = kPBK[i];
-            yPBRangePresetBtns[i].onClick = [this, k]
+            yPBRangePresetBtns[static_cast<size_t>(i)].onClick = [this, k]
             {
                 const float halfSpan = k / 8.0f;               // k × 2048 / 16384
                 const float newMin = juce::jmax (0.0f, 0.5f - halfSpan);
                 const float newMax = juce::jmin (1.0f, 0.5f + halfSpan);
-                if (auto* p = proc.apvts.getParameter (laneParam (_focusedLane, ParamID::minOutput)))
-                    p->setValueNotifyingHost (newMin);
-                if (auto* p = proc.apvts.getParameter (laneParam (_focusedLane, ParamID::maxOutput)))
-                    p->setValueNotifyingHost (newMax);
+                if (auto* pMin = proc.apvts.getParameter (laneParam (_focusedLane, ParamID::minOutput)))
+                    pMin->setValueNotifyingHost (newMin);
+                if (auto* pMax = proc.apvts.getParameter (laneParam (_focusedLane, ParamID::maxOutput)))
+                    pMax->setValueNotifyingHost (newMax);
                 updateRangeSlider();
                 proc.updateLaneSnapshot (_focusedLane);
                 refreshTickLabels();
             };
-            addAndMakeVisible (yPBRangePresetBtns[i]);
+            addAndMakeVisible (yPBRangePresetBtns[static_cast<size_t>(i)]);
         }
     }
 
@@ -1907,21 +1907,21 @@ DrawnCurveEditor::DrawnCurveEditor (DrawnCurveProcessor& p)
         static constexpr int kPBSteps[kNumYPBStepPresets] = { 64, 128, 256, 512 };
         for (int i = 0; i < kNumYPBStepPresets; ++i)
         {
-            yPBStepPresetBtns[i].setLookAndFeel (&_presetBtnLF);
-            yPBStepPresetBtns[i].setButtonText (juce::String (kPBSteps[i]));
+            yPBStepPresetBtns[static_cast<size_t>(i)].setLookAndFeel (&_presetBtnLF);
+            yPBStepPresetBtns[static_cast<size_t>(i)].setButtonText (juce::String (kPBSteps[i]));
             const int step = kPBSteps[i];
-            yPBStepPresetBtns[i].onClick = [this, step]
+            yPBStepPresetBtns[static_cast<size_t>(i)].onClick = [this, step]
             {
                 const float minOut = proc.apvts.getRawParameterValue (laneParam (_focusedLane, ParamID::minOutput))->load();
                 const float maxOut = proc.apvts.getRawParameterValue (laneParam (_focusedLane, ParamID::maxOutput))->load();
                 const int divs = juce::jlimit (2, 24, juce::roundToInt ((maxOut - minOut) * 16384.0f / step));
                 curveDisplay.setYDivisions (divs);
-                if (auto* p = proc.apvts.getParameter (laneParam (_focusedLane, ParamID::yDivisions)))
-                    p->setValueNotifyingHost (p->convertTo0to1 (static_cast<float> (divs)));
+                if (auto* param = proc.apvts.getParameter (laneParam (_focusedLane, ParamID::yDivisions)))
+                    param->setValueNotifyingHost (param->convertTo0to1 (static_cast<float> (divs)));
                 proc.updateLaneSnapshot (_focusedLane);
                 refreshTickLabels();
             };
-            addAndMakeVisible (yPBStepPresetBtns[i]);
+            addAndMakeVisible (yPBStepPresetBtns[static_cast<size_t>(i)]);
         }
     }
 
@@ -1946,15 +1946,15 @@ DrawnCurveEditor::DrawnCurveEditor (DrawnCurveProcessor& p)
     xQuantizeBtn.onClick = [this]
     {
         const bool on = xQuantizeBtn.getToggleState();
-        if (auto* p = proc.apvts.getParameter (laneParam (_focusedLane, ParamID::xQuantize)))
-            p->setValueNotifyingHost (on ? 1.0f : 0.0f);
+        if (auto* param = proc.apvts.getParameter (laneParam (_focusedLane, ParamID::xQuantize)))
+            param->setValueNotifyingHost (on ? 1.0f : 0.0f);
         proc.updateLaneSnapshot (_focusedLane);
     };
     yQuantizeBtn.onClick = [this]
     {
         const bool on = yQuantizeBtn.getToggleState();
-        if (auto* p = proc.apvts.getParameter (laneParam (_focusedLane, ParamID::yQuantize)))
-            p->setValueNotifyingHost (on ? 1.0f : 0.0f);
+        if (auto* param = proc.apvts.getParameter (laneParam (_focusedLane, ParamID::yQuantize)))
+            param->setValueNotifyingHost (on ? 1.0f : 0.0f);
         proc.updateLaneSnapshot (_focusedLane);
     };
 
@@ -2036,8 +2036,8 @@ DrawnCurveEditor::DrawnCurveEditor (DrawnCurveProcessor& p)
     {
         juce::String t = smoothingLabel.getText().trim().trimCharactersAtEnd ("%");
         const float v = juce::jlimit (0.0f, 100.0f, t.getFloatValue());
-        if (auto* p = proc.apvts.getParameter (laneParam (_focusedLane, "smoothing")))
-            p->setValueNotifyingHost (p->convertTo0to1 (v / 100.0f));
+        if (auto* param = proc.apvts.getParameter (laneParam (_focusedLane, "smoothing")))
+            param->setValueNotifyingHost (param->convertTo0to1 (v / 100.0f));
     };
     rangeSlider.setTextBoxStyle (juce::Slider::NoTextBox, true, 0, 0);
     rangeSlider.setRange (0.0, 1.0, 0.001);
@@ -2686,58 +2686,108 @@ void DrawnCurveEditor::setupSlider (juce::Slider& s, juce::Label& l,
 
 void DrawnCurveEditor::showMidiOutputPicker()
 {
-    // The virtual port "DrawnCurve" is always active — other apps see it as a source.
-    // This picker lets the user add an *additional* direct target (e.g. a specific synth app).
     const auto devices = juce::MidiOutput::getAvailableDevices();
+    const bool virtualOn = (_virtualMidiPort != nullptr && !_virtualPortMuted);
 
     juce::PopupMenu menu;
 
-    // Header: virtual port status (not selectable)
-    menu.addSectionHeader ("Virtual port: DrawnCurve " +
-                           juce::String (_virtualMidiPort != nullptr ? "(active)" : "(failed)"));
+    // Virtual port toggle
+    menu.addItem (1, "Virtual port (DrawnCurve)", true, virtualOn);
     menu.addSeparator();
 
-    menu.addSectionHeader ("Also send to:");
-    menu.addItem (1, "None (virtual port only)", true, _standaloneOut == nullptr);
+    // Direct target section
+    menu.addSectionHeader ("Direct target:");
+    menu.addItem (2, "None", true, _standaloneOut == nullptr);
 
     for (int i = 0; i < devices.size(); ++i)
     {
         const bool isCurrent = (_standaloneOut != nullptr
                                 && _standaloneOut->getIdentifier() == devices[i].identifier);
-        menu.addItem (i + 2, devices[i].name, true, isCurrent);
+        menu.addItem (i + 3, devices[i].name, true, isCurrent);
     }
 
     menu.showMenuAsync (juce::PopupMenu::Options()
                             .withTargetComponent (&midiOutBtn),
-        [this, devices] (int result)
+        [this, devices, virtualOn] (int result)
         {
             if (result <= 0) return;   // dismissed
 
-            // "None" — virtual port only
+            // Toggle virtual port (mute/unmute — port stays alive so other apps keep their connection)
             if (result == 1)
             {
-                proc.setDirectMidiOutput (nullptr);
-                _standaloneOut.reset();
-                midiOutBtn.setButtonText ("MIDI Out");
+                if (virtualOn)
+                {
+                    // 1. Disconnect — stops the audio thread from sending new messages
+                    proc.setVirtualMidiOutput (nullptr);
+                    // 2. Brute-force Note Off for all 128 pitches on all 16 channels.
+                    //    This catches any note that slipped through during the race
+                    //    window.  CC 123/120 are also sent but many iOS synths ignore
+                    //    them, so explicit Note Offs are the reliable path.
+                    if (_virtualMidiPort != nullptr)
+                        for (int ch = 1; ch <= 16; ++ch)
+                        {
+                            _virtualMidiPort->sendMessageNow (
+                                juce::MidiMessage::controllerEvent (ch, 123, 0));
+                            _virtualMidiPort->sendMessageNow (
+                                juce::MidiMessage::controllerEvent (ch, 120, 0));
+                            for (int note = 0; note < 128; ++note)
+                                _virtualMidiPort->sendMessageNow (
+                                    juce::MidiMessage::noteOff (ch, note, (uint8_t) 0));
+                        }
+                    _virtualPortMuted = true;
+                }
+                else
+                {
+                    if (_virtualMidiPort != nullptr)
+                        proc.setVirtualMidiOutput (_virtualMidiPort.get());
+                    _virtualPortMuted = false;
+                }
+                updateMidiOutBtnText();
                 return;
             }
 
-            const int idx = result - 2;
+            // "None" direct target
+            if (result == 2)
+            {
+                proc.setDirectMidiOutput (nullptr);
+                _standaloneOut.reset();
+                updateMidiOutBtnText();
+                return;
+            }
+
+            const int idx = result - 3;
             if (idx < 0 || idx >= devices.size()) return;
 
             auto newOut = juce::MidiOutput::openDevice (devices[idx].identifier);
-            if (newOut == nullptr) return;   // failed to open
+            if (newOut == nullptr) return;
 
-            proc.setDirectMidiOutput (nullptr);      // disconnect old first
+            proc.setDirectMidiOutput (nullptr);
             _standaloneOut = std::move (newOut);
             proc.setDirectMidiOutput (_standaloneOut.get());
-
-            // Truncate long device names to fit the button
-            const auto name = devices[idx].name;
-            midiOutBtn.setButtonText (name.length() > 9
-                ? name.substring (0, 8) + juce::String::fromUTF8 ("\xe2\x80\xa6")
-                : name);
+            updateMidiOutBtnText();
         });
+}
+
+void DrawnCurveEditor::updateMidiOutBtnText()
+{
+    const bool virtualOn = (_virtualMidiPort != nullptr && !_virtualPortMuted);
+    const bool hasDirect = (_standaloneOut != nullptr);
+
+    if (hasDirect)
+    {
+        const auto name = _standaloneOut->getName();
+        midiOutBtn.setButtonText (name.length() > 9
+            ? name.substring (0, 8) + juce::String::fromUTF8 ("\xe2\x80\xa6")
+            : name);
+    }
+    else if (virtualOn)
+    {
+        midiOutBtn.setButtonText ("MIDI Out");
+    }
+    else
+    {
+        midiOutBtn.setButtonText ("MIDI Off");
+    }
 }
 
 bool DrawnCurveEditor::keyPressed (const juce::KeyPress& key)
@@ -3698,7 +3748,7 @@ void DrawnCurveEditor::refreshTickLabels()
         for (int i = 0; i < kNumXStepPresets; ++i)
         {
             const int divs = juce::roundToInt (beats * kStepMults[i]);
-            xStepPresetBtns[i].setEnabled (divs >= 2 && divs <= 32);
+            xStepPresetBtns[static_cast<size_t>(i)].setEnabled (divs >= 2 && divs <= 32);
         }
     }
 
@@ -3714,7 +3764,7 @@ void DrawnCurveEditor::refreshTickLabels()
         {
             static constexpr int kNoteSteps[kNumYNoteStepPresets] = { 1, 2, 3, 4, 5 };
             for (int i = 0; i < kNumYNoteStepPresets; ++i)
-                yNoteStepPresetBtns[i].setEnabled (span >= 0.5f &&
+                yNoteStepPresetBtns[static_cast<size_t>(i)].setEnabled (span >= 0.5f &&
                     juce::roundToInt (span / kNoteSteps[i]) >= 2 &&
                     juce::roundToInt (span / kNoteSteps[i]) <= 24);
         }
@@ -3722,7 +3772,7 @@ void DrawnCurveEditor::refreshTickLabels()
         {
             static constexpr int kCCSteps[kNumYCCStepPresets] = { 1, 2, 3, 4, 6 };
             for (int i = 0; i < kNumYCCStepPresets; ++i)
-                yCCStepPresetBtns[i].setEnabled (span >= 0.5f &&
+                yCCStepPresetBtns[static_cast<size_t>(i)].setEnabled (span >= 0.5f &&
                     juce::roundToInt (span / kCCSteps[i]) >= 2 &&
                     juce::roundToInt (span / kCCSteps[i]) <= 24);
         }
@@ -3733,7 +3783,7 @@ void DrawnCurveEditor::refreshTickLabels()
             for (int i = 0; i < kNumYPBStepPresets; ++i)
             {
                 const int divs = juce::roundToInt (pbSpan / kPBSteps[i]);
-                yPBStepPresetBtns[i].setEnabled (divs >= 2 && divs <= 24);
+                yPBStepPresetBtns[static_cast<size_t>(i)].setEnabled (divs >= 2 && divs <= 24);
             }
         }
     }
@@ -4221,14 +4271,14 @@ void DrawnCurveEditor::paint (juce::Graphics& g)
                 if (rangeSummary.isNotEmpty())
                 {
                     const float chipW = juce::jmin (100.0f, static_cast<float> (rangeSummary.length() * 8 + 20));
-                    const juce::Rectangle<float> chip (x, y, chipW, chipH);
+                    const juce::Rectangle<float> rangeChip (x, y, chipW, chipH);
                     g.setColour (panelFill);
-                    g.fillRoundedRectangle (chip, 11.0f);
+                    g.fillRoundedRectangle (rangeChip, 11.0f);
                     g.setColour (panelBorder);
-                    g.drawRoundedRectangle (chip.reduced (0.5f), 11.0f, 1.0f);
+                    g.drawRoundedRectangle (rangeChip.reduced (0.5f), 11.0f, 1.0f);
                     g.setColour (eyebrowCol);
                     g.setFont (DrawnCurveLookAndFeel::makeFont (12.0f));
-                    g.drawText (rangeSummary, chip.toNearestInt(),
+                    g.drawText (rangeSummary, rangeChip.toNearestInt(),
                                 juce::Justification::centred, false);
                 }
             }
@@ -4239,11 +4289,11 @@ void DrawnCurveEditor::paint (juce::Graphics& g)
     if (_scaleOverlayOpen && _scaleOverlay.isVisible() && ! _scaleOverlay.panelRect.isEmpty())
     {
         const auto& pRect = _scaleOverlay.panelRect;
-        const juce::Colour panelBg     = _lightMode ? juce::Colour (0xfffaf8f6) : juce::Colour (0xff1e1e2c);
-        const juce::Colour panelBorder = _lightMode ? juce::Colour (0x33000000) : juce::Colour (0x33ffffff);
-        g.setColour (panelBg);
+        const juce::Colour overlayBg     = _lightMode ? juce::Colour (0xfffaf8f6) : juce::Colour (0xff1e1e2c);
+        const juce::Colour overlayBorder = _lightMode ? juce::Colour (0x33000000) : juce::Colour (0x33ffffff);
+        g.setColour (overlayBg);
         g.fillRoundedRectangle (pRect.toFloat(), 12.0f);
-        g.setColour (panelBorder);
+        g.setColour (overlayBorder);
         g.drawRoundedRectangle (pRect.toFloat().reduced (0.5f), 12.0f, 1.0f);
     }
 
@@ -4811,7 +4861,7 @@ void DrawnCurveEditor::resized()
             {
                 for (int i = 0; i < n; ++i)
                 {
-                    arr[i].setBounds (xLeft, y, yStepperW, kPH);
+                    arr[static_cast<size_t>(i)].setBounds (xLeft, y, yStepperW, kPH);
                     y += kPH + kPG;
                 }
                 if (n > 0) y += kGG - kPG;   // replace last small gap with inter-group gap
