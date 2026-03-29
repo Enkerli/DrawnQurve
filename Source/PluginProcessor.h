@@ -1,6 +1,11 @@
 #pragma once
 
 #include <juce_audio_processors/juce_audio_processors.h>
+
+// Forward declaration — MidiOutput lives in juce_audio_devices which is not
+// directly included by PluginProcessor.h, but is available at link time via
+// juce_audio_utils.  A forward decl is sufficient for pointer members.
+namespace juce { class MidiOutput; }
 #include "Engine/GestureEngine.hpp"
 #include "Engine/GestureCaptureSession.hpp"
 
@@ -82,6 +87,15 @@ namespace ParamID
     inline const juce::String scaleRoot    { "scaleRoot"    };
     inline const juce::String scaleMask    { "scaleMask"    };
     inline const juce::String laneEnabled  { "enabled"      };
+
+    // Per-lane quantization — always via laneParam(lane, base).
+    inline const juce::String xQuantize   { "xQuantize"    };  ///< Snap playhead to X-grid tick boundaries (S&H in time)
+    inline const juce::String yQuantize   { "yQuantize"    };  ///< Snap output to nearest Y-grid tick level
+    inline const juce::String legatoMode  { "legatoMode"   };  ///< Note On before Note Off (legato tie; Note mode only)
+
+    // Per-lane grid density — always via laneParam(lane, base)
+    inline const juce::String xDivisions  { "xDivisions"   };  ///< Number of X-grid tick columns (2–32), per lane
+    inline const juce::String yDivisions  { "yDivisions"   };  ///< Number of Y-grid tick rows (2–24), per lane
 
 #if defined(DC_HAVE_PER_LANE_PLAYBACK_PARAMS)
     // Per-lane playback overrides — always via laneParam(lane, base).
@@ -226,10 +240,24 @@ public:
     /// Call from the UI thread (via button click) to re-synchronise drifted lanes.
     void restartAllLanes();
 
+    /// Remove lane 'lane', shifting all higher-numbered lanes down by one.
+    /// APVTS parameters and curve snapshots are shifted with the lanes.
+    /// No-op if activeLaneCount <= 1 or lane is out of range.
+    /// Call from the UI thread only.
+    void deleteLane (int lane);
+
     // ── MIDI Panic ────────────────────────────────────────────────────────────
     /// Schedule an All Notes Off + brute-force Note Off sweep on all channels.
     /// Safe to call from any thread; executes on the next processBlock.
     void sendPanic();
+
+    // ── Standalone MIDI output ─────────────────────────────────────────────────
+    /// Set the virtual MIDI source port (always-on; other apps see "DrawnCurve").
+    void setVirtualMidiOutput (juce::MidiOutput* output) noexcept;
+    /// Set an additional direct-target output (user-selected device).
+    void setDirectMidiOutput (juce::MidiOutput* output) noexcept;
+    /// Returns the currently configured direct output (may be nullptr).
+    juce::MidiOutput* getDirectMidiOutput() const noexcept;
 
 private:
     // ── Engine ────────────────────────────────────────────────────────────────
@@ -245,6 +273,11 @@ private:
 
     /// Set by sendPanic(); cleared after the panic sweep fires in processBlock.
     std::atomic<bool> _panicNeeded { false };
+
+    /// Virtual MIDI source port — always-on in standalone (not owned; set by the editor).
+    std::atomic<juce::MidiOutput*> _virtualMidiOut { nullptr };
+    /// Optional direct-target MIDI output (not owned; set by the editor).
+    std::atomic<juce::MidiOutput*> _directMidiOut { nullptr };
 
     // ── Fallback HiRes timer ──────────────────────────────────────────────────
     static constexpr int      kTimerIntervalMs      = 10;

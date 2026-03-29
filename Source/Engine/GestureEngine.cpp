@@ -121,6 +121,7 @@ void GestureEngine::resetLane (int lane)
     // Rewind playhead.  Do NOT touch _noteOffNeeded or lastSentValue
     // so any pending Note Off still fires correctly in processLane.
     _runtimes[static_cast<size_t>(lane)].playheadSeconds = 0.0;
+    _runtimes[static_cast<size_t>(lane)].lastXTick       = -1;   // reset X-quantize dedup
 
     // Pre-seed the smoother from the curve's value at the effective start phase
     // (phase 0 shifted by phaseOffset) so that playback begins at the correct
@@ -380,6 +381,18 @@ void GestureEngine::processLane (int lane, uint32_t frameCount, double sampleRat
             _currentPhase.store (phase, std::memory_order_relaxed);
     }
 
+    // ── X-axis quantization (sample-and-hold in time) ─────────────────────────
+    // Snap the playhead to the nearest tick-boundary so the curve is only
+    // re-sampled at evenly-spaced time divisions — effectively S&H in time.
+    // With N divisions and a 4-beat loop: N=8 → eighth-note quantization.
+    if (snap->xQuantize && snap->xDivisions >= 2)
+    {
+        const float tickWidth = 1.0f / static_cast<float> (snap->xDivisions);
+        const int   tickIndex = static_cast<int> (phase / tickWidth);
+        rt.lastXTick = tickIndex;
+        phase = static_cast<float> (tickIndex) * tickWidth;
+    }
+
     // Apply phase offset: shifts which part of the curve is sampled without
     // affecting the playhead display or loop boundary logic above.
     const float sampledPhase = std::fmod (phase + snap->phaseOffset + 1.0f, 1.0f);
@@ -391,6 +404,17 @@ void GestureEngine::processLane (int lane, uint32_t frameCount, double sampleRat
         : 1.0f - std::exp (- static_cast<float> (frameCount)
                            / (snap->smoothing * 2.0f * static_cast<float> (sampleRate)));
     rt.smoothedValue += alpha * (target - rt.smoothedValue);
+
+    // ── Y-axis quantization (discrete output levels) ──────────────────────────
+    // Snap the smoothed output to the nearest horizontal tick level.
+    // For CC/PB/AT this creates discrete parameter steps.
+    // For Note mode, Y-quantize is applied separately on the raw target below
+    // (bypassing the smoother, consistent with how note detection works).
+    if (snap->yQuantize && snap->yDivisions >= 2)
+    {
+        const float step = 1.0f / static_cast<float> (snap->yDivisions);
+        rt.smoothedValue = std::round (rt.smoothedValue / step) * step;
+    }
 
     // ── Output range mapping ──────────────────────────────────────────────────
     const float ranged = snap->minOut + rt.smoothedValue * (snap->maxOut - snap->minOut);
@@ -446,7 +470,20 @@ void GestureEngine::processLane (int lane, uint32_t frameCount, double sampleRat
 
             constexpr float kClearance = 0.35f;   // semitones past midpoint required to commit
 
-            const float rawNoteF  = (snap->minOut + target * (snap->maxOut - snap->minOut)) * 127.0f;
+            // When Y-quantize is active, snap the raw target to the nearest
+            // Y-tick level before computing the pitch.  This reduces pitch
+            // resolution to yDivisions levels within the output range —
+            // e.g. 4 ticks over a 2-octave range ≈ 6 semitones per step.
+            // The snapped value is used only for this note calculation; the
+            // smoother state (rt.smoothedValue) remains unaffected by this path.
+            float noteTarget = target;
+            if (snap->yQuantize && snap->yDivisions >= 2)
+            {
+                const float step = 1.0f / static_cast<float> (snap->yDivisions);
+                noteTarget = std::round (noteTarget / step) * step;
+            }
+
+            const float rawNoteF  = (snap->minOut + noteTarget * (snap->maxOut - snap->minOut)) * 127.0f;
             const int   committed = rt.lastSentValue;
             const ScaleConfig sc  = unpackScale (_scalesPacked[static_cast<size_t>(lane)].load (std::memory_order_acquire));
 
@@ -469,11 +506,25 @@ void GestureEngine::processLane (int lane, uint32_t frameCount, double sampleRat
 
             if (midiOut)
             {
-                if (committed >= 0)
-                    midiOut (0x80u | (snap->midiChannel & 0x0Fu),
-                             static_cast<uint8_t> (committed), 0u);
-                midiOut (0x90u | (snap->midiChannel & 0x0Fu),
-                         static_cast<uint8_t> (candidate), snap->noteVelocity);
+                if (snap->legatoMode)
+                {
+                    // Legato: send Note On BEFORE Note Off so the synth sees
+                    // overlapping notes and triggers its legato/glide path.
+                    midiOut (0x90u | (snap->midiChannel & 0x0Fu),
+                             static_cast<uint8_t> (candidate), snap->noteVelocity);
+                    if (committed >= 0)
+                        midiOut (0x80u | (snap->midiChannel & 0x0Fu),
+                                 static_cast<uint8_t> (committed), 0u);
+                }
+                else
+                {
+                    // Standard: Note Off first, then Note On (re-attack).
+                    if (committed >= 0)
+                        midiOut (0x80u | (snap->midiChannel & 0x0Fu),
+                                 static_cast<uint8_t> (committed), 0u);
+                    midiOut (0x90u | (snap->midiChannel & 0x0Fu),
+                             static_cast<uint8_t> (candidate), snap->noteVelocity);
+                }
             }
             rt.lastSentValue = candidate;
             break;

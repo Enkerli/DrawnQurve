@@ -61,4 +61,11 @@ struct LaneSnapshot
     float       phaseOffset     = 0.0f;        ///< Curve lookup offset [0, 1); shifts start position
     bool        oneShot         = false;       ///< true → play once then stop (don't loop)
     bool        valid           = false;       ///< false → engine treats snapshot as empty
+
+    // ── Grid quantization ──────────────────────────────────────────────────────
+    bool        xQuantize       = false;       ///< Snap playhead to X-grid tick boundaries (S&H in time)
+    bool        yQuantize       = false;       ///< Snap output value to nearest Y-grid tick level
+    bool        legatoMode      = false;       ///< Send Note On before Note Off for legato ties (Note mode)
+    uint8_t     xDivisions      = 4;           ///< Number of X-tick columns used for xQuantize (2–32)
+    uint8_t     yDivisions      = 4;           ///< Number of Y-tick rows used for yQuantize (2–24)
 };

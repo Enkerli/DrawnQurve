@@ -153,8 +153,8 @@ void HelpOverlay::paint (juce::Graphics& g)
         { "Direction",   "Forward, Reverse, or Ping-Pong playback. Tap the active segment to pause; tap again to resume. In SYNC mode, pause persists across host transport changes." },
         { "Clear",       "Erase ALL lane curves and stop playback." },
         { "!  (Panic)",  "Sends All Notes Off on every active channel. Use if notes get stuck." },
-        { "Target",      "CC / Channel Pressure / Pitch Bend / Note — set per lane in the routing matrix below the canvas." },
-        { "Teach",       "Tap Teach on a lane to solo its output. Other lanes mute so a synth can MIDI-Learn. On CC lanes, the next incoming CC message sets that lane's CC number." },
+        { "Target",      "Tap the type button (CC / AT / PB / \xe2\x99\xa9) in the eyebrow to open per-lane routing. Choose msg type, CC#, channel, velocity." },
+        { "Solo",        "Tap Solo on a lane to isolate its output. Other lanes mute so a synth can MIDI-Learn. On CC lanes, the next incoming CC message sets that lane\xe2\x80\x99s CC number." },
         { "Mute",        "Silence one lane without erasing its curve." },
         { "Scale",       "In Note mode: choose a scale preset and root note. Use the 12 circles (C to B, left to right) to build a custom scale. Only active pitch classes are played." },
         { "FREE / SYNC", "Toggle host-tempo sync. FREE = manual speed; SYNC = follows host BPM and transport; speed becomes loop length in Beats." },
@@ -197,6 +197,628 @@ void HelpOverlay::paint (juce::Graphics& g)
 void HelpOverlay::mouseDown (const juce::MouseEvent&) { setVisible (false); }
 
 //==============================================================================
+// RoutingOverlay
+//==============================================================================
+
+// ---------------------------------------------------------------------------
+// Helpers shared across show* functions.
+// ---------------------------------------------------------------------------
+static juce::String symForMsgType (int t)
+{
+    switch (t)
+    {
+        case 0: return "CC";
+        case 1: return "AT";
+        case 2: return "PB";
+        case 3: return juce::String::fromUTF8 ("\xe2\x99\xa9");  // ♩
+        default: return "?";
+    }
+}
+
+static juce::String detailForLane (DrawnCurveProcessor& proc, int lane)
+{
+    const int type   = static_cast<int> (proc.apvts.getRawParameterValue (laneParam (lane, "msgType"))->load());
+    const int ccNum  = juce::roundToInt (proc.apvts.getRawParameterValue (laneParam (lane, ParamID::ccNumber))->load());
+    const int vel    = juce::roundToInt (proc.apvts.getRawParameterValue (laneParam (lane, ParamID::noteVelocity))->load());
+    switch (type)
+    {
+        case 0: return "CC " + juce::String (ccNum);
+        case 3: return "Vel " + juce::String (vel);
+        default: return {};
+    }
+}
+
+// ---------------------------------------------------------------------------
+RoutingOverlay::RoutingOverlay (DrawnCurveEditor& owner)
+    : _owner (owner)
+{
+    setInterceptsMouseClicks (true, true);
+    setVisible (false);
+
+    // ── Button labels (all fromUTF8 / ASCII — no raw high bytes) ─────────────
+    ccBtn  .setButtonText ("CC");
+    atBtn  .setButtonText ("AT");
+    pbBtn  .setButtonText ("PB");
+    noteBtn.setButtonText (juce::String::fromUTF8 ("\xe2\x99\xa9"));  // ♩
+    teachBtn  .setButtonText ("Solo");
+    muteBtn   .setButtonText ("Mute");
+    oneShotBtn.setButtonText (juce::String::fromUTF8 ("\xe2\x86\xa6")); // ↦
+
+    // Single-lane panel components
+    for (auto* btn : { &ccBtn, &atBtn, &pbBtn, &noteBtn,
+                       &teachBtn, &muteBtn, &oneShotBtn, &legatoBtn })
+        addChildComponent (btn);   // hidden by default; shown in showSingleLaneMode()
+
+    detailLabel.setJustificationType (juce::Justification::centred);
+    channelLabel.setJustificationType (juce::Justification::centred);
+    phaseLabel.setText ("Phase", juce::dontSendNotification);
+    addChildComponent (detailLabel);
+    addChildComponent (channelLabel);
+    addChildComponent (phaseSlider);
+    addChildComponent (phaseLabel);
+
+    // Msg type buttons — set param then refresh
+    ccBtn  .onClick = [this] { cycleToMsgType (MessageType::CC);             };
+    atBtn  .onClick = [this] { cycleToMsgType (MessageType::ChannelPressure);};
+    pbBtn  .onClick = [this] { cycleToMsgType (MessageType::PitchBend);      };
+    noteBtn.onClick = [this] { cycleToMsgType (MessageType::Note);           };
+
+    teachBtn.setClickingTogglesState (true);
+    teachBtn.onClick = [this]
+    {
+        if (teachBtn.getToggleState())
+        {
+            _owner.proc.cancelTeach();
+            _owner.proc.beginTeach (_lane);   // isolates lane output (solo)
+        }
+        else
+        {
+            _owner.proc.cancelTeach();
+        }
+        applyTheme();
+    };
+
+    muteBtn.setClickingTogglesState (true);
+    muteBtn.onClick = [this] { _owner.proc.setLanePaused (_lane, muteBtn.getToggleState()); };
+
+    // ↦/↺ toggle: ON = one-shot mode, OFF = loop mode.
+    // Going to one-shot also restarts the playhead (trigger feel).
+    oneShotBtn.setButtonText (juce::String::fromUTF8 ("\xe2\x86\xa6"));  // ↦
+    oneShotBtn.setClickingTogglesState (true);
+    oneShotBtn.onClick = [this]
+    {
+        if (_lane < 0 || _lane >= kMaxLanes) return;
+        const bool oneShot = oneShotBtn.getToggleState();
+        if (auto* p = _owner.proc.apvts.getParameter (laneParam (_lane, ParamID::loopMode)))
+            p->setValueNotifyingHost (p->convertTo0to1 (oneShot ? 1.0f : 0.0f));
+        _owner.proc.updateLaneSnapshot (_lane);
+        if (oneShot) _owner.proc.restartAllLanes();   // trigger feel when entering one-shot
+    };
+
+    // Legato toggle: tie note-ons before note-offs for gliding synths (Note mode only).
+    legatoBtn.setButtonText (juce::String::fromUTF8 ("\xe2\x8c\xa3"));   // ⌣ (smile arc, U+2323)
+    legatoBtn.setClickingTogglesState (true);
+    legatoBtn.onClick = [this]
+    {
+        if (_lane < 0 || _lane >= kMaxLanes) return;
+        const bool on = legatoBtn.getToggleState();
+        if (auto* p = _owner.proc.apvts.getParameter (laneParam (_lane, ParamID::legatoMode)))
+            p->setValueNotifyingHost (on ? 1.0f : 0.0f);
+        _owner.proc.updateLaneSnapshot (_lane);
+    };
+
+    phaseSlider.setSliderStyle (juce::Slider::LinearHorizontal);
+    phaseSlider.setTextBoxStyle (juce::Slider::NoTextBox, true, 0, 0);
+
+    // ── Editable detail label (CC# / velocity) ────────────────────────────────
+    detailLabel.setEditable (true, true, false);
+    detailLabel.onTextChange = [this]
+    {
+        if (_lane < 0 || _lane >= kMaxLanes) return;
+        const int type = static_cast<int> (
+            _owner.proc.apvts.getRawParameterValue (laneParam (_lane, "msgType"))->load());
+        const int val = juce::jlimit (0, 127, detailLabel.getText().retainCharacters ("0123456789").getIntValue());
+        if (type == 3)   // Note — velocity
+        {
+            if (auto* p = dynamic_cast<juce::AudioParameterInt*> (
+                    _owner.proc.apvts.getParameter (laneParam (_lane, ParamID::noteVelocity))))
+                *p = juce::jlimit (1, 127, val);
+        }
+        else             // CC — cc number
+        {
+            if (auto* p = dynamic_cast<juce::AudioParameterInt*> (
+                    _owner.proc.apvts.getParameter (laneParam (_lane, ParamID::ccNumber))))
+                *p = val;
+        }
+        _owner.proc.updateLaneSnapshot (_lane);
+        _owner.updateLaneRow (_lane);
+        updateDetailLabels();
+    };
+
+    // ── Editable channel label ────────────────────────────────────────────────
+    channelLabel.setEditable (true, true, false);
+    channelLabel.onTextChange = [this]
+    {
+        if (_lane < 0 || _lane >= kMaxLanes) return;
+        const int val = juce::jlimit (1, 16,
+            channelLabel.getText().retainCharacters ("0123456789").getIntValue());
+        if (auto* p = dynamic_cast<juce::AudioParameterInt*> (
+                _owner.proc.apvts.getParameter (laneParam (_lane, ParamID::midiChannel))))
+            *p = val;   // param range is 1-16; snapshot baking subtracts 1 for 0-indexed MIDI
+        _owner.proc.updateLaneSnapshot (_lane);
+        _owner.updateLaneRow (_lane);
+        updateDetailLabels();
+    };
+
+    // ── All-lanes mini matrix components ─────────────────────────────────────
+    for (int L = 0; L < kMaxLanes; ++L)
+    {
+        rowTypeBtn [static_cast<size_t>(L)].setButtonText (symForMsgType (0));
+
+        rowDetailLbl[static_cast<size_t>(L)].setJustificationType (juce::Justification::centred);
+        rowDetailLbl[static_cast<size_t>(L)].setEditable (true, true, false);
+        rowDetailLbl[static_cast<size_t>(L)].onTextChange = [this, L]
+        {
+            if (L >= _owner.proc.activeLaneCount) return;
+            const int type = static_cast<int> (
+                _owner.proc.apvts.getRawParameterValue (laneParam (L, "msgType"))->load());
+            const int val = juce::jlimit (0, 127,
+                rowDetailLbl[static_cast<size_t>(L)].getText()
+                    .retainCharacters ("0123456789").getIntValue());
+            if (type == 3)
+            {
+                if (auto* p = dynamic_cast<juce::AudioParameterInt*> (
+                        _owner.proc.apvts.getParameter (laneParam (L, ParamID::noteVelocity))))
+                    *p = juce::jlimit (1, 127, val);
+            }
+            else
+            {
+                if (auto* p = dynamic_cast<juce::AudioParameterInt*> (
+                        _owner.proc.apvts.getParameter (laneParam (L, ParamID::ccNumber))))
+                    *p = val;
+            }
+            _owner.proc.updateLaneSnapshot (L);
+            _owner.updateLaneRow (L);
+            rowDetailLbl[static_cast<size_t>(L)].setText (
+                detailForLane (_owner.proc, L), juce::dontSendNotification);
+        };
+
+        rowChanLbl[static_cast<size_t>(L)].setJustificationType (juce::Justification::centred);
+        rowChanLbl[static_cast<size_t>(L)].setEditable (true, true, false);
+        rowChanLbl[static_cast<size_t>(L)].onTextChange = [this, L]
+        {
+            if (L >= _owner.proc.activeLaneCount) return;
+            const int val = juce::jlimit (1, 16,
+                rowChanLbl[static_cast<size_t>(L)].getText()
+                    .retainCharacters ("0123456789").getIntValue());
+            if (auto* p = dynamic_cast<juce::AudioParameterInt*> (
+                    _owner.proc.apvts.getParameter (laneParam (L, ParamID::midiChannel))))
+                *p = val;
+            _owner.proc.updateLaneSnapshot (L);
+            _owner.updateLaneRow (L);
+            rowChanLbl[static_cast<size_t>(L)].setText (
+                "Ch " + juce::String (val), juce::dontSendNotification);
+        };
+
+        addChildComponent (rowTypeBtn [static_cast<size_t>(L)]);
+        addChildComponent (rowDetailLbl[static_cast<size_t>(L)]);
+        addChildComponent (rowChanLbl  [static_cast<size_t>(L)]);
+
+        rowTypeBtn[static_cast<size_t>(L)].onClick = [this, L]
+        {
+            // Cycle msg type for this row's lane
+            static const int kNext[4] = { 2, 0, 3, 1 };
+            const int cur = static_cast<int> (
+                _owner.proc.apvts.getRawParameterValue (laneParam (L, "msgType"))->load());
+            const int next = kNext[std::clamp (cur, 0, 3)];
+            if (auto* p = dynamic_cast<juce::AudioParameterChoice*> (
+                              _owner.proc.apvts.getParameter (laneParam (L, "msgType"))))
+                *p = next;
+            _owner.proc.updateLaneSnapshot (L);
+            _owner.updateLaneRow (L);
+            _owner.updateScaleVisibility();
+            // Refresh button text and detail
+            rowTypeBtn[static_cast<size_t>(L)].setButtonText (symForMsgType (next));
+            rowDetailLbl[static_cast<size_t>(L)].setText (
+                detailForLane (_owner.proc, L), juce::dontSendNotification);
+        };
+    }
+}
+
+RoutingOverlay::~RoutingOverlay() = default;
+
+// ---------------------------------------------------------------------------
+void RoutingOverlay::showSingleLaneMode (bool visible)
+{
+    for (auto* c : { static_cast<juce::Component*> (&ccBtn),
+                     static_cast<juce::Component*> (&atBtn),
+                     static_cast<juce::Component*> (&pbBtn),
+                     static_cast<juce::Component*> (&noteBtn),
+                     static_cast<juce::Component*> (&teachBtn),
+                     static_cast<juce::Component*> (&muteBtn),
+                     static_cast<juce::Component*> (&oneShotBtn),
+                     static_cast<juce::Component*> (&legatoBtn),
+                     static_cast<juce::Component*> (&detailLabel),
+                     static_cast<juce::Component*> (&channelLabel),
+                     static_cast<juce::Component*> (&phaseSlider),
+                     static_cast<juce::Component*> (&phaseLabel) })
+        c->setVisible (visible);
+}
+
+void RoutingOverlay::showAllLanesMode (bool visible)
+{
+    for (int L = 0; L < kMaxLanes; ++L)
+    {
+        rowTypeBtn [static_cast<size_t>(L)].setVisible (visible && L < _owner.proc.activeLaneCount);
+        rowDetailLbl[static_cast<size_t>(L)].setVisible (visible && L < _owner.proc.activeLaneCount);
+        rowChanLbl  [static_cast<size_t>(L)].setVisible (visible && L < _owner.proc.activeLaneCount);
+    }
+}
+
+// ---------------------------------------------------------------------------
+static void positionPanel (int& px, int& py, int panelW, int panelH,
+                           juce::Rectangle<int> anchor, int editorW, int editorH)
+{
+    px = anchor.getX();
+    py = anchor.getBottom() + 4;
+    px = juce::jlimit (4, editorW - panelW - 4, px);
+    if (py + panelH > editorH - 4)
+        py = anchor.getY() - panelH - 4;
+}
+
+void RoutingOverlay::showForLane (int lane, juce::Rectangle<int> anchorInEditor)
+{
+    _lane = lane;
+    showAllLanesMode (false);
+    showSingleLaneMode (true);
+
+    // Phase attachment
+    _phaseAttach.reset();
+    _phaseAttach = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (
+        _owner.proc.apvts, laneParam (lane, ParamID::phaseOffset), phaseSlider);
+
+    muteBtn  .setToggleState (_owner.proc.getLanePaused  (lane), juce::dontSendNotification);
+    teachBtn .setToggleState (_owner.proc.isTeachPending (lane), juce::dontSendNotification);
+    // oneShotBtn and legatoBtn states synced inside applyTheme()
+
+    updateMsgTypeHighlight();
+    updateDetailLabels();
+    applyTheme();
+
+    constexpr int kPanelW = 244, kPanelH = 160;
+    int px, py;
+    positionPanel (px, py, kPanelW, kPanelH, anchorInEditor,
+                   _owner.getWidth(), _owner.getHeight());
+    _panelRect = { px, py, kPanelW, kPanelH };
+
+    setBounds (_owner.getLocalBounds());
+    resized();
+    setVisible (true);
+    toFront (false);
+}
+
+void RoutingOverlay::showForAllLanes (juce::Rectangle<int> anchorInEditor)
+{
+    _lane = -1;
+    showSingleLaneMode (false);
+    _phaseAttach.reset();
+
+    // Refresh row buttons for each active lane
+    for (int L = 0; L < _owner.proc.activeLaneCount; ++L)
+    {
+        const int type = static_cast<int> (
+            _owner.proc.apvts.getRawParameterValue (laneParam (L, "msgType"))->load());
+        const int chan = juce::roundToInt (
+            _owner.proc.apvts.getRawParameterValue (laneParam (L, ParamID::midiChannel))->load());
+        rowTypeBtn  [static_cast<size_t>(L)].setButtonText (symForMsgType (type));
+        rowDetailLbl[static_cast<size_t>(L)].setText (detailForLane (_owner.proc, L), juce::dontSendNotification);
+        rowChanLbl  [static_cast<size_t>(L)].setText ("Ch " + juce::String (chan), juce::dontSendNotification);
+    }
+    showAllLanesMode (true);
+    applyTheme();
+
+    // Panel height: title (24) + N rows × 30 + padding
+    const int kPanelW = 244;
+    const int kPanelH = 24 + _owner.proc.activeLaneCount * 30 + 16;
+    int px, py;
+    positionPanel (px, py, kPanelW, kPanelH, anchorInEditor,
+                   _owner.getWidth(), _owner.getHeight());
+    _panelRect = { px, py, kPanelW, kPanelH };
+
+    setBounds (_owner.getLocalBounds());
+    resized();
+    setVisible (true);
+    toFront (false);
+}
+
+void RoutingOverlay::dismiss()
+{
+    _phaseAttach.reset();
+    setVisible (false);
+}
+
+void RoutingOverlay::reanchor (juce::Rectangle<int> anchorInEditor)
+{
+    // Recalculate panel position without touching _phaseAttach or re-initialising
+    // any child components.  Safe to call from resized() whether in single or all-lanes mode.
+    if (! isVisible()) return;
+
+    int panelW, panelH;
+    if (_lane >= 0 && _lane < kMaxLanes)
+    {
+        panelW = 244;
+        panelH = 160;
+    }
+    else
+    {
+        panelW = 244;
+        panelH = 24 + _owner.proc.activeLaneCount * 30 + 16;
+    }
+
+    int px, py;
+    positionPanel (px, py, panelW, panelH, anchorInEditor,
+                   _owner.getWidth(), _owner.getHeight());
+    _panelRect = { px, py, panelW, panelH };
+
+    setBounds (_owner.getLocalBounds());
+    resized();
+}
+
+void RoutingOverlay::setLightMode (bool light)
+{
+    _lightMode = light;
+    applyTheme();
+}
+
+void RoutingOverlay::applyTheme()
+{
+    // No isVisible() guard — theme must be applied before setVisible(true) so the
+    // overlay doesn't flash black on first show.
+
+    const auto btnBg   = _lightMode ? juce::Colour (0xffe8e4de) : juce::Colour (0xff2a2a3a);
+    const auto btnText = _lightMode ? juce::Colour (0xff2a2620) : juce::Colour (0xffcacad6);
+    const auto laneCol = (_lane >= 0 && _lane < kMaxLanes)
+        ? (_lightMode ? kLaneColourLight[_lane] : kLaneColourDark[_lane])
+        : btnText;
+
+    // In dark mode the selected state needs a much stronger background so the active
+    // button is immediately legible; light mode can stay subtler.
+    const auto onBg  = _lightMode ? laneCol.withAlpha (0.22f) : laneCol.withAlpha (0.50f);
+    const auto onTxt = _lightMode ? laneCol : juce::Colours::white;
+
+    for (auto* btn : { &ccBtn, &atBtn, &pbBtn, &noteBtn,
+                       &teachBtn, &muteBtn, &oneShotBtn, &legatoBtn })
+    {
+        btn->setColour (juce::TextButton::buttonColourId,   btnBg);
+        btn->setColour (juce::TextButton::buttonOnColourId, onBg);
+        btn->setColour (juce::TextButton::textColourOffId,  btnText);
+        btn->setColour (juce::TextButton::textColourOnId,   onTxt);
+    }
+    phaseLabel.setColour (juce::Label::textColourId, btnText);
+
+    // Sync toggle states from APVTS so they reflect persisted values.
+    if (_lane >= 0 && _lane < kMaxLanes)
+    {
+        const bool oneShot = _owner.proc.apvts.getRawParameterValue (
+            laneParam (_lane, ParamID::loopMode))->load() > 0.5f;
+        const bool legato  = _owner.proc.apvts.getRawParameterValue (
+            laneParam (_lane, ParamID::legatoMode))->load() > 0.5f;
+        oneShotBtn.setToggleState (oneShot, juce::dontSendNotification);
+        legatoBtn .setToggleState (legato,  juce::dontSendNotification);
+    }
+
+    // ── Editable value labels — styled like small buttons so they look tappable ──
+    // Background + outline distinguishes them from plain read-only text.
+    // backgroundWhenEditingColourId + explicit text colour prevent the blank-while-editing bug.
+    const auto editBg     = _lightMode ? juce::Colour (0xfff0ede8) : juce::Colour (0xff32323e);
+    const auto editBorder = _lightMode ? juce::Colour (0xffb0aaa0) : juce::Colour (0xff55556a);
+    const auto editingBg  = _lightMode ? juce::Colours::white : juce::Colour (0xff1e1e2c);
+
+    for (auto* lbl : { &detailLabel, &channelLabel })
+    {
+        lbl->setColour (juce::Label::backgroundColourId,            editBg);
+        lbl->setColour (juce::Label::outlineColourId,               editBorder);
+        lbl->setColour (juce::Label::textColourId,                  btnText);
+        lbl->setColour (juce::Label::backgroundWhenEditingColourId, editingBg);
+        lbl->setColour (juce::Label::textWhenEditingColourId,       btnText);
+    }
+
+    // All-lanes rows
+    for (int L = 0; L < kMaxLanes; ++L)
+    {
+        const auto rc = (_lightMode ? kLaneColourLight : kLaneColourDark)[L];
+        rowTypeBtn[static_cast<size_t>(L)].setColour (juce::TextButton::buttonColourId,   rc.withAlpha (0.14f));
+        rowTypeBtn[static_cast<size_t>(L)].setColour (juce::TextButton::buttonOnColourId, rc.withAlpha (0.30f));
+        rowTypeBtn[static_cast<size_t>(L)].setColour (juce::TextButton::textColourOffId,  rc);
+
+        for (auto* lbl : { &rowDetailLbl[static_cast<size_t>(L)],
+                           &rowChanLbl  [static_cast<size_t>(L)] })
+        {
+            lbl->setColour (juce::Label::backgroundColourId,            editBg);
+            lbl->setColour (juce::Label::outlineColourId,               editBorder);
+            lbl->setColour (juce::Label::textColourId,                  btnText);
+            lbl->setColour (juce::Label::backgroundWhenEditingColourId, editingBg);
+            lbl->setColour (juce::Label::textWhenEditingColourId,       btnText);
+        }
+    }
+
+    repaint();
+}
+
+void RoutingOverlay::updateMsgTypeHighlight()
+{
+    if (_lane < 0 || _lane >= kMaxLanes) return;
+    const auto curType = static_cast<MessageType> (
+        static_cast<int> (_owner.proc.apvts.getRawParameterValue (
+            laneParam (_lane, ParamID::msgType))->load()));
+
+    ccBtn  .setToggleState (curType == MessageType::CC,             juce::dontSendNotification);
+    atBtn  .setToggleState (curType == MessageType::ChannelPressure,juce::dontSendNotification);
+    pbBtn  .setToggleState (curType == MessageType::PitchBend,      juce::dontSendNotification);
+    noteBtn.setToggleState (curType == MessageType::Note,           juce::dontSendNotification);
+}
+
+void RoutingOverlay::updateDetailLabels()
+{
+    if (_lane < 0 || _lane >= kMaxLanes) return;
+    const auto curType = static_cast<MessageType> (
+        static_cast<int> (_owner.proc.apvts.getRawParameterValue (
+            laneParam (_lane, ParamID::msgType))->load()));
+    const int ccNum = juce::roundToInt (_owner.proc.apvts.getRawParameterValue (
+                          laneParam (_lane, ParamID::ccNumber))->load());
+    const int vel   = juce::roundToInt (_owner.proc.apvts.getRawParameterValue (
+                          laneParam (_lane, ParamID::noteVelocity))->load());
+    const int chan  = juce::roundToInt (_owner.proc.apvts.getRawParameterValue (
+                          laneParam (_lane, ParamID::midiChannel))->load());
+
+    juce::String det;
+    switch (curType)
+    {
+        case MessageType::CC:             det = "CC " + juce::String (ccNum); break;
+        case MessageType::ChannelPressure:det = "AT";                          break;
+        case MessageType::PitchBend:      det = "PB";                          break;
+        case MessageType::Note:           det = "Vel " + juce::String (vel);  break;
+    }
+    detailLabel .setText (det,                         juce::dontSendNotification);
+    channelLabel.setText ("Ch " + juce::String (chan), juce::dontSendNotification);
+}
+
+void RoutingOverlay::cycleToMsgType (MessageType t)
+{
+    if (_lane < 0 || _lane >= kMaxLanes) return;
+    if (auto* p = _owner.proc.apvts.getParameter (laneParam (_lane, ParamID::msgType)))
+        p->setValueNotifyingHost (p->convertTo0to1 (static_cast<float> (static_cast<int> (t))));
+
+    _owner.proc.updateLaneSnapshot (_lane);
+    _owner.updateLaneRow (_lane);
+    _owner.updateScaleVisibility();
+    updateMsgTypeHighlight();
+    updateDetailLabels();
+    applyTheme();
+}
+
+void RoutingOverlay::paint (juce::Graphics& g)
+{
+    if (_panelRect.isEmpty()) return;
+
+    g.setColour (juce::Colour (0x40000000));
+    g.fillRect (getLocalBounds());
+
+    const auto panelBg = _lightMode ? juce::Colour (0xfffaf8f5) : juce::Colour (0xff1e1e2a);
+    const auto border  = _lightMode ? juce::Colour (0xffccc8c0) : juce::Colour (0xff3a3a4a);
+    g.setColour (panelBg);
+    g.fillRoundedRectangle (_panelRect.toFloat(), 10.0f);
+    g.setColour (border);
+    g.drawRoundedRectangle (_panelRect.toFloat().reduced (0.5f), 10.0f, 1.0f);
+
+    const auto titleCol = _lightMode ? juce::Colour (0xff2a2620) : juce::Colour (0xffcacad6);
+    g.setColour (titleCol);
+    g.setFont (DrawnCurveLookAndFeel::makeFont (12.0f));
+
+    if (_lane >= 0 && _lane < kMaxLanes)
+    {
+        // Single-lane: colour dot + "Lane N Routing"
+        const auto lc = _lightMode ? kLaneColourLight[_lane] : kLaneColourDark[_lane];
+        g.setColour (lc);
+        g.fillEllipse (_panelRect.getX() + 10.0f, _panelRect.getY() + 8.0f, 8.0f, 8.0f);
+        g.setColour (titleCol);
+        g.drawText ("Lane " + juce::String (_lane + 1) + " Routing",
+                    _panelRect.getX() + 24, _panelRect.getY() + 4,
+                    _panelRect.getWidth() - 30, 16,
+                    juce::Justification::left, false);
+    }
+    else
+    {
+        // All-lanes: colour dots per row (drawn over the row area)
+        g.drawText ("All Lanes",
+                    _panelRect.getX() + 12, _panelRect.getY() + 4,
+                    _panelRect.getWidth() - 20, 16,
+                    juce::Justification::left, false);
+
+        for (int L = 0; L < _owner.proc.activeLaneCount; ++L)
+        {
+            const auto lc = _lightMode ? kLaneColourLight[L] : kLaneColourDark[L];
+            const float dotY = static_cast<float> (_panelRect.getY() + 24 + L * 30 + 10);
+            g.setColour (lc);
+            g.fillEllipse (_panelRect.getX() + 8.0f, dotY, 8.0f, 8.0f);
+        }
+    }
+}
+
+void RoutingOverlay::resized()
+{
+    if (_panelRect.isEmpty()) return;
+
+    if (_lane >= 0 && _lane < kMaxLanes)
+    {
+        // ── Single-lane panel ─────────────────────────────────────────────────
+        auto p = _panelRect.reduced (10);
+        p.removeFromTop (18);   // title
+
+        {   // Msg type row
+            auto row = p.removeFromTop (28);
+            const int btnW = (row.getWidth() - 3 * 4) / 4;
+            ccBtn  .setBounds (row.removeFromLeft (btnW)); row.removeFromLeft (4);
+            atBtn  .setBounds (row.removeFromLeft (btnW)); row.removeFromLeft (4);
+            pbBtn  .setBounds (row.removeFromLeft (btnW)); row.removeFromLeft (4);
+            noteBtn.setBounds (row.removeFromLeft (btnW));
+        }
+        p.removeFromTop (4);
+
+        {   // Detail + channel
+            auto row = p.removeFromTop (18);
+            detailLabel .setBounds (row.removeFromLeft (row.getWidth() / 2));
+            channelLabel.setBounds (row);
+        }
+        p.removeFromTop (4);
+
+        {   // Teach / Mute / One-shot / Legato
+            auto row = p.removeFromTop (26);
+            const int btnW = (row.getWidth() - 3 * 4) / 4;
+            teachBtn  .setBounds (row.removeFromLeft (btnW)); row.removeFromLeft (4);
+            muteBtn   .setBounds (row.removeFromLeft (btnW)); row.removeFromLeft (4);
+            oneShotBtn.setBounds (row.removeFromLeft (btnW)); row.removeFromLeft (4);
+            legatoBtn .setBounds (row.removeFromLeft (btnW));
+        }
+        p.removeFromTop (4);
+
+        {   // Phase
+            auto row = p.removeFromTop (20);
+            phaseLabel .setBounds (row.removeFromLeft (44));
+            phaseSlider.setBounds (row);
+        }
+
+        showAllLanesMode (false);
+        showSingleLaneMode (true);
+    }
+    else
+    {
+        // ── All-lanes mini matrix ─────────────────────────────────────────────
+        showSingleLaneMode (false);
+        auto p = _panelRect.reduced (10);
+        p.removeFromTop (18);   // title
+
+        for (int L = 0; L < _owner.proc.activeLaneCount; ++L)
+        {
+            auto row = p.removeFromTop (26);
+            p.removeFromTop (4);
+
+            row.removeFromLeft (18);   // dot column
+            rowTypeBtn  [static_cast<size_t>(L)].setBounds (row.removeFromLeft (44)); row.removeFromLeft (6);
+            rowDetailLbl[static_cast<size_t>(L)].setBounds (row.removeFromLeft (70)); row.removeFromLeft (6);
+            rowChanLbl  [static_cast<size_t>(L)].setBounds (row);
+        }
+        showAllLanesMode (true);
+    }
+}
+
+void RoutingOverlay::mouseDown (const juce::MouseEvent& e)
+{
+    if (! _panelRect.contains (e.getPosition()))
+        dismiss();
+}
+
+//==============================================================================
 // CurveDisplay
 //==============================================================================
 
@@ -221,7 +843,14 @@ void CurveDisplay::paint (juce::Graphics& g)
 
     g.fillAll (T.background);
 
-    // ── Grid ─────────────────────────────────────────────────────────────────
+    // ── Quantize state for focused lane (read once, used by grid + staircase) ──
+    const bool xQuant = proc.apvts.getRawParameterValue (
+        laneParam (_focusedLane, "xQuantize"))->load() > 0.5f;
+    const bool yQuant = proc.apvts.getRawParameterValue (
+        laneParam (_focusedLane, "yQuantize"))->load() > 0.5f;
+    const auto laneCol = (_lightMode ? kLaneColourLight : kLaneColourDark)[_focusedLane];
+
+    // ── Grid — thin base lines (always) ──────────────────────────────────────
     g.setColour (T.gridLine);
     for (int i = 1; i < _xDivisions; ++i)
         g.drawVerticalLine (juce::roundToInt (plotX + plotW * (float)i / (float)_xDivisions),
@@ -229,6 +858,26 @@ void CurveDisplay::paint (juce::Graphics& g)
     for (int i = 1; i < _yDivisions; ++i)
         g.drawHorizontalLine (juce::roundToInt (plotY + plotH * (float)i / (float)_yDivisions),
                               plotX, plotX + plotW);
+
+    // ── Quantize visual emphasis — thicker, tinted lines over the base grid ──
+    if (xQuant)
+    {
+        g.setColour (laneCol.withAlpha (0.22f));
+        for (int i = 1; i < _xDivisions; ++i)
+        {
+            const float x = plotX + plotW * (float)i / (float)_xDivisions;
+            g.fillRect (x - 0.75f, plotY, 1.5f, plotH);
+        }
+    }
+    if (yQuant)
+    {
+        g.setColour (laneCol.withAlpha (0.22f));
+        for (int i = 1; i < _yDivisions; ++i)
+        {
+            const float y = plotY + plotH * (float)i / (float)_yDivisions;
+            g.fillRect (plotX, y - 0.75f, plotW, 1.5f);
+        }
+    }
 
     // ── Lane curves ──────────────────────────────────────────────────────────
     // Stroke types per lane: solid / dashed / dot-dash.
@@ -280,6 +929,111 @@ void CurveDisplay::paint (juce::Graphics& g)
                                             kDashLen[lane], kDashCount[lane]);
                 g.fillPath (dashed);
             }
+        }
+    }
+
+    // ── Quantized preview overlay ─────────────────────────────────────────────
+    // Shows a staircase preview for every lane that has X or Y quantize active.
+    // Non-focused lanes draw at reduced opacity so focus hierarchy is preserved.
+    // Stair lines are nearly as thick as the raw curve lines so they read clearly.
+    //
+    //  X-only  →  S&H staircase: value held constant per X-tick
+    //  Y-only  →  256-sample path, each Y snapped to nearest grid level
+    //  X + Y   →  Full staircase: X-tick hold + Y snap
+    //
+    // In Note mode, scale quantization is applied so the preview matches the engine.
+    for (int stairLane = 0; stairLane < kMaxLanes; ++stairLane)
+    {
+        if (! proc.hasCurve (stairLane)) continue;
+
+        const bool lxQuant = proc.apvts.getRawParameterValue (
+            laneParam (stairLane, "xQuantize"))->load() > 0.5f;
+        const bool lyQuant = proc.apvts.getRawParameterValue (
+            laneParam (stairLane, "yQuantize"))->load() > 0.5f;
+        if (! lxQuant && ! lyQuant) continue;
+
+        const int lxDiv = static_cast<int> (proc.apvts.getRawParameterValue (
+            laneParam (stairLane, ParamID::xDivisions))->load());
+        const int lyDiv = static_cast<int> (proc.apvts.getRawParameterValue (
+            laneParam (stairLane, ParamID::yDivisions))->load());
+        const float lYstep = 1.0f / static_cast<float> (juce::jlimit (2, 24, lyDiv));
+
+        const auto  table = proc.getCurveTable (stairLane);
+        const auto  stairMsgType = static_cast<MessageType> (static_cast<int> (
+            proc.apvts.getRawParameterValue (laneParam (stairLane, "msgType"))->load()));
+        const float stairMinOut  = proc.apvts.getRawParameterValue (laneParam (stairLane, "minOutput"))->load();
+        const float stairMaxOut  = proc.apvts.getRawParameterValue (laneParam (stairLane, "maxOutput"))->load();
+        const bool  stairIsNote  = (stairMsgType == MessageType::Note);
+        const ScaleConfig stairSc = stairIsNote ? proc.getScaleConfig (stairLane) : ScaleConfig{};
+
+        auto toVisualY = [&] (float val) -> float
+        {
+            if (stairIsNote)
+            {
+                const float rawNoteF = (stairMinOut + val * (stairMaxOut - stairMinOut)) * 127.0f;
+                const int   rawNote  = std::clamp (static_cast<int> (std::lround (rawNoteF)), 0, 127);
+                const int   snapped  = GestureEngine::quantizeNote (rawNote, stairSc, true);
+                const float snNorm   = (static_cast<float> (snapped) / 127.0f - stairMinOut)
+                                       / std::max (stairMaxOut - stairMinOut, 0.001f);
+                return plotY + (1.0f - juce::jlimit (0.0f, 1.0f, snNorm)) * plotH;
+            }
+            return plotY + (1.0f - val) * plotH;
+        };
+
+        juce::Path quantPath;
+        const int safeXDiv = juce::jlimit (2, 32, lxDiv);
+
+        if (lxQuant)
+        {
+            bool started = false;
+            for (int i = 0; i < safeXDiv; ++i)
+            {
+                const float x1 = plotX + static_cast<float> (i)     / static_cast<float> (safeXDiv) * plotW;
+                const float x2 = plotX + static_cast<float> (i + 1) / static_cast<float> (safeXDiv) * plotW;
+                const int   tidx = juce::jlimit (0, 255,
+                    juce::roundToInt (static_cast<float> (i) / static_cast<float> (safeXDiv) * 255.0f));
+                const float raw = table[static_cast<size_t> (tidx)];
+                const float val = lyQuant
+                    ? juce::jlimit (0.0f, 1.0f, std::round (raw / lYstep) * lYstep)
+                    : raw;
+                const float cy = toVisualY (val);
+                if (! started) { quantPath.startNewSubPath (x1, cy); started = true; }
+                else             quantPath.lineTo (x1, cy);
+                quantPath.lineTo (x2, cy);
+            }
+        }
+        else
+        {
+            for (int i = 0; i < 256; ++i)
+            {
+                const float cx  = plotX + static_cast<float> (i) / 255.0f * plotW;
+                const float raw = table[static_cast<size_t> (i)];
+                const float val = juce::jlimit (0.0f, 1.0f, std::round (raw / lYstep) * lYstep);
+                const float cy  = toVisualY (val);
+                if (i == 0) quantPath.startNewSubPath (cx, cy);
+                else        quantPath.lineTo (cx, cy);
+            }
+        }
+
+        const bool isFocused = (stairLane == _focusedLane);
+        const auto stairCol = (_lightMode ? kLaneColourLight : kLaneColourDark)[stairLane];
+        // Match curve rendering: same alpha, stroke weight, and dash pattern per lane.
+        const float stairAlpha  = isFocused ? 0.75f : 0.45f;
+        const float stairStroke = isFocused ? 2.5f  : 1.8f;
+        g.setColour (stairCol.withAlpha (stairAlpha));
+        if (kDashCount[stairLane] == 0)
+        {
+            g.strokePath (quantPath, juce::PathStrokeType (stairStroke,
+                juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+        }
+        else
+        {
+            juce::Path dashed;
+            juce::PathStrokeType stroke (stairStroke, juce::PathStrokeType::curved,
+                                          juce::PathStrokeType::butt);
+            stroke.createDashedStroke (dashed, quantPath,
+                                        kDashLen[stairLane], kDashCount[stairLane]);
+            g.fillPath (dashed);
         }
     }
 
@@ -395,13 +1149,19 @@ void CurveDisplay::paint (juce::Graphics& g)
                 for (size_t i = 0; i < visible.size(); ++i)
                 {
                     const float noteY  = visible[i].y;
-                    const float halfUp = (i == 0) ? (noteY - plotY) * 0.5f
-                                                  : (visible[i-1].y - noteY) * 0.5f;
-                    const float halfDn = (i+1 < visible.size()) ? (noteY - visible[i+1].y) * 0.5f
-                                                                 : (plotY + plotH - noteY) * 0.5f;
+                    // halfUp: distance from noteY UP to midpoint with the note above (smaller Y)
+                    // halfDn: distance from noteY DOWN to midpoint with the note below (larger Y)
+                    const float halfUp = (i == 0)
+                        ? (noteY - plotY) * 0.5f
+                        : (noteY - visible[i-1].y) * 0.5f;
+                    const float halfDn = (i+1 < visible.size())
+                        ? (visible[i+1].y - noteY) * 0.5f
+                        : (plotY + plotH - noteY) * 0.5f;
+                    const float bandH  = halfUp + halfDn;
+                    if (bandH < 0.5f) continue;   // guard against degenerate zero-height rects
                     g.setColour ((i & 1) ? T.gridLine.withAlpha (0.08f)
                                          : T.gridLine.withAlpha (0.18f));
-                    g.fillRect (plotX, noteY - halfUp, plotW, halfUp + halfDn);
+                    g.fillRect (plotX, noteY - halfUp, plotW, bandH);
                 }
             }
             g.setFont (juce::Font (juce::FontOptions{}.withHeight (9.5f)));
@@ -478,6 +1238,7 @@ void CurveDisplay::paint (juce::Graphics& g)
                         juce::roundToInt (plotX + plotW - 46), 2, 46, 12,
                         juce::Justification::centredRight, false);
         }
+
     }
 
     // ── Lane legend (bottom-left of plot) ────────────────────────────────────
@@ -539,6 +1300,9 @@ void CurveDisplay::paint (juce::Graphics& g)
         const bool isNoteBadge = (static_cast<int> (
             proc.apvts.getRawParameterValue (msgParamIDForBadge)->load()) == 3);
 
+        if (! isNoteBadge || ! proc.hasCurve (_focusedLane))
+            _badgeRect = {};
+
         if (isNoteBadge && proc.hasCurve (_focusedLane))
         {
             // Root name
@@ -570,6 +1334,7 @@ void CurveDisplay::paint (juce::Graphics& g)
                                              static_cast<float> (badgeText.length() * 8 + 20));
             // Position below the duration label (which sits at y≈2..14) to avoid overlap.
             const juce::Rectangle<float> badge (w - badgeW - 6.0f, 18.0f, badgeW, badgeH);
+            _badgeRect = badge.toNearestInt();
 
             const juce::Colour pillBg   = (_lightMode ? juce::Colour (0xd0ffffff) : juce::Colour (0xd0121220));
             const juce::Colour pillText = (_lightMode ? juce::Colour (0xff2d2b27) : juce::Colour (0xccffffff));
@@ -596,6 +1361,14 @@ static float normY (float rawY, float h) noexcept
 
 void CurveDisplay::mouseDown (const juce::MouseEvent& e)
 {
+    // If the tap lands within the scale badge and we're not already capturing, open scale overlay.
+    if (onBadgeTap && ! isCapturing && ! _badgeRect.isEmpty()
+        && _badgeRect.contains (e.getPosition()))
+    {
+        onBadgeTap();
+        return;   // don't start a draw gesture
+    }
+
     captureStartTime = juce::Time::getMillisecondCounterHiRes();
     isCapturing = true;
     capturePath.clear();
@@ -629,6 +1402,7 @@ void CurveDisplay::mouseUp (const juce::MouseEvent& e)
     isCapturing = false;
     capturePath.clear();
     repaint();
+    if (onCurveDrawn) onCurveDrawn();
 }
 
 void CurveDisplay::timerCallback()
@@ -648,7 +1422,8 @@ void CurveDisplay::timerCallback()
 DrawnCurveEditor::DrawnCurveEditor (DrawnCurveProcessor& p)
     : AudioProcessorEditor (&p),
       proc (p),
-      curveDisplay (p)
+      curveDisplay (p),
+      _routingOverlay (*this)
 {
     // Set _appLF as BOTH the component LookAndFeel and the global default.
     //
@@ -726,6 +1501,30 @@ DrawnCurveEditor::DrawnCurveEditor (DrawnCurveProcessor& p)
             *pSync = nowSyncing;
         onSyncToggled (nowSyncing);
     };
+    speedLabel.setEditable (true, true, false);
+    speedLabel.onTextChange = [this]
+    {
+        const bool sync = proc.apvts.getRawParameterValue (ParamID::syncEnabled)->load() > 0.5f;
+        // Strip suffix characters (×, ♩, x, spaces) to get bare number
+        juce::String t = speedLabel.getText().trim();
+        for (const juce::juce_wchar ch : { (juce::juce_wchar)0x00D7, (juce::juce_wchar)0x2669,
+                                           (juce::juce_wchar)'x',    (juce::juce_wchar)'X' })
+            t = t.trimCharactersAtEnd (juce::String::charToString (ch)).trim();
+        const float v = t.getFloatValue();
+        if (v <= 0.0f) return;
+        if (sync)
+        {
+            const float beats = juce::jlimit (1.0f, 32.0f, v);
+            if (auto* p = proc.apvts.getParameter (ParamID::syncBeats))
+                p->setValueNotifyingHost (p->convertTo0to1 (beats));
+        }
+        else
+        {
+            const float spd = juce::jlimit (0.25f, 4.0f, v);
+            if (auto* p = proc.apvts.getParameter (ParamID::playbackSpeed))
+                p->setValueNotifyingHost (p->convertTo0to1 (spd));
+        }
+    };
 
     addAndMakeVisible (helpButton);
     helpButton.onClick = [this]
@@ -735,9 +1534,22 @@ DrawnCurveEditor::DrawnCurveEditor (DrawnCurveProcessor& p)
         if (helpOverlay.isVisible()) helpOverlay.toFront (false);
     };
 
+    // ── Standalone MIDI output ─────────────────────────────────────────────────
+    // Create a virtual MIDI source port so other apps see "DrawnCurve" as a source.
+    // Also show a button to optionally target a specific device.
+    if (juce::JUCEApplicationBase::isStandaloneApp())
+    {
+        _virtualMidiPort = juce::MidiOutput::createNewDevice ("DrawnCurve");
+        if (_virtualMidiPort != nullptr)
+            proc.setVirtualMidiOutput (_virtualMidiPort.get());
+
+        addAndMakeVisible (midiOutBtn);
+        midiOutBtn.onClick = [this] { showMidiOutputPicker(); };
+    }
+
     // ── Global speed slider (utility bar — always bound to global speed param) ─
-    setupSlider (speedSlider, speedLabel, "FREE");
-    speedSlider.setTextBoxStyle (juce::Slider::TextBoxRight, false, 42, 18);
+    setupSlider (speedSlider, speedLabel, {});
+    speedSlider.setTextBoxStyle (juce::Slider::NoTextBox, true, 0, 0);
     speedSlider.setTextValueSuffix ("x");
     speedSlider.setNumDecimalPlacesToDisplay (2);
     // speedAttach is set by bindPlaybackToLane() called at end of constructor.
@@ -863,31 +1675,376 @@ DrawnCurveEditor::DrawnCurveEditor (DrawnCurveProcessor& p)
     addAndMakeVisible (tickYPlusBtn);
     addAndMakeVisible (tickXMinusBtn);
     addAndMakeVisible (tickXPlusBtn);
-    tickYMinusBtn.onClick = [this] { curveDisplay.setYDivisions (curveDisplay.getYDivisions() - 1); };
-    tickYPlusBtn .onClick = [this] { curveDisplay.setYDivisions (curveDisplay.getYDivisions() + 1); };
-    tickXMinusBtn.onClick = [this] { curveDisplay.setXDivisions (curveDisplay.getXDivisions() - 1); };
-    tickXPlusBtn .onClick = [this] { curveDisplay.setXDivisions (curveDisplay.getXDivisions() + 1); };
+    // Grid density — write to APVTS so the value persists across editor open/close.
+    tickYMinusBtn.onClick = [this]
+    {
+        const int n = juce::jlimit (2, 24, curveDisplay.getYDivisions() - 1);
+        curveDisplay.setYDivisions (n);
+        refreshTickLabels();
+        if (auto* p = proc.apvts.getParameter (laneParam (_focusedLane, ParamID::yDivisions)))
+            p->setValueNotifyingHost (p->convertTo0to1 (static_cast<float> (n)));
+        proc.updateLaneSnapshot (_focusedLane);
+    };
+    tickYPlusBtn.onClick = [this]
+    {
+        const int n = juce::jlimit (2, 24, curveDisplay.getYDivisions() + 1);
+        curveDisplay.setYDivisions (n);
+        refreshTickLabels();
+        if (auto* p = proc.apvts.getParameter (laneParam (_focusedLane, ParamID::yDivisions)))
+            p->setValueNotifyingHost (p->convertTo0to1 (static_cast<float> (n)));
+        proc.updateLaneSnapshot (_focusedLane);
+    };
+    tickXMinusBtn.onClick = [this]
+    {
+        const int n = juce::jlimit (2, 32, curveDisplay.getXDivisions() - 1);
+        curveDisplay.setXDivisions (n);
+        refreshTickLabels();
+        if (auto* p = proc.apvts.getParameter (laneParam (_focusedLane, ParamID::xDivisions)))
+            p->setValueNotifyingHost (p->convertTo0to1 (static_cast<float> (n)));
+        proc.updateLaneSnapshot (_focusedLane);
+    };
+    tickXPlusBtn.onClick = [this]
+    {
+        const int n = juce::jlimit (2, 32, curveDisplay.getXDivisions() + 1);
+        curveDisplay.setXDivisions (n);
+        refreshTickLabels();
+        if (auto* p = proc.apvts.getParameter (laneParam (_focusedLane, ParamID::xDivisions)))
+            p->setValueNotifyingHost (p->convertTo0to1 (static_cast<float> (n)));
+        proc.updateLaneSnapshot (_focusedLane);
+    };
+
+    // Tick count indicator labels — shown between the − / + stepper buttons.
+    for (auto* l : { &tickXCountLabel, &tickYCountLabel })
+    {
+        l->setFont (juce::Font (juce::FontOptions{}.withHeight (11.0f)));
+        l->setJustificationType (juce::Justification::centred);
+        addAndMakeVisible (*l);
+    }
+    // Step-size annotation labels — shown below (Y) and right-of-count (X).
+    yTickStepLabel.setFont (juce::Font (juce::FontOptions{}.withHeight (9.0f)));
+    yTickStepLabel.setJustificationType (juce::Justification::centred);
+    addAndMakeVisible (yTickStepLabel);
+    xTickStepLabel.setFont (juce::Font (juce::FontOptions{}.withHeight (9.0f)));
+    xTickStepLabel.setJustificationType (juce::Justification::centredLeft);
+    addAndMakeVisible (xTickStepLabel);
+
+    // ── Beat subdivision preset buttons (sync mode, X-axis row left side) ──────
+    // Ordered finest→coarsest (left→right): 16t, 16, 8t, 8, 4t, 4 (quarter), 2 (half)
+    // Each button sets xDivisions = round(syncBeats × multiplier).
+    {
+        static constexpr float kMults[kNumXStepPresets]       = { 6.f, 4.f, 3.f, 2.f, 1.5f, 1.f, 0.5f };
+        static constexpr const char* kLabels[kNumXStepPresets] = {
+            "\xe2\x99\xac\x33",  // ♬3  16th triplet
+            "\xe2\x99\xac",      // ♬   16th
+            "\xe2\x99\xaa\x33",  // ♪3  8th triplet
+            "\xe2\x99\xaa",      // ♪   8th
+            "\xe2\x99\xa9\x33",  // ♩3  quarter triplet
+            "\xe2\x99\xa9",      // ♩   quarter
+            "\xe2\x99\xa9\x32",  // ♩2  half
+        };
+        for (int i = 0; i < kNumXStepPresets; ++i)
+        {
+            xStepPresetBtns[i].setLookAndFeel (&_presetBtnLF);
+            xStepPresetBtns[i].setButtonText (juce::String::fromUTF8 (kLabels[i]));
+            const float mult = kMults[i];
+            xStepPresetBtns[i].onClick = [this, mult]
+            {
+                const float beats = proc.apvts.getRawParameterValue (ParamID::syncBeats)->load();
+                const int   divs  = juce::jlimit (2, 32, juce::roundToInt (beats * mult));
+                curveDisplay.setXDivisions (divs);
+                refreshTickLabels();
+                if (auto* p = proc.apvts.getParameter (laneParam (_focusedLane, ParamID::xDivisions)))
+                    p->setValueNotifyingHost (p->convertTo0to1 (static_cast<float> (divs)));
+                proc.updateLaneSnapshot (_focusedLane);
+            };
+            addAndMakeVisible (xStepPresetBtns[i]);
+        }
+    }
+
+    // ── Sync-beats duration preset buttons (sync mode, X-axis row right side) ──
+    // Values: 1, 3, 4, 8, 16, 32 beats.
+    {
+        static constexpr int kDurs[kNumSyncBeatsPresets] = { 1, 3, 4, 8, 16, 32 };
+        for (int i = 0; i < kNumSyncBeatsPresets; ++i)
+        {
+            syncBeatsPresetBtns[i].setLookAndFeel (&_presetBtnLF);
+            syncBeatsPresetBtns[i].setButtonText (juce::String (kDurs[i]));
+            const int dur = kDurs[i];
+            syncBeatsPresetBtns[i].onClick = [this, dur]
+            {
+                if (auto* p = proc.apvts.getParameter (ParamID::syncBeats))
+                    p->setValueNotifyingHost (p->convertTo0to1 (static_cast<float> (dur)));
+                speedSlider.setValue (dur, juce::dontSendNotification);
+                refreshTickLabels();
+            };
+            addAndMakeVisible (syncBeatsPresetBtns[i]);
+        }
+    }
+
+    // ── Y-axis preset buttons ─────────────────────────────────────────────────
+    // Note mode: octave range presets (set minOutput=0, maxOutput=N*12/127)
+    {
+        static constexpr int kOcts[kNumYOctavePresets] = { 8, 4, 3, 2, 1 };
+        for (int i = 0; i < kNumYOctavePresets; ++i)
+        {
+            yOctavePresetBtns[i].setLookAndFeel (&_presetBtnLF);
+            yOctavePresetBtns[i].setButtonText (juce::String (kOcts[i]));
+            const int oct = kOcts[i];
+            yOctavePresetBtns[i].onClick = [this, oct]
+            {
+                const float newMax = juce::jmin (1.0f, oct * 12.0f / 127.0f);
+                if (auto* p = proc.apvts.getParameter (laneParam (_focusedLane, ParamID::minOutput)))
+                    p->setValueNotifyingHost (0.0f);
+                if (auto* p = proc.apvts.getParameter (laneParam (_focusedLane, ParamID::maxOutput)))
+                    p->setValueNotifyingHost (newMax);
+                updateRangeSlider();
+                proc.updateLaneSnapshot (_focusedLane);
+                refreshTickLabels();
+            };
+            addAndMakeVisible (yOctavePresetBtns[i]);
+        }
+    }
+
+    // Note mode: semitone step presets (set yDivisions = round(span_semitones / N))
+    {
+        static constexpr int kNoteSteps[kNumYNoteStepPresets] = { 1, 2, 3, 4, 5 };
+        for (int i = 0; i < kNumYNoteStepPresets; ++i)
+        {
+            yNoteStepPresetBtns[i].setLookAndFeel (&_presetBtnLF);
+            yNoteStepPresetBtns[i].setButtonText (juce::String (kNoteSteps[i]));
+            const int step = kNoteSteps[i];
+            yNoteStepPresetBtns[i].onClick = [this, step]
+            {
+                const float minOut = proc.apvts.getRawParameterValue (laneParam (_focusedLane, ParamID::minOutput))->load();
+                const float maxOut = proc.apvts.getRawParameterValue (laneParam (_focusedLane, ParamID::maxOutput))->load();
+                const int divs = juce::jlimit (2, 24, juce::roundToInt ((maxOut - minOut) * 127.0f / step));
+                curveDisplay.setYDivisions (divs);
+                if (auto* p = proc.apvts.getParameter (laneParam (_focusedLane, ParamID::yDivisions)))
+                    p->setValueNotifyingHost (p->convertTo0to1 (static_cast<float> (divs)));
+                proc.updateLaneSnapshot (_focusedLane);
+                refreshTickLabels();
+            };
+            addAndMakeVisible (yNoteStepPresetBtns[i]);
+        }
+    }
+
+    // CC/Pressure mode: dozen range presets (set minOutput=0, maxOutput=N/127)
+    {
+        static constexpr int kDozens[kNumYDozenPresets] = { 72, 60, 48, 36, 24, 12 };
+        for (int i = 0; i < kNumYDozenPresets; ++i)
+        {
+            yDozenPresetBtns[i].setLookAndFeel (&_presetBtnLF);
+            yDozenPresetBtns[i].setButtonText (juce::String (kDozens[i]));
+            const int val = kDozens[i];
+            yDozenPresetBtns[i].onClick = [this, val]
+            {
+                const float newMax = juce::jmin (1.0f, val / 127.0f);
+                if (auto* p = proc.apvts.getParameter (laneParam (_focusedLane, ParamID::minOutput)))
+                    p->setValueNotifyingHost (0.0f);
+                if (auto* p = proc.apvts.getParameter (laneParam (_focusedLane, ParamID::maxOutput)))
+                    p->setValueNotifyingHost (newMax);
+                updateRangeSlider();
+                proc.updateLaneSnapshot (_focusedLane);
+                refreshTickLabels();
+            };
+            addAndMakeVisible (yDozenPresetBtns[i]);
+        }
+    }
+
+    // CC/Pressure mode: value step presets (set yDivisions = round(span_values / N))
+    {
+        static constexpr int kCCSteps[kNumYCCStepPresets] = { 1, 2, 3, 4, 6 };
+        for (int i = 0; i < kNumYCCStepPresets; ++i)
+        {
+            yCCStepPresetBtns[i].setLookAndFeel (&_presetBtnLF);
+            yCCStepPresetBtns[i].setButtonText (juce::String (kCCSteps[i]));
+            const int step = kCCSteps[i];
+            yCCStepPresetBtns[i].onClick = [this, step]
+            {
+                const float minOut = proc.apvts.getRawParameterValue (laneParam (_focusedLane, ParamID::minOutput))->load();
+                const float maxOut = proc.apvts.getRawParameterValue (laneParam (_focusedLane, ParamID::maxOutput))->load();
+                const int divs = juce::jlimit (2, 24, juce::roundToInt ((maxOut - minOut) * 127.0f / step));
+                curveDisplay.setYDivisions (divs);
+                if (auto* p = proc.apvts.getParameter (laneParam (_focusedLane, ParamID::yDivisions)))
+                    p->setValueNotifyingHost (p->convertTo0to1 (static_cast<float> (divs)));
+                proc.updateLaneSnapshot (_focusedLane);
+                refreshTickLabels();
+            };
+            addAndMakeVisible (yCCStepPresetBtns[i]);
+        }
+    }
+
+    // PitchBend mode: range presets centred at 0 (k = 2048, so 4k = ±8192 = full range)
+    // Labels "4k","3k","2k","1k" (large → small). No step presets for PB.
+    {
+        // N × 2048 = half-span in pitch-bend units; normalised: centre = 0.5, span = N/8
+        static constexpr int kPBK[kNumYPBRangePresets] = { 4, 3, 2, 1 };
+        static constexpr const char* kPBLabels[kNumYPBRangePresets] = { "4k", "3k", "2k", "1k" };
+        for (int i = 0; i < kNumYPBRangePresets; ++i)
+        {
+            yPBRangePresetBtns[i].setLookAndFeel (&_presetBtnLF);
+            yPBRangePresetBtns[i].setButtonText (kPBLabels[i]);
+            const int k = kPBK[i];
+            yPBRangePresetBtns[i].onClick = [this, k]
+            {
+                const float halfSpan = k / 8.0f;               // k × 2048 / 16384
+                const float newMin = juce::jmax (0.0f, 0.5f - halfSpan);
+                const float newMax = juce::jmin (1.0f, 0.5f + halfSpan);
+                if (auto* p = proc.apvts.getParameter (laneParam (_focusedLane, ParamID::minOutput)))
+                    p->setValueNotifyingHost (newMin);
+                if (auto* p = proc.apvts.getParameter (laneParam (_focusedLane, ParamID::maxOutput)))
+                    p->setValueNotifyingHost (newMax);
+                updateRangeSlider();
+                proc.updateLaneSnapshot (_focusedLane);
+                refreshTickLabels();
+            };
+            addAndMakeVisible (yPBRangePresetBtns[i]);
+        }
+    }
+
+    // PitchBend mode: step presets (yDivisions = round(span_pb / N))
+    {
+        static constexpr int kPBSteps[kNumYPBStepPresets] = { 64, 128, 256, 512 };
+        for (int i = 0; i < kNumYPBStepPresets; ++i)
+        {
+            yPBStepPresetBtns[i].setLookAndFeel (&_presetBtnLF);
+            yPBStepPresetBtns[i].setButtonText (juce::String (kPBSteps[i]));
+            const int step = kPBSteps[i];
+            yPBStepPresetBtns[i].onClick = [this, step]
+            {
+                const float minOut = proc.apvts.getRawParameterValue (laneParam (_focusedLane, ParamID::minOutput))->load();
+                const float maxOut = proc.apvts.getRawParameterValue (laneParam (_focusedLane, ParamID::maxOutput))->load();
+                const int divs = juce::jlimit (2, 24, juce::roundToInt ((maxOut - minOut) * 16384.0f / step));
+                curveDisplay.setYDivisions (divs);
+                if (auto* p = proc.apvts.getParameter (laneParam (_focusedLane, ParamID::yDivisions)))
+                    p->setValueNotifyingHost (p->convertTo0to1 (static_cast<float> (divs)));
+                proc.updateLaneSnapshot (_focusedLane);
+                refreshTickLabels();
+            };
+            addAndMakeVisible (yPBStepPresetBtns[i]);
+        }
+    }
+
+    // Seed display from lane 0's persisted APVTS values.
+    {
+        const int xDiv = static_cast<int> (proc.apvts.getRawParameterValue (laneParam (0, ParamID::xDivisions))->load());
+        const int yDiv = static_cast<int> (proc.apvts.getRawParameterValue (laneParam (0, ParamID::yDivisions))->load());
+        curveDisplay.setXDivisions (xDiv);
+        curveDisplay.setYDivisions (yDiv);
+        refreshTickLabels();
+    }
+
+    // ── Axis quantization toggle buttons (icon-based, no LF needed) ──────────
+    xQuantizeBtn.setClickingTogglesState (true);
+    yQuantizeBtn.setClickingTogglesState (true);
+    // Closed lock = quantize on; open lock = quantize off
+    xQuantizeBtn.setToggleIcons (dcui::IconType::lock, dcui::IconType::lockOpen);
+    yQuantizeBtn.setToggleIcons (dcui::IconType::lock, dcui::IconType::lockOpen);
+    addAndMakeVisible (xQuantizeBtn);
+    addAndMakeVisible (yQuantizeBtn);
+
+    xQuantizeBtn.onClick = [this]
+    {
+        const bool on = xQuantizeBtn.getToggleState();
+        if (auto* p = proc.apvts.getParameter (laneParam (_focusedLane, ParamID::xQuantize)))
+            p->setValueNotifyingHost (on ? 1.0f : 0.0f);
+        proc.updateLaneSnapshot (_focusedLane);
+    };
+    yQuantizeBtn.onClick = [this]
+    {
+        const bool on = yQuantizeBtn.getToggleState();
+        if (auto* p = proc.apvts.getParameter (laneParam (_focusedLane, ParamID::yQuantize)))
+            p->setValueNotifyingHost (on ? 1.0f : 0.0f);
+        proc.updateLaneSnapshot (_focusedLane);
+    };
+
+    // ── '#' combo: activates both X and Y quantize simultaneously ────────────
+    addAndMakeVisible (xyLockBtn);
+    xyLockBtn.onClick = [this]
+    {
+        const bool xOn = xQuantizeBtn.getToggleState();
+        const bool yOn = yQuantizeBtn.getToggleState();
+        // If both are already on, turn both off; otherwise turn both on.
+        const bool target = !(xOn && yOn);
+        xQuantizeBtn.setToggleState (target, juce::dontSendNotification);
+        yQuantizeBtn.setToggleState (target, juce::dontSendNotification);
+        if (auto* px = proc.apvts.getParameter (laneParam (_focusedLane, ParamID::xQuantize)))
+            px->setValueNotifyingHost (target ? 1.0f : 0.0f);
+        if (auto* py = proc.apvts.getParameter (laneParam (_focusedLane, ParamID::yQuantize)))
+            py->setValueNotifyingHost (target ? 1.0f : 0.0f);
+        proc.updateLaneSnapshot (_focusedLane);
+    };
+
+    // Seed quantize button toggle states from saved APVTS params (lane 0 at startup).
+    // setFocusedLane() syncs these when the lane changes, but must also be set here
+    // so a newly opened editor reflects the persisted values immediately.
+    xQuantizeBtn.setToggleState (
+        proc.apvts.getRawParameterValue (laneParam (0, ParamID::xQuantize))->load() > 0.5f,
+        juce::dontSendNotification);
+    yQuantizeBtn.setToggleState (
+        proc.apvts.getRawParameterValue (laneParam (0, ParamID::yQuantize))->load() > 0.5f,
+        juce::dontSendNotification);
 
     // ── Lane focus selector ───────────────────────────────────────────────────
-    updateLaneFocusCtrl();   // builds segments from proc.activeLaneCount
+    updateLaneFocusCtrl();   // builds ✤ + lane segments from proc.activeLaneCount
     laneFocusCtrl.onChange = [this] (int idx)
     {
-        setFocusedLane (idx);
+        if (idx == 0)
+        {
+            // "✤" All Lanes tab
+            _showingAllLanes = true;
+#if defined(DC_HAVE_PER_LANE_PLAYBACK_PARAMS)
+            bindPlaybackToLane (-1);
+#endif
+            updateScaleVisibility();
+            resized();   // re-show the routing button for lane 0
+            repaint();
+        }
+        else
+        {
+            setFocusedLane (idx - 1);
+        }
     };
     addAndMakeVisible (laneFocusCtrl);
 
-    // ── Add-lane button ───────────────────────────────────────────────────────
+    // ── Eyebrow lane management buttons ──────────────────────────────────────
+    eyebrowAddLaneBtn.setButtonText ("+");
+    eyebrowAddLaneBtn.onClick = [this] { addLane(); };
+    addAndMakeVisible (eyebrowAddLaneBtn);
+
+    eyebrowDeleteLaneBtn.setButtonText ("-");
+    eyebrowDeleteLaneBtn.onClick = [this] { deleteLane (_focusedLane); };
+    addAndMakeVisible (eyebrowDeleteLaneBtn);
+
+    // Right-rail add/delete kept for legacy reasons but always hidden.
     addLaneBtn.setButtonText ("+");
     addLaneBtn.onClick = [this] { addLane(); };
     addAndMakeVisible (addLaneBtn);
 
+    deleteLaneBtn.setButtonText ("-");
+    deleteLaneBtn.onClick = [this] { deleteLane (_focusedLane); };
+    addAndMakeVisible (deleteLaneBtn);
+
+    // Routing overlay — child covering the full editor, shown on demand.
+    addChildComponent (_routingOverlay);
+
     // ── Shaping sliders ───────────────────────────────────────────────────────
-    setupSlider (smoothingSlider, smoothingLabel, "Smooth");
-    rangeSlider.setSliderStyle (juce::Slider::TwoValueHorizontal);
+    setupSlider (smoothingSlider, smoothingLabel, {});
+    smoothingSlider.setTextBoxStyle (juce::Slider::NoTextBox, true, 0, 0);
+    smoothingLabel.setEditable (true, true, false);
+    smoothingLabel.onTextChange = [this]
+    {
+        juce::String t = smoothingLabel.getText().trim().trimCharactersAtEnd ("%");
+        const float v = juce::jlimit (0.0f, 100.0f, t.getFloatValue());
+        if (auto* p = proc.apvts.getParameter (laneParam (_focusedLane, "smoothing")))
+            p->setValueNotifyingHost (p->convertTo0to1 (v / 100.0f));
+    };
     rangeSlider.setTextBoxStyle (juce::Slider::NoTextBox, true, 0, 0);
     rangeSlider.setRange (0.0, 1.0, 0.001);
     addAndMakeVisible (rangeSlider);
     rangeLabel.setFont (juce::Font (juce::FontOptions{}.withHeight (11.0f)));
+    rangeLabel.setEditable (true, true, false);
+    rangeLabel.onTextChange = [this] { applyRangeLabelText (rangeLabel.getText()); };
     addAndMakeVisible (rangeLabel);
 
     rangeSlider.onValueChange = [this]
@@ -942,16 +2099,21 @@ DrawnCurveEditor::DrawnCurveEditor (DrawnCurveProcessor& p)
         laneTypeBtn[static_cast<size_t>(L)].setLookAndFeel (&_symbolLF);
         laneTypeBtn[static_cast<size_t>(L)].onClick = [this, L]
         {
-            static const int kCycleNext[4] = { 2, 0, 3, 1 };
-            const int cur = static_cast<int> (
-                proc.apvts.getRawParameterValue (laneParam (L, "msgType"))->load());
-            const int next = kCycleNext[std::clamp (cur, 0, 3)];
-            if (auto* pType = dynamic_cast<juce::AudioParameterChoice*> (
-                              proc.apvts.getParameter (laneParam (L, "msgType"))))
-                *pType = next;
-            updateLaneRow (L);
-            if (L == _focusedLane)
-                updateScaleVisibility();
+            const auto btnBounds = laneTypeBtn[static_cast<size_t>(L)].getBoundsInParent();
+
+            // All-lanes mode: open mini matrix overlay regardless of which lane button is shown
+            if (_showingAllLanes)
+            {
+                if (_routingOverlay.isVisible() && _routingOverlay.activeLane() == -1)
+                    { _routingOverlay.dismiss(); return; }
+                _routingOverlay.showForAllLanes (btnBounds);
+                return;
+            }
+
+            // Individual lane mode
+            if (_routingOverlay.isVisible() && _routingOverlay.activeLane() == L)
+                { _routingOverlay.dismiss(); return; }
+            _routingOverlay.showForLane (L, btnBounds);
         };
         laneTypeBtn[static_cast<size_t>(L)].onStateChange = [this, L] {
             // Right-click → popup menu
@@ -1115,6 +2277,8 @@ DrawnCurveEditor::DrawnCurveEditor (DrawnCurveProcessor& p)
         proc.apvts.addParameterListener (laneParam (L, "minOutput"),    this);
         proc.apvts.addParameterListener (laneParam (L, "maxOutput"),    this);
         proc.apvts.addParameterListener (laneParam (L, "smoothing"),    this);
+        proc.apvts.addParameterListener (laneParam (L, ParamID::xDivisions), this);
+        proc.apvts.addParameterListener (laneParam (L, ParamID::yDivisions), this);
     }
     // Global scale params (outside per-lane loop — shared by all Note-mode lanes)
     proc.apvts.addParameterListener ("scaleMode", this);
@@ -1431,9 +2595,21 @@ DrawnCurveEditor::DrawnCurveEditor (DrawnCurveProcessor& p)
     addAndMakeVisible (curveDisplay);
     addChildComponent (helpOverlay);
 
+    // ── Scale overlay backdrop — added AFTER all other components so it draws on top.
+    // hitTest punches through the panel area so scale components below remain interactive.
+    _scaleOverlay.onDismiss = [this] { closeScaleOverlay(); };
+    _scaleOverlay.setVisible (false);
+    addChildComponent (_scaleOverlay);
+
+    // Badge tap → open scale overlay
+    curveDisplay.onBadgeTap    = [this] { openScaleOverlay(); };
+    curveDisplay.onCurveDrawn  = [this] { refreshTickLabels(); };
+
     // Register global param listeners
     proc.apvts.addParameterListener (ParamID::playbackDirection, this);
     proc.apvts.addParameterListener (ParamID::syncEnabled,       this);
+    proc.apvts.addParameterListener (ParamID::playbackSpeed,     this);
+    proc.apvts.addParameterListener (ParamID::syncBeats,         this);
 #if defined(DC_HAVE_PER_LANE_PLAYBACK_PARAMS)
     for (int L = 0; L < kMaxLanes; ++L)
         proc.apvts.addParameterListener (laneParam (L, ParamID::laneDirection), this);
@@ -1446,6 +2622,9 @@ DrawnCurveEditor::DrawnCurveEditor (DrawnCurveProcessor& p)
 #if defined(DC_HAVE_PER_LANE_PLAYBACK_PARAMS)
     bindPlaybackToLane (0);   // initial binding: lane 0
 #endif
+
+    // Defer tick-label refresh so lane snapshots are fully populated before we read durations.
+    juce::MessageManager::callAsync ([this] { refreshTickLabels(); });
 }
 
 DrawnCurveEditor::~DrawnCurveEditor()
@@ -1468,10 +2647,13 @@ DrawnCurveEditor::~DrawnCurveEditor()
     // Remove all APVTS listeners.
     proc.apvts.removeParameterListener (ParamID::playbackDirection, this);
     proc.apvts.removeParameterListener (ParamID::syncEnabled,       this);
+    proc.apvts.removeParameterListener (ParamID::playbackSpeed,     this);
+    proc.apvts.removeParameterListener (ParamID::syncBeats,         this);
     for (int L = 0; L < kMaxLanes; ++L)
     {
         for (const auto& base : { "msgType", "ccNumber", "midiChannel", "noteVelocity",
-                                   "enabled", "loopMode", "phaseOffset", "minOutput", "maxOutput", "smoothing" })
+                                   "enabled", "loopMode", "phaseOffset", "minOutput", "maxOutput", "smoothing",
+                                   "xDivisions", "yDivisions" })
             proc.apvts.removeParameterListener (laneParam (L, base), this);
 #if defined(DC_HAVE_PER_LANE_PLAYBACK_PARAMS)
         proc.apvts.removeParameterListener (laneParam (L, ParamID::laneDirection), this);
@@ -1480,6 +2662,10 @@ DrawnCurveEditor::~DrawnCurveEditor()
     // Global scale params
     for (const auto& id : { "scaleMode", "scaleRoot", "scaleMask" })
         proc.apvts.removeParameterListener (id, this);
+
+    // Disconnect standalone MIDI outputs before destroying them.
+    proc.setVirtualMidiOutput (nullptr);
+    proc.setDirectMidiOutput (nullptr);
 }
 
 //==============================================================================
@@ -1496,6 +2682,62 @@ void DrawnCurveEditor::setupSlider (juce::Slider& s, juce::Label& l,
     l.setText (labelText, juce::dontSendNotification);
     l.setFont (juce::Font (juce::FontOptions{}.withHeight (11.0f)));
     addAndMakeVisible (l);
+}
+
+void DrawnCurveEditor::showMidiOutputPicker()
+{
+    // The virtual port "DrawnCurve" is always active — other apps see it as a source.
+    // This picker lets the user add an *additional* direct target (e.g. a specific synth app).
+    const auto devices = juce::MidiOutput::getAvailableDevices();
+
+    juce::PopupMenu menu;
+
+    // Header: virtual port status (not selectable)
+    menu.addSectionHeader ("Virtual port: DrawnCurve " +
+                           juce::String (_virtualMidiPort != nullptr ? "(active)" : "(failed)"));
+    menu.addSeparator();
+
+    menu.addSectionHeader ("Also send to:");
+    menu.addItem (1, "None (virtual port only)", true, _standaloneOut == nullptr);
+
+    for (int i = 0; i < devices.size(); ++i)
+    {
+        const bool isCurrent = (_standaloneOut != nullptr
+                                && _standaloneOut->getIdentifier() == devices[i].identifier);
+        menu.addItem (i + 2, devices[i].name, true, isCurrent);
+    }
+
+    menu.showMenuAsync (juce::PopupMenu::Options()
+                            .withTargetComponent (&midiOutBtn),
+        [this, devices] (int result)
+        {
+            if (result <= 0) return;   // dismissed
+
+            // "None" — virtual port only
+            if (result == 1)
+            {
+                proc.setDirectMidiOutput (nullptr);
+                _standaloneOut.reset();
+                midiOutBtn.setButtonText ("MIDI Out");
+                return;
+            }
+
+            const int idx = result - 2;
+            if (idx < 0 || idx >= devices.size()) return;
+
+            auto newOut = juce::MidiOutput::openDevice (devices[idx].identifier);
+            if (newOut == nullptr) return;   // failed to open
+
+            proc.setDirectMidiOutput (nullptr);      // disconnect old first
+            _standaloneOut = std::move (newOut);
+            proc.setDirectMidiOutput (_standaloneOut.get());
+
+            // Truncate long device names to fit the button
+            const auto name = devices[idx].name;
+            midiOutBtn.setButtonText (name.length() > 9
+                ? name.substring (0, 8) + juce::String::fromUTF8 ("\xe2\x80\xa6")
+                : name);
+        });
 }
 
 bool DrawnCurveEditor::keyPressed (const juce::KeyPress& key)
@@ -1539,8 +2781,25 @@ void DrawnCurveEditor::setFocusedLane (int lane)
 
     _focusedLane = juce::jlimit (0, proc.activeLaneCount - 1, lane);
     curveDisplay.setFocusedLane (_focusedLane);
-    laneFocusCtrl.setSelectedIndex (_focusedLane, juce::dontSendNotification);
+    // Index 0 is ✤ (all-lanes); individual lanes are at index (lane+1)
+    laneFocusCtrl.setSelectedIndex (_focusedLane + 1, juce::dontSendNotification);
+    resized();   // re-position eyebrow routing button for the new focused lane
     bindShapingToLane (_focusedLane);
+
+    // Sync quantize toggle buttons and grid density to the newly focused lane's params.
+    xQuantizeBtn.setToggleState (
+        proc.apvts.getRawParameterValue (laneParam (_focusedLane, ParamID::xQuantize))->load() > 0.5f,
+        juce::dontSendNotification);
+    yQuantizeBtn.setToggleState (
+        proc.apvts.getRawParameterValue (laneParam (_focusedLane, ParamID::yQuantize))->load() > 0.5f,
+        juce::dontSendNotification);
+    {
+        const int xDiv = static_cast<int> (proc.apvts.getRawParameterValue (laneParam (_focusedLane, ParamID::xDivisions))->load());
+        const int yDiv = static_cast<int> (proc.apvts.getRawParameterValue (laneParam (_focusedLane, ParamID::yDivisions))->load());
+        curveDisplay.setXDivisions (xDiv);
+        curveDisplay.setYDivisions (yDiv);
+        refreshTickLabels();
+    }
 #if defined(DC_HAVE_PER_LANE_PLAYBACK_PARAMS)
     bindPlaybackToLane (_focusedLane);
 #endif
@@ -1552,21 +2811,51 @@ void DrawnCurveEditor::setFocusedLane (int lane)
 void DrawnCurveEditor::updateLaneFocusCtrl()
 {
     std::vector<SegmentedControl::Segment> segs;
+    // Index 0 — "✤" All Lanes
+    segs.push_back ({ "all",
+                      juce::String::fromUTF8 ("\xe2\x9c\xa4"),   // ✤
+                      "All Lanes" });
+    // Indices 1..N — individual lanes
     for (int L = 0; L < proc.activeLaneCount; ++L)
         segs.push_back ({ "l" + juce::String (L + 1),
                           juce::String (L + 1),
                           "Lane " + juce::String (L + 1) });
     laneFocusCtrl.setSegments (std::move (segs));
-    laneFocusCtrl.setSelectedIndex (
-        juce::jlimit (0, proc.activeLaneCount - 1, _focusedLane),
-        juce::dontSendNotification);
+
+    // Selected index: 0 = all-lanes, (lane+1) = specific lane
+    const int selIdx = _showingAllLanes
+        ? 0
+        : juce::jlimit (1, proc.activeLaneCount, _focusedLane + 1);
+    laneFocusCtrl.setSelectedIndex (selIdx, juce::dontSendNotification);
 }
 
 void DrawnCurveEditor::addLane()
 {
     if (proc.activeLaneCount >= kMaxLanes) return;
     ++proc.activeLaneCount;
+
     updateLaneFocusCtrl();
+    resized();
+    applyTheme();
+    repaint();
+}
+
+void DrawnCurveEditor::deleteLane (int lane)
+{
+    if (proc.activeLaneCount <= 1) return;
+
+    // Keep focused lane in bounds: if we're deleting it or it would be above the new last lane,
+    // move focus down by one.
+    const int newCount = proc.activeLaneCount - 1;
+    if (_focusedLane >= lane)
+        setFocusedLane (juce::jmax (0, _focusedLane - 1));
+    else if (_focusedLane >= newCount)
+        setFocusedLane (newCount - 1);
+
+    proc.deleteLane (lane);
+
+    updateLaneFocusCtrl();
+    updateAllLaneRows();
     resized();
     applyTheme();
     repaint();
@@ -1577,6 +2866,12 @@ void DrawnCurveEditor::bindShapingToLane (int lane)
     // Smoothing attachment
     smoothingAttach.reset();
     smoothingAttach = std::make_unique<Attach> (proc.apvts, laneParam (lane, "smoothing"), smoothingSlider);
+    // Update smooth label to show the current value as a percentage
+    {
+        const float sv = proc.apvts.getRawParameterValue (laneParam (lane, "smoothing"))->load();
+        smoothingLabel.setText (juce::String (juce::roundToInt (sv * 100)) + "%",
+                                juce::dontSendNotification);
+    }
 
     // Phase offset attachment
     phaseOffsetAttach.reset();
@@ -1754,7 +3049,14 @@ void DrawnCurveEditor::parameterChanged (const juce::String& paramID, float)
             const bool isSyncing = proc.apvts.getRawParameterValue (ParamID::syncEnabled)->load() > 0.5f;
             syncButton.setToggleState (isSyncing, juce::dontSendNotification);
             onSyncToggled (isSyncing);
+            refreshTickLabels();
         });
+        return;
+    }
+
+    if (paramID == ParamID::playbackSpeed || paramID == ParamID::syncBeats)
+    {
+        juce::MessageManager::callAsync ([this] { updateSpeedLabel(); refreshTickLabels(); });
         return;
     }
 
@@ -1773,6 +3075,7 @@ void DrawnCurveEditor::parameterChanged (const juce::String& paramID, float)
                 updateScaleVisibility();
                 resized();   // recompute canvas height (anyNote may have changed)
                 applyTheme();
+                if (L == _focusedLane) refreshTickLabels();   // Y step unit depends on msgType
             });
             return;
         }
@@ -1798,7 +3101,7 @@ void DrawnCurveEditor::parameterChanged (const juce::String& paramID, float)
             // Re-bake range into snapshot immediately; also update the slider display.
             proc.updateLaneSnapshot (L);
             if (L == _focusedLane)
-                juce::MessageManager::callAsync ([this] { updateRangeSlider(); });
+                juce::MessageManager::callAsync ([this] { updateRangeSlider(); refreshTickLabels(); });
             return;
         }
 
@@ -1806,6 +3109,14 @@ void DrawnCurveEditor::parameterChanged (const juce::String& paramID, float)
         {
             // Re-bake smoothing into snapshot immediately (attachment fires this).
             proc.updateLaneSnapshot (L);
+            if (L == _focusedLane)
+            {
+                juce::MessageManager::callAsync ([this, L] {
+                    const float sv = proc.apvts.getRawParameterValue (laneParam (L, "smoothing"))->load();
+                    smoothingLabel.setText (juce::String (juce::roundToInt (sv * 100)) + "%",
+                                           juce::dontSendNotification);
+                });
+            }
             return;
         }
 
@@ -1816,6 +3127,43 @@ void DrawnCurveEditor::parameterChanged (const juce::String& paramID, float)
             return;
         }
 
+        if (paramID == laneParam (L, ParamID::xQuantize)
+            || paramID == laneParam (L, ParamID::yQuantize)
+            || paramID == laneParam (L, ParamID::legatoMode))
+        {
+            proc.updateLaneSnapshot (L);
+            if (L == _focusedLane)
+            {
+                juce::MessageManager::callAsync ([this, L] {
+                    const bool xq = proc.apvts.getRawParameterValue (laneParam (L, ParamID::xQuantize))->load() > 0.5f;
+                    const bool yq = proc.apvts.getRawParameterValue (laneParam (L, ParamID::yQuantize))->load() > 0.5f;
+                    xQuantizeBtn.setToggleState (xq, juce::dontSendNotification);
+                    yQuantizeBtn.setToggleState (yq, juce::dontSendNotification);
+                });
+            }
+            return;
+        }
+
+    }
+
+    // Per-lane grid density — rebake snapshot and sync display if it's the focused lane
+    for (int L = 0; L < kMaxLanes; ++L)
+    {
+        if (paramID == laneParam (L, ParamID::xDivisions) || paramID == laneParam (L, ParamID::yDivisions))
+        {
+            proc.updateLaneSnapshot (L);
+            if (L == _focusedLane)
+            {
+                juce::MessageManager::callAsync ([this, L] {
+                    const int xDiv = static_cast<int> (proc.apvts.getRawParameterValue (laneParam (L, ParamID::xDivisions))->load());
+                    const int yDiv = static_cast<int> (proc.apvts.getRawParameterValue (laneParam (L, ParamID::yDivisions))->load());
+                    curveDisplay.setXDivisions (xDiv);
+                    curveDisplay.setYDivisions (yDiv);
+                    refreshTickLabels();
+                });
+            }
+            return;
+        }
     }
 
     // Global scale params — update scale panel regardless of which lane is focused
@@ -1859,7 +3207,6 @@ void DrawnCurveEditor::onSyncToggled (bool isSync)
         speedSlider.setNormalisableRange (inv);
         speedSlider.setValue (proc.apvts.getRawParameterValue (ParamID::syncBeats)->load(),
                               juce::dontSendNotification);
-        speedLabel.setText ("SYNC", juce::dontSendNotification);
         speedSlider.setTextValueSuffix (" beats");
         speedSlider.setNumDecimalPlacesToDisplay (0);
     }
@@ -1870,10 +3217,10 @@ void DrawnCurveEditor::onSyncToggled (bool isSync)
         speedSlider.setNormalisableRange (juce::NormalisableRange<double> (0.25, 4.0));
         speedSlider.setValue (proc.apvts.getRawParameterValue (ParamID::playbackSpeed)->load(),
                               juce::dontSendNotification);
-        speedLabel.setText ("FREE", juce::dontSendNotification);
         speedSlider.setTextValueSuffix ("x");
         speedSlider.setNumDecimalPlacesToDisplay (2);
     }
+    updateSpeedLabel();
 
 #if defined(DC_HAVE_PER_LANE_PLAYBACK_PARAMS)
     // ── Per-lane speed slider — enabled only in FREE mode ─────────────────────
@@ -1887,6 +3234,7 @@ void DrawnCurveEditor::onSyncToggled (bool isSync)
     dirControl.setAlpha (1.0f);
     dirControl.repaint();
     applyTheme();
+    resized();   // re-layout X-axis row to show/hide beat preset buttons
 }
 
 //==============================================================================
@@ -1895,6 +3243,10 @@ void DrawnCurveEditor::onSyncToggled (bool isSync)
 
 void DrawnCurveEditor::updateScaleVisibility()
 {
+    // When the overlay is open, it manages scale component visibility via resized().
+    // Don't call resized() here — this function itself may be called from within resized().
+    if (_scaleOverlayOpen) return;
+
     // Show the scale panel whenever ANY lane uses Note mode — scale is now
     // global so it applies to all Note-mode lanes simultaneously.
     bool anyNote = false;
@@ -2082,7 +3434,7 @@ void DrawnCurveEditor::updateRangeLabel()
             const char* nm = _useFlats ? kFlatNames[midi % 12] : kSharpNames[midi % 12];
             return juce::String::fromUTF8 (nm) + juce::String (midi / 12 - 1);
         };
-        rangeLabel.setText (noteName (mn) + " - " + noteName (mx),
+        rangeLabel.setText (noteName (mn) + " \xe2\x80\x93 " + noteName (mx),
                             juce::dontSendNotification);
     }
     else if (msgType == MessageType::PitchBend)
@@ -2090,7 +3442,7 @@ void DrawnCurveEditor::updateRangeLabel()
         // Show signed pitch-bend values (-8192 – +8191)
         const int lo = juce::jlimit (-8192, 8191, juce::roundToInt (mn * 16383.0f) - 8192);
         const int hi = juce::jlimit (-8192, 8191, juce::roundToInt (mx * 16383.0f) - 8192);
-        rangeLabel.setText (juce::String (lo) + " - " + juce::String (hi),
+        rangeLabel.setText (juce::String (lo) + " \xe2\x80\x93 " + juce::String (hi),
                             juce::dontSendNotification);
     }
     else
@@ -2098,12 +3450,293 @@ void DrawnCurveEditor::updateRangeLabel()
         // CC (0-127) and Channel Pressure (0-127)
         const int lo = juce::jlimit (0, 127, juce::roundToInt (mn * 127.0f));
         const int hi = juce::jlimit (0, 127, juce::roundToInt (mx * 127.0f));
-        rangeLabel.setText (juce::String (lo) + " - " + juce::String (hi),
+        rangeLabel.setText (juce::String (lo) + " \xe2\x80\x93 " + juce::String (hi),
                             juce::dontSendNotification);
     }
 
     // Repaint so the collapsed musical summary chip reflects the updated range text.
     repaint();
+}
+
+// ---------------------------------------------------------------------------
+// Parse a MIDI note name string such as "C3", "C#3", "Db-1", "C♯4", "D♭5".
+// Returns the MIDI note number [0,127] or -1 on failure.
+static int parseMidiNoteName (const juce::String& s)
+{
+    if (s.isEmpty()) return -1;
+    int pos = 0;
+
+    // Letter (A–G, case-insensitive)
+    const juce::juce_wchar letter = juce::CharacterFunctions::toUpperCase (s[pos++]);
+    int semitone;
+    switch (letter)
+    {
+        case 'C': semitone = 0;  break;
+        case 'D': semitone = 2;  break;
+        case 'E': semitone = 4;  break;
+        case 'F': semitone = 5;  break;
+        case 'G': semitone = 7;  break;
+        case 'A': semitone = 9;  break;
+        case 'B': semitone = 11; break;
+        default:  return -1;
+    }
+
+    // Optional accidental: #, b, ♯ (U+266F), ♭ (U+266D)
+    if (pos < s.length())
+    {
+        const juce::juce_wchar acc = s[pos];
+        if (acc == '#' || acc == 0x266F) { semitone++; pos++; }
+        else if (acc == 'b' || acc == 0x266D) { semitone--; pos++; }
+    }
+
+    // Octave number (may be negative, e.g. "C-1")
+    if (pos >= s.length()) return -1;
+    const juce::String octStr = s.substring (pos).trim();
+    if (octStr.isEmpty()) return -1;
+    const int oct = octStr.getIntValue();
+    const int midi = (oct + 1) * 12 + semitone;
+    return std::clamp (midi, 0, 127);
+}
+
+void DrawnCurveEditor::applyRangeLabelText (const juce::String& rawText)
+{
+    const juce::String text = rawText.trim();
+
+    // Find the separator — en-dash "–", " - ", or hyphen between non-negative tokens
+    static const juce::juce_wchar kEnDash = 0x2013;
+    const juce::String enDash = juce::String::charToString (kEnDash);
+
+    int sepIdx = -1;
+    int sepLen = 0;
+
+    // Try " – " (en-dash with spaces)
+    sepIdx = text.indexOf (" " + enDash + " ");
+    if (sepIdx >= 0) { sepLen = 3; }
+    else
+    {
+        // Bare en-dash
+        sepIdx = text.indexOf (enDash);
+        if (sepIdx >= 0) { sepLen = 1; }
+        else
+        {
+            // " - " (hyphen with spaces)
+            sepIdx = text.indexOf (" - ");
+            if (sepIdx >= 0) { sepLen = 3; }
+            else
+            {
+                // Hyphen not at start (avoid negative numbers like "-8192")
+                for (int i = 1; i < text.length(); ++i)
+                {
+                    if (text[i] == '-') { sepIdx = i; sepLen = 1; break; }
+                }
+            }
+        }
+    }
+
+    if (sepIdx < 0) return;
+
+    const juce::String left  = text.substring (0, sepIdx).trim();
+    const juce::String right = text.substring (sepIdx + sepLen).trim();
+    if (left.isEmpty() || right.isEmpty()) return;
+
+    const auto msgType = static_cast<MessageType> (static_cast<int> (
+        proc.apvts.getRawParameterValue (laneParam (_focusedLane, "msgType"))->load()));
+
+    float minNorm = -1.0f, maxNorm = -1.0f;
+
+    if (msgType == MessageType::Note)
+    {
+        // Accept note names ("C#3") or raw MIDI integers ("60")
+        int lo = parseMidiNoteName (left);
+        int hi = parseMidiNoteName (right);
+        if (lo < 0) lo = juce::jlimit (0, 127, left .getIntValue());
+        if (hi < 0) hi = juce::jlimit (0, 127, right.getIntValue());
+        minNorm = static_cast<float> (lo) / 127.0f;
+        maxNorm = static_cast<float> (hi) / 127.0f;
+    }
+    else if (msgType == MessageType::PitchBend)
+    {
+        const int lo = left .getIntValue();   // signed: -8192 – +8191
+        const int hi = right.getIntValue();
+        minNorm = (static_cast<float> (lo) + 8192.0f) / 16383.0f;
+        maxNorm = (static_cast<float> (hi) + 8192.0f) / 16383.0f;
+    }
+    else  // CC / Channel Pressure (0-127)
+    {
+        const int lo = juce::jlimit (0, 127, left .getIntValue());
+        const int hi = juce::jlimit (0, 127, right.getIntValue());
+        minNorm = static_cast<float> (lo) / 127.0f;
+        maxNorm = static_cast<float> (hi) / 127.0f;
+    }
+
+    minNorm = juce::jlimit (0.0f, 1.0f, minNorm);
+    maxNorm = juce::jlimit (0.0f, 1.0f, maxNorm);
+    if (minNorm >= maxNorm) return;   // degenerate range — ignore
+
+    rangeSlider.setMinValue (static_cast<double> (minNorm), juce::sendNotification);
+    rangeSlider.setMaxValue (static_cast<double> (maxNorm), juce::sendNotification);
+}
+
+void DrawnCurveEditor::updateSpeedLabel()
+{
+    const bool sync = proc.apvts.getRawParameterValue (ParamID::syncEnabled)->load() > 0.5f;
+    if (sync)
+    {
+        const int beats = juce::roundToInt (
+            proc.apvts.getRawParameterValue (ParamID::syncBeats)->load());
+        speedLabel.setText (juce::String (beats) + "\xe2\x99\xa9",   // ♩
+                            juce::dontSendNotification);
+    }
+    else
+    {
+        const float spd = proc.apvts.getRawParameterValue (ParamID::playbackSpeed)->load();
+        speedLabel.setText (juce::String (spd, 2) + "\xc3\x97",      // ×
+                            juce::dontSendNotification);
+    }
+}
+
+juce::String DrawnCurveEditor::yTickText (int n) const
+{
+    if (n <= 0) return {};
+    const int msgType = static_cast<int> (
+        proc.apvts.getRawParameterValue (laneParam (_focusedLane, ParamID::msgType))->load());
+    const float minOut = proc.apvts.getRawParameterValue (laneParam (_focusedLane, ParamID::minOutput))->load();
+    const float maxOut = proc.apvts.getRawParameterValue (laneParam (_focusedLane, ParamID::maxOutput))->load();
+    const float range  = maxOut - minOut;
+    if (range <= 0.0f) return {};
+
+    // Format a float value without trailing zeros, max 1 decimal place.
+    auto fmt = [] (float v) -> juce::String {
+        if (v >= 9.5f)  return juce::String (juce::roundToInt (v));
+        if (v >= 0.95f) return juce::String (v, 1);
+        return juce::String (v, 2);
+    };
+
+    switch (msgType)
+    {
+        case 3:  // Note — semitone steps
+        {
+            const float step = range * 127.0f / static_cast<float> (n);
+            if (step < 0.05f) return {};
+            return fmt (step) + "st";
+        }
+        case 0:  // CC — 0-127 value steps
+        case 1:  // AT — 0-127 value steps
+        {
+            const float step = range * 127.0f / static_cast<float> (n);
+            if (step < 0.1f) return {};
+            return fmt (step);
+        }
+        case 2:  // PB — percentage of range per step
+        {
+            const float step = range * 100.0f / static_cast<float> (n);
+            if (step < 0.1f) return {};
+            return fmt (step) + "%";
+        }
+        default: return {};
+    }
+}
+
+juce::String DrawnCurveEditor::xTickText (int n) const
+{
+    if (n <= 0) return {};
+    const bool isSync = proc.apvts.getRawParameterValue (ParamID::syncEnabled)->load() > 0.5f;
+    if (isSync)
+    {
+        const float beats = proc.apvts.getRawParameterValue (ParamID::syncBeats)->load();
+        const float step  = beats / static_cast<float> (n);
+
+        // Match known note values and return the corresponding symbol.
+        struct NoteVal { float val; const char* sym; };
+        static constexpr NoteVal kNoteVals[] = {
+            { 2.f,        "\xe2\x99\xa9\x32"       },  // ♩2  half note (2 beats)
+            { 1.f,        "\xe2\x99\xa9"            },  // ♩   quarter note (1 beat)
+            { 2.f / 3.f,  "\xe2\x99\xa9\x33"       },  // ♩3  quarter triplet
+            { 0.5f,       "\xe2\x99\xaa"            },  // ♪   eighth note
+            { 1.f / 3.f,  "\xe2\x99\xaa\x33"       },  // ♪3  eighth triplet
+            { 0.25f,      "\xe2\x99\xac"            },  // ♬   sixteenth note
+            { 1.f / 6.f,  "\xe2\x99\xac\x33"       },  // ♬3  sixteenth triplet
+        };
+        for (const auto& nv : kNoteVals)
+            if (std::fabs (step - nv.val) < 0.005f)
+                return juce::String::fromUTF8 (nv.sym);
+
+        // Fallback: whole-beat integer or decimal
+        const juce::String noteQ = juce::String::fromUTF8 ("\xe2\x99\xa9");
+        if (step >= 0.5f && std::fmod (step, 1.0f) < 0.01f)
+            return juce::String (juce::roundToInt (step)) + noteQ;
+        return juce::String (step, 2) + noteQ;
+    }
+    else
+    {
+        const float dur = proc.curveDuration (_focusedLane);
+        if (dur <= 0.0f) return {};
+        const float speedRatio = proc.getEffectiveSpeedRatio();
+        const float loopDur    = (speedRatio > 0.001f) ? dur / speedRatio : dur;
+        const float step       = loopDur / static_cast<float> (n);
+        if (step >= 9.5f)   return juce::String (juce::roundToInt (step)) + "s";
+        if (step >= 0.095f) return juce::String (step, 2) + "s";
+        return juce::String (juce::roundToInt (step * 1000.0f)) + "ms";
+    }
+}
+
+void DrawnCurveEditor::refreshTickLabels()
+{
+    const int xDiv = curveDisplay.getXDivisions();
+    const int yDiv = curveDisplay.getYDivisions();
+    tickXCountLabel.setText (juce::String (xDiv), juce::dontSendNotification);
+    tickYCountLabel.setText (juce::String (yDiv), juce::dontSendNotification);
+    xTickStepLabel .setText (xTickText (xDiv),    juce::dontSendNotification);
+    yTickStepLabel .setText (yTickText (yDiv),    juce::dontSendNotification);
+
+    // X step preset enabled states (sync mode only)
+    const bool isSync = proc.apvts.getRawParameterValue (ParamID::syncEnabled)->load() > 0.5f;
+    if (isSync)
+    {
+        static constexpr float kStepMults[kNumXStepPresets] = { 6.f, 4.f, 3.f, 2.f, 1.5f, 1.f, 0.5f };
+        const float beats = proc.apvts.getRawParameterValue (ParamID::syncBeats)->load();
+        for (int i = 0; i < kNumXStepPresets; ++i)
+        {
+            const int divs = juce::roundToInt (beats * kStepMults[i]);
+            xStepPresetBtns[i].setEnabled (divs >= 2 && divs <= 32);
+        }
+    }
+
+    // Y step preset enabled states (based on current range span)
+    {
+        const int yMsgType = static_cast<int> (
+            proc.apvts.getRawParameterValue (laneParam (_focusedLane, ParamID::msgType))->load());
+        const float minOut = proc.apvts.getRawParameterValue (laneParam (_focusedLane, ParamID::minOutput))->load();
+        const float maxOut = proc.apvts.getRawParameterValue (laneParam (_focusedLane, ParamID::maxOutput))->load();
+        const float span   = (maxOut - minOut) * 127.0f;
+
+        if (yMsgType == 3)  // Note — semitone steps
+        {
+            static constexpr int kNoteSteps[kNumYNoteStepPresets] = { 1, 2, 3, 4, 5 };
+            for (int i = 0; i < kNumYNoteStepPresets; ++i)
+                yNoteStepPresetBtns[i].setEnabled (span >= 0.5f &&
+                    juce::roundToInt (span / kNoteSteps[i]) >= 2 &&
+                    juce::roundToInt (span / kNoteSteps[i]) <= 24);
+        }
+        else if (yMsgType == 0 || yMsgType == 1)  // CC / Pressure — value steps
+        {
+            static constexpr int kCCSteps[kNumYCCStepPresets] = { 1, 2, 3, 4, 6 };
+            for (int i = 0; i < kNumYCCStepPresets; ++i)
+                yCCStepPresetBtns[i].setEnabled (span >= 0.5f &&
+                    juce::roundToInt (span / kCCSteps[i]) >= 2 &&
+                    juce::roundToInt (span / kCCSteps[i]) <= 24);
+        }
+        else if (yMsgType == 2)  // PitchBend — absolute PB unit steps
+        {
+            const float pbSpan = (maxOut - minOut) * 16384.0f;
+            static constexpr int kPBSteps[kNumYPBStepPresets] = { 64, 128, 256, 512 };
+            for (int i = 0; i < kNumYPBStepPresets; ++i)
+            {
+                const int divs = juce::roundToInt (pbSpan / kPBSteps[i]);
+                yPBStepPresetBtns[i].setEnabled (divs >= 2 && divs <= 24);
+            }
+        }
+    }
 }
 
 void DrawnCurveEditor::updateScaleStatus()
@@ -2178,12 +3811,29 @@ void DrawnCurveEditor::applyTheme()
     rangeSlider.setColour (juce::Slider::trackColourId,      accent.withAlpha (0.45f));
     rangeSlider.setColour (juce::Slider::backgroundColourId, tbBg);
 
-    for (auto* l : { &smoothingLabel, &rangeLabel, &speedLabel, &phaseOffsetLabel
+    for (auto* l : { &smoothingLabel, &rangeLabel, &speedLabel, &phaseOffsetLabel,
+                     &tickXCountLabel, &tickYCountLabel,
+                     &xTickStepLabel, &yTickStepLabel
 #if defined(DC_HAVE_PER_LANE_PLAYBACK_PARAMS)
                    , &laneSpeedLabel
 #endif
                    })
         l->setColour (juce::Label::textColourId, dimText);
+
+    // Editable value labels — styled like small buttons so they read as tappable,
+    // with explicit editing colours to prevent the blank-while-editing bug.
+    {
+        const auto editBg     = light ? juce::Colour (0xfff0ede8) : juce::Colour (0xff32323e);
+        const auto editBorder = light ? juce::Colour (0xffc0bab2) : juce::Colour (0xff55556a);
+        for (auto* l : { &rangeLabel, &speedLabel, &smoothingLabel })
+        {
+            l->setColour (juce::Label::backgroundColourId,            editBg);
+            l->setColour (juce::Label::outlineColourId,               editBorder);
+            l->setColour (juce::Label::textWhenEditingColourId,       textCol);
+            l->setColour (juce::Label::backgroundWhenEditingColourId, tbBg);
+            l->setColour (juce::Label::outlineWhenEditingColourId,    accent);
+        }
+    }
 
     // clearButton is a dcui::IconButton
     clearButton.setBaseColour (light ? juce::Colour (0xff706D64) : juce::Colours::lightgrey);
@@ -2203,6 +3853,10 @@ void DrawnCurveEditor::applyTheme()
     // Scale notation button (in utility bar) — styled like regular utility buttons
     scaleNotationBtn.setColour (juce::TextButton::buttonColourId,  btnBg);
     scaleNotationBtn.setColour (juce::TextButton::textColourOffId, btnText);
+
+    // Standalone MIDI out button
+    midiOutBtn.setColour (juce::TextButton::buttonColourId,  btnBg);
+    midiOutBtn.setColour (juce::TextButton::textColourOffId, btnText);
 
     // Utility buttons
     for (auto* b : { &playButton, &panicButton, &themeButton, &helpButton,
@@ -2250,6 +3904,25 @@ void DrawnCurveEditor::applyTheme()
         laneFocusCtrl.repaint();
     }
 
+    // Beat preset buttons (sync mode) + Y-axis preset buttons — same palette as density buttons
+    {
+        const juce::Colour presetBg   = light ? juce::Colour (0xffF0EFE7) : btnBg;
+        const juce::Colour presetText = light ? juce::Colour (0xff5B6985) : juce::Colours::lightgrey;
+        auto colourPreset = [&] (juce::TextButton& b)
+        {
+            b.setColour (juce::TextButton::buttonColourId,  presetBg);
+            b.setColour (juce::TextButton::textColourOffId, presetText);
+        };
+        for (auto& b : xStepPresetBtns)    colourPreset (b);
+        for (auto& b : syncBeatsPresetBtns) colourPreset (b);
+        for (auto& b : yOctavePresetBtns)   colourPreset (b);
+        for (auto& b : yNoteStepPresetBtns) colourPreset (b);
+        for (auto& b : yDozenPresetBtns)    colourPreset (b);
+        for (auto& b : yCCStepPresetBtns)   colourPreset (b);
+        for (auto& b : yPBRangePresetBtns)  colourPreset (b);
+        for (auto& b : yPBStepPresetBtns)   colourPreset (b);
+    }
+
     // Density buttons
     for (auto* b : { &tickYMinusBtn, &tickYPlusBtn, &tickXMinusBtn, &tickXPlusBtn })
     {
@@ -2292,9 +3965,21 @@ void DrawnCurveEditor::applyTheme()
                                   isOneShot ? dimText : laneCol);
     }
 
-    // Add-lane button: subdued "+" appearance
+    // Add / delete lane buttons: subdued appearance inside the matrix
     addLaneBtn.setColour (juce::TextButton::buttonColourId, btnBg);
     addLaneBtn.setColour (juce::TextButton::textColourOffId, dimText);
+    deleteLaneBtn.setColour (juce::TextButton::buttonColourId, btnBg);
+    deleteLaneBtn.setColour (juce::TextButton::textColourOffId, dimText);
+
+    // Eyebrow lane management buttons
+    for (auto* b : { &eyebrowAddLaneBtn, &eyebrowDeleteLaneBtn })
+    {
+        b->setColour (juce::TextButton::buttonColourId,  btnBg);
+        b->setColour (juce::TextButton::textColourOffId, dimText);
+    }
+
+    // Routing overlay theme
+    _routingOverlay.setLightMode (light);
 
     // Scale controls
     scaleLabel.setColour (juce::Label::textColourId, dimText);
@@ -2327,7 +4012,77 @@ void DrawnCurveEditor::applyTheme()
     syncButton.setBaseColour (light ? juce::Colour (0xff6D28D9) : juce::Colour (0xff2979ff));
     syncButton.repaint();
 
+    // xQuantize / yQuantize lock buttons — use lane 0's colour when focused on lane 0,
+    // otherwise use a neutral accent that reads clearly in both themes.
+    const auto lockColour = light ? juce::Colour (0xff706D64) : juce::Colours::lightgrey;
+    xQuantizeBtn.setBaseColour (lockColour);
+    yQuantizeBtn.setBaseColour (lockColour);
+    xQuantizeBtn.repaint();
+    yQuantizeBtn.repaint();
+
+    // '#' combo button — neutral style, slightly smaller text
+    xyLockBtn.setColour (juce::TextButton::buttonColourId,
+        light ? juce::Colour (0xffe0dcd5) : juce::Colour (0xff2a2a38));
+    xyLockBtn.setColour (juce::TextButton::buttonOnColourId, lockColour.withAlpha (0.3f));
+    xyLockBtn.setColour (juce::TextButton::textColourOffId, lockColour);
+    xyLockBtn.setColour (juce::TextButton::textColourOnId,  lockColour.brighter (0.4f));
+
+    _scaleOverlay.setLightMode (_lightMode);
+
     repaint();
+}
+
+//==============================================================================
+// Scale overlay
+//==============================================================================
+
+void DrawnCurveEditor::openScaleOverlay()
+{
+    _scaleOverlayOpen = true;
+    _scaleOverlay.setLightMode (_lightMode);
+    _scaleOverlay.setBounds (getLocalBounds());
+
+    // Reparent scale browser components into the overlay so they paint above the dim.
+    // ScaleOverlay has the same bounds / coordinate origin as DrawnCurveEditor, so
+    // the setBounds() calls in resized() are valid for children of either.
+    for (auto& b : familyBtns)    _scaleOverlay.addAndMakeVisible (b);
+    _scaleOverlay.addAndMakeVisible (recentFamilyBtn);
+    for (auto& b : subfamilyBtns)  _scaleOverlay.addAndMakeVisible (b);
+    _scaleOverlay.addAndMakeVisible (scaleLattice);
+    _scaleOverlay.addAndMakeVisible (scaleRotateBtn);
+    _scaleOverlay.addAndMakeVisible (scaleAllBtn);
+    _scaleOverlay.addAndMakeVisible (scaleNoneBtn);
+    _scaleOverlay.addAndMakeVisible (scaleInvBtn);
+    _scaleOverlay.addAndMakeVisible (scaleRootBtn);
+    _scaleOverlay.addAndMakeVisible (scaleLabel);
+    _scaleOverlay.addAndMakeVisible (maskLabel);
+
+    resized();                          // positions components within ScaleOverlay
+    _scaleOverlay.setVisible (true);
+    _scaleOverlay.toFront (false);
+    repaint();
+}
+
+void DrawnCurveEditor::closeScaleOverlay()
+{
+    _scaleOverlayOpen = false;
+    _scaleOverlay.setVisible (false);
+
+    // Reparent scale browser components back to DrawnCurveEditor (hidden — visibility
+    // is restored by updateScaleVisibility() which also calls resized()).
+    for (auto& b : familyBtns)    addChildComponent (b);
+    addChildComponent (recentFamilyBtn);
+    for (auto& b : subfamilyBtns)  addChildComponent (b);
+    addChildComponent (scaleLattice);
+    addChildComponent (scaleRotateBtn);
+    addChildComponent (scaleAllBtn);
+    addChildComponent (scaleNoneBtn);
+    addChildComponent (scaleInvBtn);
+    addChildComponent (scaleRootBtn);
+    addChildComponent (scaleLabel);
+    addChildComponent (maskLabel);
+
+    updateScaleVisibility();   // restores correct visibility + repositions via resized()
 }
 
 //==============================================================================
@@ -2480,6 +4235,18 @@ void DrawnCurveEditor::paint (juce::Graphics& g)
         }
     }
 
+    // ── Scale overlay panel background (drawn on top of stage, below the ScaleOverlay component) ──
+    if (_scaleOverlayOpen && _scaleOverlay.isVisible() && ! _scaleOverlay.panelRect.isEmpty())
+    {
+        const auto& pRect = _scaleOverlay.panelRect;
+        const juce::Colour panelBg     = _lightMode ? juce::Colour (0xfffaf8f6) : juce::Colour (0xff1e1e2c);
+        const juce::Colour panelBorder = _lightMode ? juce::Colour (0x33000000) : juce::Colour (0x33ffffff);
+        g.setColour (panelBg);
+        g.fillRoundedRectangle (pRect.toFloat(), 12.0f);
+        g.setColour (panelBorder);
+        g.drawRoundedRectangle (pRect.toFloat().reduced (0.5f), 12.0f, 1.0f);
+    }
+
 }
 
 //==============================================================================
@@ -2491,14 +4258,18 @@ void DrawnCurveEditor::resized()
     using namespace Layout;
 
     auto area = getLocalBounds().reduced (pad);
+    // "singleLane" now means the rail is hidden, regardless of lane count.
+    // This drives the layout branch: full-width canvas + eyebrow controls vs. two-column.
+    const bool singleLane = !_railExpanded;
 
-    // ── Utility / global bar ──────────────────────────────────────────────────
-    // Full-width bar: left = global controls (sync, lane-sync, speed);
-    //                 right = utility buttons (clear, panic, theme, help)
+    // ── Eyebrow / utility bar ─────────────────────────────────────────────────
+    // Single-lane mode: one expanded 52px bar with performance controls + utilities.
+    // Multi-lane mode:  36px bar with sync/speed on the left, utilities on the right.
     {
-        auto row = area.removeFromTop (utilityRowH);
+        const int eyebrowH = singleLane ? 52 : utilityRowH;
+        auto row = area.removeFromTop (eyebrowH);
 
-        // Right side: utility buttons
+        // ── Right side: utility buttons (always present) ─────────────────────
         themeButton     .setBounds (row.removeFromRight (32).withSizeKeepingCentre (32, 28));
         row.removeFromRight (4);
         helpButton      .setBounds (row.removeFromRight (28).withSizeKeepingCentre (28, 28));
@@ -2507,17 +4278,165 @@ void DrawnCurveEditor::resized()
         row.removeFromRight (4);
         clearButton     .setBounds (row.removeFromRight (44).withSizeKeepingCentre (44, 28));
         row.removeFromRight (6);
-        // ♯/♭ notation toggle — shown to the right of the speed controls
         scaleNotationBtn.setBounds (row.removeFromRight (28).withSizeKeepingCentre (28, 28));
-        row.removeFromRight (6);   // visual separator gap
+        row.removeFromRight (8);   // visual separator gap
 
-        // Left side: sync toggle + lane-sync toggle + speed label + speed slider
-        syncButton .setBounds (row.removeFromLeft (38).withSizeKeepingCentre (38, 28));
-        row.removeFromLeft (4);
-        laneSyncBtn.setBounds (row.removeFromLeft (38).withSizeKeepingCentre (38, 28));
-        row.removeFromLeft (8);
-        speedLabel .setBounds (row.removeFromLeft (36).withSizeKeepingCentre (36, 14));
-        speedSlider.setBounds (row.removeFromLeft (180));
+        // Standalone only: MIDI output device picker
+        if (juce::JUCEApplicationBase::isStandaloneApp())
+        {
+            midiOutBtn.setBounds (row.removeFromRight (72).withSizeKeepingCentre (72, 28));
+            row.removeFromRight (6);
+        }
+
+        if (singleLane)
+        {
+            // ── Single-lane eyebrow: proportional slider layout ───────────────
+            // Layout order (left → right): [dir] [sync] [range+label] [speed] [smooth] [routing]
+            // All fixed elements are placed first; remaining space is split proportionally
+            // among the three sliders.
+            //
+            // Responsive breakpoints (based on remaining space after fixed elements):
+            //   sliderSpace >= 220px → all 3 sliders visible  (~800px+ window)
+            //   sliderSpace >= 100px → range + speed only      (~680px+ window)
+            //   sliderSpace <  100px → range only              (< ~680px window)
+
+            // Hide legacy right-rail buttons.
+            addLaneBtn.setBounds ({});
+            addLaneBtn.setVisible (false);
+            deleteLaneBtn.setBounds ({});
+            deleteLaneBtn.setVisible (false);
+
+            // ── Fixed: routing button (right edge) ───────────────────────────
+            // All-lanes tab: show laneTypeBtn[0] with ✤ text.
+            // Individual lane tab: show laneTypeBtn[focusedLane] with its type symbol.
+            const int focL = _focusedLane;
+            laneTypeBtn[static_cast<size_t>(focL)].setBounds (
+                row.removeFromRight (56).withSizeKeepingCentre (56, 28));
+            laneTypeBtn[static_cast<size_t>(focL)].setVisible (true);
+            // When in all-lanes mode, override label to ✤
+            if (_showingAllLanes)
+                laneTypeBtn[static_cast<size_t>(focL)].setButtonText (
+                    juce::String::fromUTF8 ("\xe2\x9c\xa4"));  // ✤
+            // else: text is set by updateLaneRow() to the lane's msg type symbol
+            // Hide routing buttons for other lanes
+            for (int L = 0; L < kMaxLanes; ++L)
+                if (L != focL)
+                    laneTypeBtn[static_cast<size_t>(L)].setBounds ({});
+            row.removeFromRight (6);
+
+            // ── Fixed: direction + sync (left edge) ───────────────────────────
+            dirControl.setBounds (row.removeFromLeft (100).withSizeKeepingCentre (100, 40));
+            row.removeFromLeft (8);
+
+            // ── Lane selector — always visible: ✤ + lane numbers ─────────────
+            {
+                const int nSegs    = proc.activeLaneCount + 1;   // +1 for ✤
+                const int selectorW = 28 * nSegs + (nSegs - 1);
+                laneFocusCtrl.setBounds (row.removeFromLeft (selectorW)
+                                             .withSizeKeepingCentre (selectorW, 26));
+                laneFocusCtrl.setVisible (true);
+                row.removeFromLeft (4);
+
+                if (proc.activeLaneCount < kMaxLanes)
+                {
+                    eyebrowAddLaneBtn.setBounds (row.removeFromLeft (24).withSizeKeepingCentre (24, 22));
+                    eyebrowAddLaneBtn.setVisible (true);
+                    row.removeFromLeft (2);
+                }
+                else
+                {
+                    eyebrowAddLaneBtn.setBounds ({});
+                    eyebrowAddLaneBtn.setVisible (false);
+                }
+
+                if (proc.activeLaneCount > 1)
+                {
+                    eyebrowDeleteLaneBtn.setBounds (row.removeFromLeft (24).withSizeKeepingCentre (24, 22));
+                    eyebrowDeleteLaneBtn.setVisible (true);
+                    row.removeFromLeft (6);
+                }
+                else
+                {
+                    eyebrowDeleteLaneBtn.setBounds ({});
+                    eyebrowDeleteLaneBtn.setVisible (false);
+                }
+            }
+
+            syncButton .setBounds (row.removeFromLeft (38).withSizeKeepingCentre (38, 28));
+            row.removeFromLeft (4);
+            laneSyncBtn.setBounds (row.removeFromLeft (32).withSizeKeepingCentre (32, 28));
+            row.removeFromLeft (6);
+
+            // ── Proportional slider allocation ────────────────────────────────
+            const int sliderSpace = juce::jmax (0, row.getWidth());
+            constexpr int kSliderGap = 6;
+
+            const bool showSpeed  = sliderSpace >= 100;
+            const bool showSmooth = sliderSpace >= 220;
+            const int  numGaps    = showSmooth ? 2 : (showSpeed ? 1 : 0);
+            const int  availW     = juce::jmax (0, sliderSpace - numGaps * kSliderGap);
+
+            const int rangeW = showSpeed
+                ? juce::roundToInt (availW * (showSmooth ? 0.38f : 0.52f))
+                : availW;
+            const int speedW = showSpeed
+                ? (showSmooth ? juce::roundToInt (availW * 0.37f) : availW - rangeW)
+                : 0;
+            const int smoothW = showSmooth ? (availW - rangeW - speedW) : 0;
+
+            // Range / Speed / Smooth — label on top, slider below.
+            // Labels get a 22 px strip (full width, full height) so the touch
+            // target is reliably tappable; slider gets the remaining ~30 px.
+            constexpr int kLblH = 22;
+
+            if (rangeW > 0)
+            {
+                auto rangeSection = row.removeFromLeft (rangeW);
+                rangeLabel .setBounds (rangeSection.removeFromTop (kLblH));
+                rangeSlider.setBounds (rangeSection.withSizeKeepingCentre (rangeW, 24));
+            }
+            else
+            {
+                rangeLabel .setBounds ({});
+                rangeSlider.setBounds ({});
+            }
+
+            if (showSpeed && speedW > 0)
+            {
+                row.removeFromLeft (kSliderGap);
+                auto speedSection = row.removeFromLeft (speedW);
+                speedLabel .setBounds (speedSection.removeFromTop (kLblH));
+                speedSlider.setBounds (speedSection.withSizeKeepingCentre (speedW, 24));
+            }
+            else
+            {
+                speedLabel .setBounds ({});
+                speedSlider.setBounds ({});
+            }
+
+            if (showSmooth && smoothW > 0)
+            {
+                row.removeFromLeft (kSliderGap);
+                auto smoothSection = row.removeFromLeft (smoothW);
+                smoothingLabel .setBounds (smoothSection.removeFromTop (kLblH));
+                smoothingSlider.setBounds (smoothSection.withSizeKeepingCentre (smoothW, 24));
+            }
+            else
+            {
+                smoothingLabel .setBounds ({});
+                smoothingSlider.setBounds ({});
+            }
+        }
+        else
+        {
+            // ── Left side (multi-lane): [sync] [lane-sync] [speed label] [speed slider] ──
+            syncButton .setBounds (row.removeFromLeft (38).withSizeKeepingCentre (38, 28));
+            row.removeFromLeft (4);
+            laneSyncBtn.setBounds (row.removeFromLeft (38).withSizeKeepingCentre (38, 28));
+            row.removeFromLeft (8);
+            speedLabel .setBounds (row.removeFromLeft (36).withSizeKeepingCentre (36, 14));
+            speedSlider.setBounds (row.removeFromLeft (180));
+        }
     }
     area.removeFromTop (pad);
 
@@ -2564,7 +4483,7 @@ void DrawnCurveEditor::resized()
             musicalToggleBtn.setBounds ({});
         }
 
-        if (anyNoteMode && _musicalExpanded)
+        if (anyNoteMode && _musicalExpanded && ! _scaleOverlayOpen)
         {
             auto ne = _musicalPanel;
             ne.removeFromTop (musicalCollapsedH);   // skip the summary header strip
@@ -2645,59 +4564,109 @@ void DrawnCurveEditor::resized()
         }
     }
 
-    // ── Two-column split (main area) ──────────────────────────────────────────
-    auto rightCol = area.removeFromRight (rightColW);
-    area.removeFromRight (colGap);
-    auto stageCol = area;
+    // ── Column layout: single-lane = full width; multi-lane = two columns ────
+    juce::Rectangle<int> stageCol;
 
-    // ══════════════════════════════════════════════════════════════════════════
-    // RIGHT RAIL — single panel containing focused-lane controls + routing matrix
-    // Global controls (sync, lane sync, speed) live in the utility bar above.
-    // ══════════════════════════════════════════════════════════════════════════
-    _globalPanel = {};
-    _lanesPanel  = {};   // merged into focused lane panel — drawn there in paint()
-
-    // ── Single FOCUSED LANE panel (full right rail) ───────────────────────────
-    _focusedLanePanel = rightCol;
+    if (singleLane)
     {
-        auto fp = _focusedLanePanel.reduced (panelPad);
-        fp.removeFromTop (8);    // top padding
+        // ── Single-lane: no right rail — stage takes the full width ──────────
+        stageCol = area;
+        _globalPanel      = {};
+        _lanesPanel       = {};
+        _focusedLanePanel = {};
+        _matrixRowOrigin  = {};
 
-        // Lane focus selector (1 / 2 / 3)
-        {
-            auto focusRow = fp.removeFromTop (28);
-            laneFocusCtrl.setBounds (focusRow);
-        }
-        fp.removeFromTop (6);
-
-        // Direction segmented control (full width)
-        dirControl.setBounds (fp.removeFromTop (40));
-        fp.removeFromTop (6);
-
+        // Hide right-rail-only components.
+        // Note: laneFocusCtrl bounds are managed in the eyebrow section above —
+        // it may be visible there as a mini lane selector; don't zero it here.
+        phaseOffsetLabel .setBounds ({});
+        phaseOffsetSlider.setBounds ({});
+        oneShotBtn.setBounds ({});
+        oneShotBtn.setVisible (false);
+        // Hide deleteLaneBtn — only visible inside the matrix rail
+        deleteLaneBtn.setBounds ({});
+        deleteLaneBtn.setVisible (false);
 #if defined(DC_HAVE_PER_LANE_PLAYBACK_PARAMS)
-        // Per-lane speed multiplier (before range)
-        laneSpeedLabel .setBounds (fp.removeFromTop (paramLabelH));
-        laneSpeedSlider.setBounds (fp.removeFromTop (paramSliderH));
-        fp.removeFromTop (4);
+        laneSpeedLabel .setBounds ({});
+        laneSpeedSlider.setBounds ({});
 #endif
 
-        // Range
-        rangeLabel .setBounds (fp.removeFromTop (paramLabelH));
-        rangeSlider.setBounds (fp.removeFromTop (paramSliderH + 4));
-        fp.removeFromTop (4);
+        // Hide inactive lane matrix rows (lanes 1-3 not visible in single-lane mode).
+        // Exception: laneTypeBtn[_focusedLane] was already positioned in the eyebrow above;
+        // don't zero it out here or the routing button disappears for lanes 2+.
+        for (int L = 0; L < kMaxLanes; ++L)
+        {
+            const bool isEyebrowBtn = (L == _focusedLane);
+            laneTypeBtn    [static_cast<size_t>(L)].setVisible (isEyebrowBtn);
+            laneDetailLabel[static_cast<size_t>(L)].setVisible (false);
+            laneChannelLabel[static_cast<size_t>(L)].setVisible (false);
+            laneTeachBtn   [static_cast<size_t>(L)].setVisible (false);
+            laneMuteBtn    [static_cast<size_t>(L)].setVisible (false);
+            laneSelectBtn  [static_cast<size_t>(L)].setVisible (false);
 
-        // Smooth
-        smoothingLabel .setBounds (fp.removeFromTop (paramLabelH));
-        smoothingSlider.setBounds (fp.removeFromTop (paramSliderH));
-        fp.removeFromTop (4);
+            if (! isEyebrowBtn)
+            {
+                laneTypeBtn    [static_cast<size_t>(L)].setBounds ({});
+                laneDetailLabel[static_cast<size_t>(L)].setBounds ({});
+                laneChannelLabel[static_cast<size_t>(L)].setBounds ({});
+                laneTeachBtn   [static_cast<size_t>(L)].setBounds ({});
+                laneMuteBtn    [static_cast<size_t>(L)].setBounds ({});
+                laneSelectBtn  [static_cast<size_t>(L)].setBounds ({});
+            }
+        }
+    }
+    else
+    {
+        // ── Multi-lane: two-column split ─────────────────────────────────────
+        auto rightCol = area.removeFromRight (rightColW);
+        area.removeFromRight (colGap);
+        stageCol = area;
 
-        // Phase offset
-        phaseOffsetLabel .setBounds (fp.removeFromTop (paramLabelH));
-        phaseOffsetSlider.setBounds (fp.removeFromTop (paramSliderH));
-        fp.removeFromTop (8);
+        // Re-show controls that may have been hidden in single-lane mode
+        oneShotBtn.setVisible (true);
 
-        // ── Routing matrix (immediately below sliders) ─────────────────────
-        fp.removeFromTop (8);    // gap before matrix rows
+        // ══════════════════════════════════════════════════════════════════════
+        // RIGHT RAIL
+        // ══════════════════════════════════════════════════════════════════════
+        _globalPanel = {};
+        _lanesPanel  = {};
+
+        _focusedLanePanel = rightCol;
+        {
+            auto fp = _focusedLanePanel.reduced (panelPad);
+            fp.removeFromTop (8);
+
+            // Lane focus selector (1 / 2 / 3)
+            laneFocusCtrl.setBounds (fp.removeFromTop (28));
+            fp.removeFromTop (6);
+
+            // Direction segmented control (full width)
+            dirControl.setBounds (fp.removeFromTop (40));
+            fp.removeFromTop (6);
+
+#if defined(DC_HAVE_PER_LANE_PLAYBACK_PARAMS)
+            laneSpeedLabel .setBounds (fp.removeFromTop (paramLabelH));
+            laneSpeedSlider.setBounds (fp.removeFromTop (paramSliderH));
+            fp.removeFromTop (4);
+#endif
+
+            // Range
+            rangeLabel .setBounds (fp.removeFromTop (paramLabelH));
+            rangeSlider.setBounds (fp.removeFromTop (paramSliderH + 4));
+            fp.removeFromTop (4);
+
+            // Smooth
+            smoothingLabel .setBounds (fp.removeFromTop (paramLabelH));
+            smoothingSlider.setBounds (fp.removeFromTop (paramSliderH));
+            fp.removeFromTop (4);
+
+            // Phase offset
+            phaseOffsetLabel .setBounds (fp.removeFromTop (paramLabelH));
+            phaseOffsetSlider.setBounds (fp.removeFromTop (paramSliderH));
+            fp.removeFromTop (8);
+
+            // ── Routing matrix ────────────────────────────────────────────────
+            fp.removeFromTop (8);
 
         // Matrix rows — record origin for paint() dot positions.
         // Only lay out active lanes; hide / zero-bound inactive ones.
@@ -2746,19 +4715,44 @@ void DrawnCurveEditor::resized()
             }
         }
 
-        // "Add lane" button below the last active row (hidden when at max capacity)
-        if (proc.activeLaneCount < kMaxLanes && fp.getHeight() >= 24)
-        {
-            fp.removeFromTop (4);
-            addLaneBtn.setBounds (fp.removeFromTop (24).removeFromLeft (24));
-            addLaneBtn.setVisible (true);
+            // ── + / − buttons below the last active row ──────────────────────
+            // "+" adds a lane (hidden at max capacity); "−" removes the last lane
+            // (hidden when only one lane remains).  Both sit on the same row.
+            if (fp.getHeight() >= 24)
+            {
+                fp.removeFromTop (4);
+                auto btnRow = fp.removeFromTop (24);
+
+                if (proc.activeLaneCount < kMaxLanes)
+                {
+                    addLaneBtn.setBounds (btnRow.removeFromLeft (24));
+                    addLaneBtn.setVisible (true);
+                    btnRow.removeFromLeft (4);
+                }
+                else
+                {
+                    addLaneBtn.setBounds ({});
+                    addLaneBtn.setVisible (false);
+                }
+
+                if (proc.activeLaneCount > 1)
+                {
+                    deleteLaneBtn.setBounds (btnRow.removeFromLeft (24));
+                    deleteLaneBtn.setVisible (true);
+                }
+                else
+                {
+                    deleteLaneBtn.setBounds ({});
+                    deleteLaneBtn.setVisible (false);
+                }
+            }
+            else
+            {
+                addLaneBtn   .setBounds ({});   addLaneBtn   .setVisible (false);
+                deleteLaneBtn.setBounds ({});   deleteLaneBtn.setVisible (false);
+            }
         }
-        else
-        {
-            addLaneBtn.setBounds ({});
-            addLaneBtn.setVisible (false);
-        }
-    }
+    }   // end else (multi-lane right rail)
 
     // ══════════════════════════════════════════════════════════════════════════
     // STAGE COLUMN
@@ -2770,28 +4764,245 @@ void DrawnCurveEditor::resized()
 
         // laneFocusCtrl is placed in the FOCUSED LANE panel (right rail); no placement here.
 
-        // Y-density stepper (left edge of canvas)
+        // ── Y-axis column (left edge) ────────────────────────────────────────
+        // Bottom zone: [yQ lock] 28px + 4px gap + [# corner] 28px = 60px total.
+        // Y-stepper cluster is centred in the remaining space above.
         auto yStepCol = sc.removeFromLeft (yStepperW);
         sc.removeFromLeft (3);
         {
-            const int btnH = 28, yMid = yStepCol.getCentreY();
-            tickYPlusBtn .setBounds (yStepCol.getX(), yMid - btnH - 2, yStepperW, btnH);
-            tickYMinusBtn.setBounds (yStepCol.getX(), yMid + 2,        yStepperW, btnH);
-        }
+            constexpr int btnH = 22, lblH = 14, stepH = 11;
+            constexpr int kStepperH = btnH + lblH + stepH + btnH;   // 69px
+            constexpr int kBotZone  = 28 + 4 + xStepperH;           // yQ + gap + #
+            constexpr int kPH = 20, kPG = 2, kGG = 6;               // preset btn height, gap, inter-group gap
+            const int availTop = yStepCol.getY();
+            const int availH   = yStepCol.getHeight() - kBotZone - 8;
+            const int xLeft    = yStepCol.getX();
 
-        // X-density stepper (bottom edge of canvas)
+            const int msgType = static_cast<int> (
+                proc.apvts.getRawParameterValue (laneParam (_focusedLane, ParamID::msgType))->load());
+            const bool isNote = (msgType == 3);
+            const bool isCC01 = (msgType == 0 || msgType == 1);
+            const bool isPB   = (msgType == 2);
+
+            // Hide all Y preset buttons; re-show the relevant ones below.
+            for (auto& b : yOctavePresetBtns)   b.setBounds ({});
+            for (auto& b : yNoteStepPresetBtns)  b.setBounds ({});
+            for (auto& b : yDozenPresetBtns)     b.setBounds ({});
+            for (auto& b : yCCStepPresetBtns)    b.setBounds ({});
+            for (auto& b : yPBRangePresetBtns)   b.setBounds ({});
+            for (auto& b : yPBStepPresetBtns)    b.setBounds ({});
+
+            const int nRange = isNote ? kNumYOctavePresets
+                                      : (isCC01 ? kNumYDozenPresets
+                                                : (isPB ? kNumYPBRangePresets : 0));
+            const int nStep  = isNote ? kNumYNoteStepPresets
+                                      : (isCC01 ? kNumYCCStepPresets
+                                                : (isPB ? kNumYPBStepPresets : 0));
+            const int rangeGroupH = nRange > 0 ? nRange * kPH + (nRange - 1) * kPG : 0;
+            const int stepGroupH  = nStep  > 0 ? nStep  * kPH + (nStep  - 1) * kPG : 0;
+            const int totalH = rangeGroupH + (rangeGroupH > 0 ? kGG : 0)
+                             + kStepperH
+                             + (stepGroupH  > 0 ? kGG : 0) + stepGroupH;
+
+            int y = availTop + (availH - totalH) / 2;
+
+            // ── Range presets (above Y+) ──────────────────────────────────────
+            auto placeGroup = [&] (auto& arr, int n)
+            {
+                for (int i = 0; i < n; ++i)
+                {
+                    arr[i].setBounds (xLeft, y, yStepperW, kPH);
+                    y += kPH + kPG;
+                }
+                if (n > 0) y += kGG - kPG;   // replace last small gap with inter-group gap
+            };
+            if (isNote)       placeGroup (yOctavePresetBtns,  kNumYOctavePresets);
+            else if (isCC01)  placeGroup (yDozenPresetBtns,   kNumYDozenPresets);
+            else if (isPB)    placeGroup (yPBRangePresetBtns, kNumYPBRangePresets);
+
+            // ── Stepper cluster ───────────────────────────────────────────────
+            tickYPlusBtn   .setBounds (xLeft, y, yStepperW, btnH);  y += btnH;
+            tickYCountLabel.setBounds (xLeft, y, yStepperW, lblH);  y += lblH;
+            yTickStepLabel .setBounds (xLeft, y, yStepperW, stepH); y += stepH;
+            tickYMinusBtn  .setBounds (xLeft, y, yStepperW, btnH);  y += btnH;
+
+            // ── Step presets (below Y-) ───────────────────────────────────────
+            if (isNote)      { y += kGG; placeGroup (yNoteStepPresetBtns, kNumYNoteStepPresets); }
+            else if (isCC01) { y += kGG; placeGroup (yCCStepPresetBtns,   kNumYCCStepPresets); }
+            else if (isPB)   { y += kGG; placeGroup (yPBStepPresetBtns,   kNumYPBStepPresets); }
+        }
+        // yQ just above the corner #; # at the very bottom (aligned with X row).
+        yQuantizeBtn.setBounds (yStepCol.getX(),
+                                yStepCol.getBottom() - xStepperH - 4 - 28,
+                                yStepperW, 28);
+        xyLockBtn   .setBounds (yStepCol.getX(),
+                                yStepCol.getBottom() - xStepperH,
+                                yStepperW, xStepperH);
+
+        // ── X-axis row (bottom edge) ─────────────────────────────────────────
+        // Layout: [xQ] gap … [X− count X+ centred] …
+        // xQ is the right half of the ⌞ corner (# is at yStepCol bottom, xQ is
+        // immediately to the right — together they form ⌞).
         sc.removeFromBottom (3);
         {
             auto row = sc.removeFromBottom (xStepperH);
-            tickXMinusBtn.setBounds (row.removeFromLeft (28));
-            row.removeFromLeft (4);
-            tickXPlusBtn .setBounds (row.removeFromLeft (28));
+            constexpr int kCountW = 24, kStepLblW = 42;
+
+            // xQ at the leftmost position in the row (flush against the # corner)
+            xQuantizeBtn.setBounds (row.removeFromLeft (28));
+
+            const bool isSync = proc.apvts.getRawParameterValue (ParamID::syncEnabled)->load() > 0.5f;
+            if (isSync)
+            {
+                // ── Sync mode: entire cluster centred in the space after xQ ────
+                constexpr int kPW  = 32, kPG  = 3;   // preset button width + gap
+                constexpr int kDW  = 28, kDG  = 3;   // duration button width + gap
+                constexpr int kGG  = 6;               // gap between groups
+                constexpr int kStepGroupW = kNumXStepPresets    * kPW + (kNumXStepPresets    - 1) * kPG;
+                constexpr int kDurGroupW  = kNumSyncBeatsPresets * kDW + (kNumSyncBeatsPresets - 1) * kDG;
+                constexpr int kStepperW   = 28 + 2 + kCountW + 2 + kStepLblW + 2 + 28;
+                constexpr int kTotalW     = kStepGroupW + kGG + kStepperW + kGG + kDurGroupW;
+
+                const int cx = row.getX() + (row.getWidth() - kTotalW) / 2;
+                int x = cx;
+
+                for (auto& b : xStepPresetBtns)
+                {
+                    b.setBounds (x, row.getY(), kPW, row.getHeight());
+                    x += kPW + kPG;
+                }
+                x += kGG - kPG;   // replace last gap with inter-group gap
+
+                tickXMinusBtn  .setBounds (x,                          row.getY(), 28,         row.getHeight());  x += 28 + 2;
+                tickXCountLabel.setBounds (x,                          row.getY(), kCountW,    row.getHeight());  x += kCountW + 2;
+                xTickStepLabel .setBounds (x,                          row.getY(), kStepLblW,  row.getHeight());  x += kStepLblW + 2;
+                tickXPlusBtn   .setBounds (x,                          row.getY(), 28,         row.getHeight());  x += 28 + kGG;
+
+                for (auto& b : syncBeatsPresetBtns)
+                {
+                    b.setBounds (x, row.getY(), kDW, row.getHeight());
+                    x += kDW + kDG;
+                }
+            }
+            else
+            {
+                // ── Free mode: hide presets, centre the stepper cluster ───────
+                for (auto& b : xStepPresetBtns)     b.setBounds ({});
+                for (auto& b : syncBeatsPresetBtns)  b.setBounds ({});
+
+                row.removeFromLeft (8);
+                constexpr int kStepW = 28 + 2 + kCountW + 2 + kStepLblW + 2 + 28;
+                const int xStart = row.getX() + (row.getWidth() - kStepW) / 2;
+                tickXMinusBtn  .setBounds (xStart,                                       row.getY(), 28,         row.getHeight());
+                tickXCountLabel.setBounds (xStart + 30,                                  row.getY(), kCountW,    row.getHeight());
+                xTickStepLabel .setBounds (xStart + 30 + kCountW + 2,                   row.getY(), kStepLblW,  row.getHeight());
+                tickXPlusBtn   .setBounds (xStart + 30 + kCountW + 2 + kStepLblW + 2,  row.getY(), 28,         row.getHeight());
+            }
         }
 
         // Curve display fills remaining stage area
         curveDisplay.setBounds (sc);
     }
 
-    // ── Help overlay ──────────────────────────────────────────────────────────
+    // ── Scale browser overlay panel ────────────────────────────────────────────
+    if (_scaleOverlayOpen && ! _musicalPanel.isEmpty())
+    {
+        using namespace Layout;
+        constexpr int kOvW   = 340;
+        constexpr int kOvPad = 8;
+        constexpr int kOvH   = kOvPad + kFamilyBarH + 4 + kSubfamilyRowH + 4 + kActionRowH + 4 + kScaleLatticeH + kOvPad;
+        const int kOvX = getWidth() - kOvW - 10;
+        const int kOvY = (curveDisplay.isVisible()
+                          ? curveDisplay.getBoundsInParent().getY() + 8 : 60);
+        const juce::Rectangle<int> ovPanel (kOvX, kOvY, kOvW, kOvH);
+
+        _scaleOverlay.panelRect = ovPanel;
+        _scaleOverlay.setBounds (getLocalBounds());
+
+        // Make scale components visible — they may have been hidden while the zone was collapsed.
+        // NOTE: do NOT call setActiveFamily() here — it calls resized() and would recurse.
+        // Restore subfamily chip visibility directly instead.
+        for (auto& b : familyBtns) b.setVisible (true);
+        recentFamilyBtn.setVisible (true);
+        scaleLattice   .setVisible (true);
+        scaleRotateBtn .setVisible (true);
+        scaleAllBtn    .setVisible (true);
+        scaleNoneBtn   .setVisible (true);
+        scaleInvBtn    .setVisible (true);
+        scaleRootBtn   .setVisible (true);
+        scaleLabel     .setVisible (true);
+        maskLabel      .setVisible (true);
+        // Restore per-chip visibility without calling setActiveFamily (avoids re-entrant resized()).
+        for (int i = 0; i < kMaxModes; ++i)
+            subfamilyBtns[static_cast<size_t>(i)].setVisible (i < _numSubfamilyChips);
+
+        auto ne = ovPanel.reduced (kOvPad, kOvPad);
+
+        // Family tab bar
+        {
+            auto fRow = ne.removeFromTop (kFamilyBarH);
+            const int N    = dcScale::kNumFamilies + 1;
+            const int btnW = (fRow.getWidth() - (N - 1)) / N;
+            for (int f = 0; f < dcScale::kNumFamilies; ++f)
+            {
+                familyBtns[static_cast<size_t>(f)].setBounds (fRow.removeFromLeft (btnW));
+                fRow.removeFromLeft (1);
+            }
+            recentFamilyBtn.setBounds (fRow.removeFromLeft (btnW));
+        }
+        ne.removeFromTop (4);
+
+        // Subfamily chips
+        {
+            auto sRow = ne.removeFromTop (kSubfamilyRowH);
+            const int N = _numSubfamilyChips;
+            if (N > 0)
+            {
+                const int chipW = (sRow.getWidth() - (N - 1) * 2) / N;
+                for (int i = 0; i < kMaxModes; ++i)
+                {
+                    if (i < N)
+                    {
+                        subfamilyBtns[static_cast<size_t>(i)].setBounds (sRow.removeFromLeft (chipW));
+                        if (i < N - 1) sRow.removeFromLeft (2);
+                    }
+                    else { subfamilyBtns[static_cast<size_t>(i)].setBounds ({}); }
+                }
+            }
+        }
+        ne.removeFromTop (4);
+
+        // Action row
+        {
+            auto aRow = ne.removeFromTop (kActionRowH);
+            maskLabel .setBounds (aRow.removeFromRight (52).withSizeKeepingCentre (52, 20));
+            aRow.removeFromRight (3);
+            scaleLabel.setBounds (aRow.removeFromRight (84).withSizeKeepingCentre (84, 14));
+            aRow.removeFromRight (8);
+            scaleRotateBtn.setBounds (aRow.removeFromLeft (28)); aRow.removeFromLeft (6);
+            scaleAllBtn   .setBounds (aRow.removeFromLeft (28)); aRow.removeFromLeft (2);
+            scaleNoneBtn  .setBounds (aRow.removeFromLeft (28)); aRow.removeFromLeft (2);
+            scaleInvBtn   .setBounds (aRow.removeFromLeft (28)); aRow.removeFromLeft (2);
+            scaleRootBtn  .setBounds (aRow.removeFromLeft (28));
+        }
+        ne.removeFromTop (4);
+
+        // Lattice
+        scaleLattice.setBounds (ne.removeFromTop (kScaleLatticeH));
+    }
+
+    // ── Full-editor overlays ──────────────────────────────────────────────────
     helpOverlay.setBounds (getLocalBounds());
+    // Routing overlay: if visible, reposition the panel without recreating attachments.
+    // anchor = the routing button for the currently focused lane (valid in both
+    // single-lane and all-lanes mode since focL is always a valid lane index).
+    if (_routingOverlay.isVisible())
+    {
+        const int anchorL = juce::jlimit (0, kMaxLanes - 1, _focusedLane);
+        _routingOverlay.reanchor (laneTypeBtn[static_cast<size_t> (anchorL)].getBoundsInParent());
+    }
+    else
+    {
+        _routingOverlay.setBounds (getLocalBounds());
+    }
 }

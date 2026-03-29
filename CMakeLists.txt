@@ -68,6 +68,8 @@ juce_add_plugin(DrawnCurve
         UIInterfaceOrientationPortraitUpsideDown
         UIInterfaceOrientationLandscapeLeft
         UIInterfaceOrientationLandscapeRight
+    BACKGROUND_AUDIO_ENABLED TRUE
+    PLIST_TO_MERGE "${CMAKE_SOURCE_DIR}/Assets/Info-Standalone.plist"
 )
 
 # Ensure all source files are interpreted as UTF-8 (for Unicode symbols)

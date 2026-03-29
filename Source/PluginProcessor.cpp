@@ -132,6 +132,26 @@ juce::AudioProcessorValueTreeState::ParameterLayout DrawnCurveProcessor::createP
             juce::ParameterID { laneParam (L, ParamID::phaseOffset), 1 },
             lname + "Phase Offset", 0, 100, 0));  ///< Curve start offset in percent
 
+        layout.add (std::make_unique<juce::AudioParameterBool>(
+            juce::ParameterID { laneParam (L, ParamID::xQuantize), 1 },
+            lname + "X Quantize", false));  ///< Snap playhead to X-grid boundaries (S&H in time)
+
+        layout.add (std::make_unique<juce::AudioParameterBool>(
+            juce::ParameterID { laneParam (L, ParamID::yQuantize), 1 },
+            lname + "Y Quantize", false));  ///< Snap output to nearest Y-grid tick level
+
+        layout.add (std::make_unique<juce::AudioParameterBool>(
+            juce::ParameterID { laneParam (L, ParamID::legatoMode), 1 },
+            lname + "Legato", false));  ///< Note On before Note Off for legato ties (Note mode only)
+
+        layout.add (std::make_unique<juce::AudioParameterInt>(
+            juce::ParameterID { laneParam (L, ParamID::xDivisions), 1 },
+            lname + "X Grid Divisions", 2, 32, 4));
+
+        layout.add (std::make_unique<juce::AudioParameterInt>(
+            juce::ParameterID { laneParam (L, ParamID::yDivisions), 1 },
+            lname + "Y Grid Divisions", 2, 24, 4));
+
 #if defined(DC_HAVE_PER_LANE_PLAYBACK_PARAMS)
         // TODO: add ParamID entries for per-lane playback
         // Prep: Per-lane playback controls (currently unused by engine; UI TBD)
@@ -459,6 +479,21 @@ void DrawnCurveProcessor::processBlock (juce::AudioBuffer<float>& buffer,
                               getSampleRate(), midiOut, effectiveSpeed, dir);
 #endif
     }
+
+    // In standalone mode, forward generated MIDI to virtual port + direct target.
+    {
+        auto* vOut = _virtualMidiOut.load (std::memory_order_acquire);
+        auto* dOut = _directMidiOut.load  (std::memory_order_acquire);
+        if (vOut != nullptr || dOut != nullptr)
+        {
+            for (const auto meta : midiMessages)
+            {
+                const auto& msg = meta.getMessage();
+                if (vOut) vOut->sendMessageNow (msg);
+                if (dOut) dOut->sendMessageNow (msg);
+            }
+        }
+    }
 }
 
 //==============================================================================
@@ -515,6 +550,22 @@ void DrawnCurveProcessor::hiResTimerCallback()
 
     if (! localBuf.isEmpty())
     {
+        // In standalone mode, send to virtual port + direct target.
+        {
+            auto* vOut = _virtualMidiOut.load (std::memory_order_acquire);
+            auto* dOut = _directMidiOut.load  (std::memory_order_acquire);
+            if (vOut != nullptr || dOut != nullptr)
+            {
+                for (const auto meta : localBuf)
+                {
+                    const auto& msg = meta.getMessage();
+                    if (vOut) vOut->sendMessageNow (msg);
+                    if (dOut) dOut->sendMessageNow (msg);
+                }
+            }
+        }
+
+        // Also buffer for processBlock (flushed to the host/AudioProcessorPlayer path).
         juce::SpinLock::ScopedLockType lock (_pendingMidiLock);
         for (const auto meta : localBuf)
             _pendingMidi.addEvent (meta.getMessage(), meta.samplePosition);
@@ -568,10 +619,21 @@ void DrawnCurveProcessor::finalizeCapture (int lane)
      * TODO: migrate to shared_ptr<const LaneSnapshot> ownership to allow safe
      * reclamation without leaks.
      */
+    const bool  xQuant  = apvts.getRawParameterValue (laneParam (lane, ParamID::xQuantize))->load() > 0.5f;
+    const bool  yQuant  = apvts.getRawParameterValue (laneParam (lane, ParamID::yQuantize))->load() > 0.5f;
+    const bool  legato  = apvts.getRawParameterValue (laneParam (lane, ParamID::legatoMode))->load() > 0.5f;
+    const auto  xDiv    = static_cast<uint8_t> (static_cast<int> (apvts.getRawParameterValue (laneParam (lane, ParamID::xDivisions))->load()));
+    const auto  yDiv    = static_cast<uint8_t> (static_cast<int> (apvts.getRawParameterValue (laneParam (lane, ParamID::yDivisions))->load()));
+
     auto* snap = new LaneSnapshot (_capture.finalize (ccNum, ch, minOut, maxOut, smooth, msgType));
     snap->noteVelocity = noteVel;
     snap->oneShot      = oneShot;
     snap->phaseOffset  = phaseOffPct / 100.0f;
+    snap->xQuantize    = xQuant;
+    snap->yQuantize    = yQuant;
+    snap->legatoMode   = legato;
+    snap->xDivisions   = xDiv;
+    snap->yDivisions   = yDiv;
 
 #if JUCE_DEBUG
     ++gSnapshotReplacements;
@@ -614,6 +676,12 @@ void DrawnCurveProcessor::updateLaneSnapshot (int lane)
      * TODO: migrate to shared_ptr<const LaneSnapshot> ownership to allow safe
      * reclamation without leaks.
      */
+    const bool  xQuant  = apvts.getRawParameterValue (laneParam (lane, ParamID::xQuantize))->load() > 0.5f;
+    const bool  yQuant  = apvts.getRawParameterValue (laneParam (lane, ParamID::yQuantize))->load() > 0.5f;
+    const bool  legato  = apvts.getRawParameterValue (laneParam (lane, ParamID::legatoMode))->load() > 0.5f;
+    const auto  xDiv    = static_cast<uint8_t> (static_cast<int> (apvts.getRawParameterValue (laneParam (lane, ParamID::xDivisions))->load()));
+    const auto  yDiv    = static_cast<uint8_t> (static_cast<int> (apvts.getRawParameterValue (laneParam (lane, ParamID::yDivisions))->load()));
+
     // Clone the existing snapshot, then overwrite only the param-driven fields.
     auto* snap = new LaneSnapshot (*existing);
     snap->ccNumber       = ccNum;
@@ -625,6 +693,11 @@ void DrawnCurveProcessor::updateLaneSnapshot (int lane)
     snap->noteVelocity   = noteVel;
     snap->oneShot        = oneShot;
     snap->phaseOffset    = phaseOffPct / 100.0f;
+    snap->xQuantize      = xQuant;
+    snap->yQuantize      = yQuant;
+    snap->legatoMode     = legato;
+    snap->xDivisions     = xDiv;
+    snap->yDivisions     = yDiv;
 
 #if JUCE_DEBUG
     ++gSnapshotReplacements;
@@ -666,6 +739,56 @@ void DrawnCurveProcessor::clearAllSnapshots()
     _laneSnaps.fill (nullptr);
 }
 
+void DrawnCurveProcessor::deleteLane (int lane)
+{
+    if (activeLaneCount <= 1 || lane < 0 || lane >= activeLaneCount) return;
+
+    // Shift every lane above 'lane' down by one slot.
+    // Both APVTS parameters and curve snapshots are copied to the destination.
+    for (int src = lane + 1; src < activeLaneCount; ++src)
+    {
+        const int dst = src - 1;
+
+        // ── Copy APVTS parameters ──────────────────────────────────────────
+        // Using getValue() / setValueNotifyingHost() so all UI listeners fire.
+        static const char* const kBases[] = {
+            "msgType", "ccNumber", "midiChannel", "smoothing",
+            "minOutput", "maxOutput", "noteVelocity", "loopMode",
+            "phaseOffset", "scaleMode", "scaleRoot", "scaleMask",
+            "enabled", "xQuantize", "yQuantize", "legatoMode", "xDivisions", "yDivisions", nullptr
+        };
+        for (int i = 0; kBases[i] != nullptr; ++i)
+        {
+            const juce::String base (kBases[i]);
+            if (auto* pSrc = apvts.getParameter (laneParam (src, base)))
+            if (auto* pDst = apvts.getParameter (laneParam (dst, base)))
+                pDst->setValueNotifyingHost (pSrc->getValue());
+        }
+
+        // ── Copy curve snapshot ───────────────────────────────────────────
+        // A new heap copy is made so the audio thread can safely finish
+        // reading the original while the UI thread installs the new one.
+        const auto* srcSnap = _laneSnaps[static_cast<size_t> (src)];
+        if (srcSnap && srcSnap->valid)
+        {
+            auto* newSnap = new LaneSnapshot (*srcSnap);
+            _laneSnaps[static_cast<size_t> (dst)] = newSnap;
+            juce::SpinLock::ScopedLockType lock (_engineLock);
+            _engine.setSnapshot (dst, newSnap);
+        }
+        else
+        {
+            _laneSnaps[static_cast<size_t> (dst)] = nullptr;
+            juce::SpinLock::ScopedLockType lock (_engineLock);
+            _engine.clearSnapshot (dst);
+        }
+    }
+
+    // Clear the vacated top slot and shrink the active count.
+    clearSnapshot (activeLaneCount - 1);
+    --activeLaneCount;
+}
+
 //==============================================================================
 // MIDI Panic
 //==============================================================================
@@ -701,6 +824,21 @@ void DrawnCurveProcessor::restartAllLanes()
 void DrawnCurveProcessor::sendPanic()
 {
     _panicNeeded.store (true, std::memory_order_release);
+}
+
+void DrawnCurveProcessor::setVirtualMidiOutput (juce::MidiOutput* output) noexcept
+{
+    _virtualMidiOut.store (output, std::memory_order_release);
+}
+
+void DrawnCurveProcessor::setDirectMidiOutput (juce::MidiOutput* output) noexcept
+{
+    _directMidiOut.store (output, std::memory_order_release);
+}
+
+juce::MidiOutput* DrawnCurveProcessor::getDirectMidiOutput() const noexcept
+{
+    return _directMidiOut.load (std::memory_order_acquire);
 }
 
 //==============================================================================
