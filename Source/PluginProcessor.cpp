@@ -467,11 +467,16 @@ void DrawnCurveProcessor::processBlock (juce::AudioBuffer<float>& buffer,
     }
 
     // ── Advance engine on the audio thread ────────────────────────────────────
+    // Use a temporary buffer to minimize time spent holding the spinlock.
+    // The engine writes to tempMidiBuffer while locked, then we swap it into
+    // midiMessages after releasing the lock. This prevents the audio thread
+    // from blocking the hi-res timer for extended periods.
+    juce::MidiBuffer tempMidiBuffer;
     {
         juce::SpinLock::ScopedLockType lock (_engineLock);
-        auto midiOut = [&midiMessages] (uint8_t status, uint8_t d1, uint8_t d2)
+        auto midiOut = [&tempMidiBuffer] (uint8_t status, uint8_t d1, uint8_t d2)
         {
-            midiMessages.addEvent (makeMidiMessage (status, d1, d2), 0);
+            tempMidiBuffer.addEvent (makeMidiMessage (status, d1, d2), 0);
         };
 #if defined(DC_HAVE_PER_LANE_PLAYBACK_PARAMS)
         _engine.processBlock (static_cast<uint32_t> (buffer.getNumSamples()),
@@ -481,6 +486,10 @@ void DrawnCurveProcessor::processBlock (juce::AudioBuffer<float>& buffer,
                               getSampleRate(), midiOut, effectiveSpeed, dir);
 #endif
     }
+    
+    // Add generated MIDI to output buffer (lock is now released)
+    for (const auto meta : tempMidiBuffer)
+        midiMessages.addEvent (meta.getMessage(), meta.samplePosition);
 
     // In standalone mode, forward generated MIDI to virtual port + direct target.
     {
@@ -514,7 +523,9 @@ void DrawnCurveProcessor::hiResTimerCallback()
     const auto nominalFrames =
         static_cast<uint32_t> (_timerSampleRate * kTimerIntervalMs / 1000.0);
 
-    const float globalSpeed = _effectiveSpeedRatio.load (std::memory_order_relaxed);
+    // Read speed directly from the parameter tree — _effectiveSpeedRatio is only
+    // updated by processBlock(), which never runs in standalone mode (no audio device).
+    const float globalSpeed = apvts.getRawParameterValue (ParamID::playbackSpeed)->load();
     const auto  globalDir   = static_cast<PlaybackDirection> (
         static_cast<int> (apvts.getRawParameterValue (ParamID::playbackDirection)->load()));
 #if defined(DC_HAVE_PER_LANE_PLAYBACK_PARAMS)
@@ -576,6 +587,28 @@ void DrawnCurveProcessor::hiResTimerCallback()
 #if JUCE_DEBUG
     dbgLogCountersIfNeeded();
 #endif
+}
+
+//==============================================================================
+// Standalone Teach/Learn helper (no audio device required)
+//==============================================================================
+
+void DrawnCurveProcessor::handleTeachMidi (const juce::MidiMessage& msg)
+{
+    // Called from the TeachMidiCallback adapter in StandaloneApp.cpp.
+    // Mirrors the Teach/Learn CC-detect logic in processBlock.
+    const int pending = _teachPendingLane.load (std::memory_order_relaxed);
+    if (pending < 0) return;
+
+    const int msgType = static_cast<int> (
+        apvts.getRawParameterValue (laneParam (pending, ParamID::msgType))->load());
+    if (msgType == 0 && msg.isController())
+    {
+        const juce::String pid = laneParam (pending, ParamID::ccNumber);
+        if (auto* p = dynamic_cast<juce::AudioParameterInt*> (apvts.getParameter (pid)))
+            *p = msg.getControllerNumber();
+        _teachPendingLane.store (-1, std::memory_order_relaxed);
+    }
 }
 
 //==============================================================================

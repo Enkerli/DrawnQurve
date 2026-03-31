@@ -1,5 +1,8 @@
 cmake_minimum_required(VERSION 3.22)
 project(DrawnCurve VERSION 1.0.0)
+# User-facing name is "DrawnQurve" — the cmake target remains "DrawnCurve"
+# to avoid breaking all target_* references.  PRODUCT_NAME and BUNDLE_ID
+# control the name visible to users and the App Store.
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED YES)
@@ -31,46 +34,86 @@ if(NOT JUCE_FOUND)
     add_subdirectory("${JUCE_PATH}" JUCE)
 endif()
 
+# ── Detect platform ──────────────────────────────────────────────────────────
+set(IS_IOS FALSE)
+set(IS_MACOS FALSE)
+
+if(CMAKE_SYSTEM_NAME STREQUAL "iOS")
+    set(IS_IOS TRUE)
+    message(STATUS "Configuring for iOS")
+elseif(CMAKE_SYSTEM_NAME STREQUAL "Darwin" OR APPLE AND NOT IOS)
+    set(IS_MACOS TRUE)
+    message(STATUS "Configuring for macOS")
+endif()
+
+# ── Platform-specific deployment targets ──────────────────────────────────────
+if(IS_IOS)
+    set(CMAKE_OSX_DEPLOYMENT_TARGET "16.0" CACHE STRING "Minimum iOS deployment version")
+elseif(IS_MACOS)
+    set(CMAKE_OSX_DEPLOYMENT_TARGET "11.0" CACHE STRING "Minimum macOS deployment version")
+endif()
+
 # ── Plugin target ─────────────────────────────────────────────────────────────
 #
 # IS_MIDI_EFFECT TRUE  →  kAudioUnitType_MIDIProcessor ('aumi')
 # No audio buses.  MIDI output only via midiOutputEventBlock.
 # ─────────────────────────────────────────────────────────────────────────────
-juce_add_plugin(DrawnCurve
+
+# Build base plugin properties (common to all platforms)
+set(PLUGIN_BASE_PROPS
     COMPANY_NAME                "Enkerli"
     COMPANY_WEBSITE             "https://enkerli.com"
-    BUNDLE_ID                   "com.enkerli.DrawnCurve"
+    BUNDLE_ID                   "com.enkerli.DrawnQurve"
     PLUGIN_MANUFACTURER_CODE    Enke
-    PLUGIN_CODE                 Dcau
-    FORMATS                     AUv3 Standalone
-    PRODUCT_NAME                "DrawnCurve"
+    PLUGIN_CODE                 Dqau
+    PRODUCT_NAME                "DrawnQurve"
     ICON_BIG                    "${CMAKE_SOURCE_DIR}/Assets/icon_1024.png"
-    DESCRIPTION                 "Drawn-curve MIDI CC looper"
+    DESCRIPTION                 "Drawn-qurve MIDI looper"
     IS_SYNTH                    FALSE
     NEEDS_MIDI_INPUT            TRUE
     NEEDS_MIDI_OUTPUT           TRUE
     IS_MIDI_EFFECT              TRUE
     EDITOR_WANTS_KEYBOARD_FOCUS FALSE
     COPY_PLUGIN_AFTER_BUILD     FALSE
-    MICROPHONE_PERMISSION_ENABLED FALSE
-    # JUCE generates UISupportedInterfaceOrientations from these properties;
-    # using IPHONE_SCREEN_ORIENTATIONS / IPAD_SCREEN_ORIENTATIONS here takes
-    # precedence over the JUCE default (Portrait + Landscape only) and ensures
-    # PortraitUpsideDown is included.  PLIST_TO_MERGE for the same key was
-    # silently ignored because JUCE writes the key after the merge step.
-    IPHONE_SCREEN_ORIENTATIONS
-        UIInterfaceOrientationPortrait
-        UIInterfaceOrientationPortraitUpsideDown
-        UIInterfaceOrientationLandscapeLeft
-        UIInterfaceOrientationLandscapeRight
-    IPAD_SCREEN_ORIENTATIONS
-        UIInterfaceOrientationPortrait
-        UIInterfaceOrientationPortraitUpsideDown
-        UIInterfaceOrientationLandscapeLeft
-        UIInterfaceOrientationLandscapeRight
-    BACKGROUND_AUDIO_ENABLED TRUE
-    PLIST_TO_MERGE "${CMAKE_SOURCE_DIR}/Assets/Info-Standalone.plist"
 )
+
+# Add platform-specific properties
+if(IS_IOS)
+    juce_add_plugin(DrawnCurve
+        ${PLUGIN_BASE_PROPS}
+        FORMATS                     AUv3 Standalone
+        MICROPHONE_PERMISSION_ENABLED FALSE
+        # JUCE generates UISupportedInterfaceOrientations from these properties;
+        # using IPHONE_SCREEN_ORIENTATIONS / IPAD_SCREEN_ORIENTATIONS here takes
+        # precedence over the JUCE default (Portrait + Landscape only) and ensures
+        # PortraitUpsideDown is included.  PLIST_TO_MERGE for the same key was
+        # silently ignored because JUCE writes the key after the merge step.
+        IPHONE_SCREEN_ORIENTATIONS
+            UIInterfaceOrientationPortrait
+            UIInterfaceOrientationPortraitUpsideDown
+            UIInterfaceOrientationLandscapeLeft
+            UIInterfaceOrientationLandscapeRight
+        IPAD_SCREEN_ORIENTATIONS
+            UIInterfaceOrientationPortrait
+            UIInterfaceOrientationPortraitUpsideDown
+            UIInterfaceOrientationLandscapeLeft
+            UIInterfaceOrientationLandscapeRight
+        BACKGROUND_AUDIO_ENABLED TRUE
+        PLIST_TO_MERGE "${CMAKE_SOURCE_DIR}/Assets/Info-Standalone.plist"
+    )
+elseif(IS_MACOS)
+    juce_add_plugin(DrawnCurve
+        ${PLUGIN_BASE_PROPS}
+        FORMATS                     AU AUv3 Standalone
+        # macOS does not use BACKGROUND_AUDIO_ENABLED or orientation properties
+    )
+else()
+    # Fallback for other platforms (Windows, Linux, etc.)
+    juce_add_plugin(DrawnCurve
+        ${PLUGIN_BASE_PROPS}
+        FORMATS                     Standalone
+    )
+endif()
 
 # Ensure all source files are interpreted as UTF-8 (for Unicode symbols)
 add_compile_options($<$<CXX_COMPILER_ID:GNU,Clang>:-finput-charset=UTF-8>)
@@ -115,6 +158,7 @@ target_sources(DrawnCurve PRIVATE
     Source/PluginEditor.cpp
     Source/Engine/GestureEngine.cpp
     Source/Engine/GestureCaptureSession.cpp
+    Source/StandaloneApp.cpp
     # Header-only — listed so Xcode shows them in the project navigator
     Source/ScaleData.h
     Source/UI/PCSPreview.h
@@ -127,14 +171,20 @@ target_include_directories(DrawnCurve PRIVATE Source/Engine Source Source/UI)
 # ── iOS code signing ──────────────────────────────────────────────────────────
 # Embed signing identity so cmake regeneration preserves it.
 # These settings match the provisioning profiles on the build machine.
-set_target_properties (DrawnCurve_AUv3 PROPERTIES
-    XCODE_ATTRIBUTE_DEVELOPMENT_TEAM        "P8W7XXJN6C"
-    XCODE_ATTRIBUTE_CODE_SIGN_STYLE         "Automatic"
-    XCODE_ATTRIBUTE_CODE_SIGN_IDENTITY      "Apple Development")
-set_target_properties (DrawnCurve_Standalone PROPERTIES
-    XCODE_ATTRIBUTE_DEVELOPMENT_TEAM        "P8W7XXJN6C"
-    XCODE_ATTRIBUTE_CODE_SIGN_STYLE         "Automatic"
-    XCODE_ATTRIBUTE_CODE_SIGN_IDENTITY      "Apple Development")
+if(IS_IOS)
+    if(TARGET DrawnCurve_AUv3)
+        set_target_properties (DrawnCurve_AUv3 PROPERTIES
+            XCODE_ATTRIBUTE_DEVELOPMENT_TEAM        "P8W7XXJN6C"
+            XCODE_ATTRIBUTE_CODE_SIGN_STYLE         "Automatic"
+            XCODE_ATTRIBUTE_CODE_SIGN_IDENTITY      "Apple Development")
+    endif()
+    if(TARGET DrawnCurve_Standalone)
+        set_target_properties (DrawnCurve_Standalone PROPERTIES
+            XCODE_ATTRIBUTE_DEVELOPMENT_TEAM        "P8W7XXJN6C"
+            XCODE_ATTRIBUTE_CODE_SIGN_STYLE         "Automatic"
+            XCODE_ATTRIBUTE_CODE_SIGN_IDENTITY      "Apple Development")
+    endif()
+endif()
 
 target_compile_definitions(DrawnCurve
     PUBLIC
@@ -145,6 +195,14 @@ target_compile_definitions(DrawnCurve
         # Enable per-lane playback parameters (speed multiplier, direction, sync group).
         # Remove to compile without per-lane playback support.
         DC_HAVE_PER_LANE_PLAYBACK_PARAMS=1
+        # Tell JUCE standalone not to open audio devices for MIDI-only plugins
+        # This prevents the RemoteIO/CoreAudio errors on macOS
+        JUCE_STANDALONE_FILTER_WINDOW_USE_KIOSK_MODE=0
+)
+
+# Platform-specific definitions
+if(IS_IOS)
+    target_compile_definitions(DrawnCurve PUBLIC
         # Known JUCE 8.x issue: the Standalone wrapper tries to open RemoteIO
         # with 2 audio channels even for IS_MIDI_EFFECT plugins (0 audio buses).
         # AURemoteIO returns error 561015905 and logs to console; plugin audio
@@ -152,7 +210,16 @@ target_compile_definitions(DrawnCurve
         # correctly in real hosts (AUM, Cubasis, etc.) without this error.
         # CA Event launch-measurement failures in the same log are also benign
         # sandbox artefacts and cannot be suppressed from our code.
-)
+    )
+elseif(IS_MACOS)
+    target_compile_definitions(DrawnCurve PUBLIC
+        # Use a custom standalone app (StandaloneApp.cpp) instead of JUCE's default
+        # StandaloneFilterApp.  The custom app closes the dummy CoreAudio output that
+        # JUCE opens for MIDI-effect plugins, preventing HALC_ProxyIOContext overload
+        # messages and the mutex crash on quit.
+        JUCE_USE_CUSTOM_PLUGIN_STANDALONE_APP=1
+    )
+endif()
 
 target_link_libraries(DrawnCurve
     PRIVATE

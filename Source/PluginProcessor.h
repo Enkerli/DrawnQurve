@@ -119,7 +119,7 @@ public:
     ~DrawnCurveProcessor() override;
 
     // ── AudioProcessor identity ───────────────────────────────────────────────
-    const juce::String getName() const override { return "DrawnCurve"; }
+    const juce::String getName() const override { return "DrawnQurve"; }
 
     // acceptsMidi = true so incoming MIDI CC messages can trigger Teach/Learn.
     bool acceptsMidi()  const override { return true;  }
@@ -139,6 +139,7 @@ public:
     void prepareToPlay  (double sampleRate, int samplesPerBlock) override;
     void releaseResources()                                      override;
     void processBlock   (juce::AudioBuffer<float>&, juce::MidiBuffer&) override;
+    using AudioProcessor::processBlock;   // expose double-buffer overload; avoids -Woverloaded-virtual
 
     // ── Editor ───────────────────────────────────────────────────────────────
     bool hasEditor() const override { return true; }
@@ -251,8 +252,13 @@ public:
     /// Safe to call from any thread; executes on the next processBlock.
     void sendPanic();
 
+    // ── Standalone Teach/Learn helper ────────────────────────────────────────────
+    /// Called by the TeachMidiCallback adapter in StandaloneApp.cpp when MIDI
+    /// arrives without an audio device driving processBlock.
+    void handleTeachMidi (const juce::MidiMessage& msg);
+
     // ── Standalone MIDI output ─────────────────────────────────────────────────
-    /// Set the virtual MIDI source port (always-on; other apps see "DrawnCurve").
+    /// Set the virtual MIDI source port (always-on; other apps see "DrawnQurve").
     void setVirtualMidiOutput (juce::MidiOutput* output) noexcept;
     /// Set an additional direct-target output (user-selected device).
     void setDirectMidiOutput (juce::MidiOutput* output) noexcept;

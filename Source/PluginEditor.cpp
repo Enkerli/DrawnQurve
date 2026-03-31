@@ -136,32 +136,41 @@ HelpOverlay::HelpOverlay()
 
 void HelpOverlay::paint (juce::Graphics& g)
 {
-    g.fillAll (juce::Colour (0xd0000000));
+    // ── Backdrop ─────────────────────────────────────────────────────────────
+    const auto bgCol  = _lightMode ? juce::Colour (0xe8f0f0f0) : juce::Colour (0xe8101018);
+    const auto fgCol  = _lightMode ? juce::Colours::black       : juce::Colours::white;
+    const auto acCol  = _lightMode ? juce::Colour (0xff0066cc)  : juce::Colour (0xff80d8ff);
+    const auto dimCol = fgCol.withAlpha (0.55f);
+
+    g.fillAll (bgCol);
 
     const auto bounds = getLocalBounds().toFloat().reduced (24.0f, 20.0f);
-    g.setColour (juce::Colours::white);
+
+    // ── Title ────────────────────────────────────────────────────────────────
+    g.setColour (fgCol);
     g.setFont (juce::Font (juce::FontOptions{}.withHeight (15.0f).withStyle ("Bold")));
-    g.drawText ("DrawnCurve  Quick Reference",
+    g.drawText ("DrawnQurve  Quick Reference",
                 bounds.withHeight (22.0f).toNearestInt(),
                 juce::Justification::centred, false);
 
+    // ── Entries ──────────────────────────────────────────────────────────────
     struct Entry { const char* label; const char* desc; };
     static const Entry kEntries[] =
     {
-        { "CURVE AREA",  "Draw a curve with your finger or Pencil. Time flows left to right; MIDI value top to bottom. Each lane has its own curve." },
-        { "Lane 1/2/3",  "Select the active lane. Each lane routes independently to its own MIDI target. Coloured dots show each lane's playhead position." },
-        { "Direction",   "Forward, Reverse, or Ping-Pong playback. Tap the active segment to pause; tap again to resume. In SYNC mode, pause persists across host transport changes." },
-        { "Clear",       "Erase ALL lane curves and stop playback." },
-        { "!  (Panic)",  "Sends All Notes Off on every active channel. Use if notes get stuck." },
-        { "Target",      "Tap the type button (CC / AT / PB / \xe2\x99\xa9) in the eyebrow to open per-lane routing. Choose msg type, CC#, channel, velocity." },
-        { "Solo",        "Tap Solo on a lane to isolate its output. Other lanes mute so a synth can MIDI-Learn. On CC lanes, the next incoming CC message sets that lane\xe2\x80\x99s CC number." },
-        { "Mute",        "Silence one lane without erasing its curve." },
-        { "Scale",       "In Note mode: choose a scale preset and root note. Use the 12 circles (C to B, left to right) to build a custom scale. Only active pitch classes are played." },
-        { "FREE / SYNC", "Toggle host-tempo sync. FREE = manual speed; SYNC = follows host BPM and transport; speed becomes loop length in Beats." },
-        { "Smooth",      "Output smoothing (0 = instant). Applied per focused lane. Affects CC and Pitch Bend; bypassed for note-change detection in Note mode." },
-        { "Range",       "Output range min/max per lane. In Note mode, shows the note name boundaries." },
-        { "Y- / Y+",     "Decrease or increase horizontal grid lines." },
-        { "X- / X+",     "Decrease or increase vertical grid lines." },
+        { "DRAW",        "Draw a curve in the lane area. Time = left to right, value = bottom to top. Pencil pressure varies intensity." },
+        { "PLAY / PAUSE","Top-left controls. Tap the direction segment to pause/resume. Forward, Reverse, Ping-Pong." },
+        { "LANES",       "Each lane is an independent MIDI stream. Tap a lane tab to focus it. Coloured dots = playheads." },
+        { "+  (Add)",    "Add a lane (up to 3). Each new lane gets its own routing and curve." },
+        { "ROUTING",     "Tap the type chip (CC / AT / PB / Note) to open per-lane routing: message type, CC#, channel, velocity." },
+        { "SOLO / MUTE", "Solo isolates one lane. On CC lanes, solo also arms MIDI Learn. Mute silences without erasing." },
+        { "SCALE",       "Note mode only. Pick a preset or tap the 12 pitch-class circles to build a custom scale." },
+        { "FREE / SYNC", "FREE = manual speed. SYNC = locks to host tempo; speed becomes loop length in beats." },
+        { "GRID",        "X-/X+ and Y-/Y+ adjust grid density per lane. Lock icons snap playhead (X) or output (Y) to grid." },
+        { "SMOOTH",      "Output smoothing per lane. 0 = instant. Bypassed for note-change detection in Note mode." },
+        { "RANGE",       "Min/max output per lane. In Note mode, shows note-name boundaries." },
+        { "CLEAR",       "Erase ALL curves and stop playback." },
+        { "!  (Panic)",  "All Notes Off on every active channel. Use if notes get stuck." },
+        { "?  (Help)",   "You are here." },
     };
 
     const float lineH  = 14.0f;
@@ -172,14 +181,14 @@ void HelpOverlay::paint (juce::Graphics& g)
     for (const auto& e : kEntries)
     {
         g.setFont (juce::Font (juce::FontOptions{}.withHeight (11.5f).withStyle ("Bold")));
-        g.setColour (juce::Colour (0xff80d8ff));
+        g.setColour (acCol);
         g.drawText (e.label,
                     juce::roundToInt (bounds.getX()), juce::roundToInt (y),
                     juce::roundToInt (labelW), juce::roundToInt (lineH * 2),
                     juce::Justification::topRight, false);
 
         g.setFont (juce::Font (juce::FontOptions{}.withHeight (11.5f)));
-        g.setColour (juce::Colours::white);
+        g.setColour (fgCol);
         g.drawMultiLineText (e.desc,
                              juce::roundToInt (bounds.getX() + labelW + gap),
                              juce::roundToInt (y + 11.5f),
@@ -189,7 +198,7 @@ void HelpOverlay::paint (juce::Graphics& g)
     }
 
     g.setFont (juce::Font (juce::FontOptions{}.withHeight (11.0f).withStyle ("Italic")));
-    g.setColour (juce::Colours::white.withAlpha (0.6f));
+    g.setColour (dimCol);
     g.drawText ("Tap anywhere to close", getLocalBounds().withTop (getHeight() - 22),
                 juce::Justification::centred, false);
 }
@@ -1535,11 +1544,11 @@ DrawnCurveEditor::DrawnCurveEditor (DrawnCurveProcessor& p)
     };
 
     // ── Standalone MIDI output ─────────────────────────────────────────────────
-    // Create a virtual MIDI source port so other apps see "DrawnCurve" as a source.
+    // Create a virtual MIDI source port so other apps see "DrawnQurve" as a source.
     // Also show a button to optionally target a specific device.
     if (juce::JUCEApplicationBase::isStandaloneApp())
     {
-        _virtualMidiPort = juce::MidiOutput::createNewDevice ("DrawnCurve");
+        _virtualMidiPort = juce::MidiOutput::createNewDevice ("DrawnQurve");
         if (_virtualMidiPort != nullptr)
             proc.setVirtualMidiOutput (_virtualMidiPort.get());
 
@@ -2624,7 +2633,10 @@ DrawnCurveEditor::DrawnCurveEditor (DrawnCurveProcessor& p)
 #endif
 
     // Defer tick-label refresh so lane snapshots are fully populated before we read durations.
-    juce::MessageManager::callAsync ([this] { refreshTickLabels(); });
+    juce::MessageManager::callAsync ([safeThis = juce::Component::SafePointer<DrawnCurveEditor>(this)] {
+        if (safeThis == nullptr) return;
+        safeThis->refreshTickLabels();
+    });
 }
 
 DrawnCurveEditor::~DrawnCurveEditor()
@@ -3068,10 +3080,11 @@ void DrawnCurveEditor::parameterChanged (const juce::String& paramID, float)
         // Only update dirControl if we're currently showing global ("*") params.
         if (! _showingAllLanes) return;
 #endif
-        juce::MessageManager::callAsync ([this] {
-            dirControl.setSelectedIndex (
+        juce::MessageManager::callAsync ([safeThis = juce::Component::SafePointer<DrawnCurveEditor>(this)] {
+            if (safeThis == nullptr) return;
+            safeThis->dirControl.setSelectedIndex (
                 kDirParamToVis[static_cast<int> (
-                    proc.apvts.getRawParameterValue (ParamID::playbackDirection)->load())],
+                    safeThis->proc.apvts.getRawParameterValue (ParamID::playbackDirection)->load())],
                 juce::dontSendNotification);
         });
         return;
@@ -3082,11 +3095,12 @@ void DrawnCurveEditor::parameterChanged (const juce::String& paramID, float)
     {
         if (paramID == laneParam (L, ParamID::laneDirection) && L == _focusedLane && ! _showingAllLanes)
         {
-            juce::MessageManager::callAsync ([this, L] {
+            juce::MessageManager::callAsync ([safeThis = juce::Component::SafePointer<DrawnCurveEditor>(this), L] {
+                if (safeThis == nullptr) return;
                 const int dir = static_cast<int> (
-                    proc.apvts.getRawParameterValue (laneParam (L, ParamID::laneDirection))->load());
-                dirControl.setSelectedIndex (kDirParamToVis[juce::jlimit (0, 2, dir)],
-                                             juce::dontSendNotification);
+                    safeThis->proc.apvts.getRawParameterValue (laneParam (L, ParamID::laneDirection))->load());
+                safeThis->dirControl.setSelectedIndex (kDirParamToVis[juce::jlimit (0, 2, dir)],
+                                                       juce::dontSendNotification);
             });
             return;
         }
@@ -3095,18 +3109,22 @@ void DrawnCurveEditor::parameterChanged (const juce::String& paramID, float)
 
     if (paramID == ParamID::syncEnabled)
     {
-        juce::MessageManager::callAsync ([this] {
-            const bool isSyncing = proc.apvts.getRawParameterValue (ParamID::syncEnabled)->load() > 0.5f;
-            syncButton.setToggleState (isSyncing, juce::dontSendNotification);
-            onSyncToggled (isSyncing);
-            refreshTickLabels();
+        juce::MessageManager::callAsync ([safeThis = juce::Component::SafePointer<DrawnCurveEditor>(this)] {
+            if (safeThis == nullptr) return;
+            const bool isSyncing = safeThis->proc.apvts.getRawParameterValue (ParamID::syncEnabled)->load() > 0.5f;
+            safeThis->syncButton.setToggleState (isSyncing, juce::dontSendNotification);
+            safeThis->onSyncToggled (isSyncing);
+            safeThis->refreshTickLabels();
         });
         return;
     }
 
     if (paramID == ParamID::playbackSpeed || paramID == ParamID::syncBeats)
     {
-        juce::MessageManager::callAsync ([this] { updateSpeedLabel(); refreshTickLabels(); });
+        juce::MessageManager::callAsync ([safeThis = juce::Component::SafePointer<DrawnCurveEditor>(this)] {
+            if (safeThis == nullptr) return;
+            safeThis->updateSpeedLabel(); safeThis->refreshTickLabels();
+        });
         return;
     }
 
@@ -3120,28 +3138,33 @@ void DrawnCurveEditor::parameterChanged (const juce::String& paramID, float)
         {
             // Re-bake the snapshot so changes take effect immediately (no redraw needed).
             proc.updateLaneSnapshot (L);
-            juce::MessageManager::callAsync ([this, L] {
-                updateLaneRow (L);
-                updateScaleVisibility();
-                resized();   // recompute canvas height (anyNote may have changed)
-                applyTheme();
-                if (L == _focusedLane) refreshTickLabels();   // Y step unit depends on msgType
+            juce::MessageManager::callAsync ([safeThis = juce::Component::SafePointer<DrawnCurveEditor>(this), L] {
+                if (safeThis == nullptr) return;
+                safeThis->updateLaneRow (L);
+                safeThis->updateScaleVisibility();
+                safeThis->resized();   // recompute canvas height (anyNote may have changed)
+                safeThis->applyTheme();
+                if (L == safeThis->_focusedLane) safeThis->refreshTickLabels();   // Y step unit depends on msgType
             });
             return;
         }
 
         if (paramID == laneParam (L, "enabled"))
         {
-            juce::MessageManager::callAsync ([this, L] { updateLaneRow (L); });
+            juce::MessageManager::callAsync ([safeThis = juce::Component::SafePointer<DrawnCurveEditor>(this), L] {
+                if (safeThis == nullptr) return;
+                safeThis->updateLaneRow (L);
+            });
             return;
         }
 
         if (paramID == laneParam (L, "loopMode"))
         {
             proc.updateLaneSnapshot (L);
-            juce::MessageManager::callAsync ([this, L] {
-                updateLaneRow (L);   // refreshes per-lane loop button text in matrix
-                applyTheme();
+            juce::MessageManager::callAsync ([safeThis = juce::Component::SafePointer<DrawnCurveEditor>(this), L] {
+                if (safeThis == nullptr) return;
+                safeThis->updateLaneRow (L);   // refreshes per-lane loop button text in matrix
+                safeThis->applyTheme();
             });
             return;
         }
@@ -3151,7 +3174,10 @@ void DrawnCurveEditor::parameterChanged (const juce::String& paramID, float)
             // Re-bake range into snapshot immediately; also update the slider display.
             proc.updateLaneSnapshot (L);
             if (L == _focusedLane)
-                juce::MessageManager::callAsync ([this] { updateRangeSlider(); refreshTickLabels(); });
+                juce::MessageManager::callAsync ([safeThis = juce::Component::SafePointer<DrawnCurveEditor>(this)] {
+                    if (safeThis == nullptr) return;
+                    safeThis->updateRangeSlider(); safeThis->refreshTickLabels();
+                });
             return;
         }
 
@@ -3161,10 +3187,11 @@ void DrawnCurveEditor::parameterChanged (const juce::String& paramID, float)
             proc.updateLaneSnapshot (L);
             if (L == _focusedLane)
             {
-                juce::MessageManager::callAsync ([this, L] {
-                    const float sv = proc.apvts.getRawParameterValue (laneParam (L, "smoothing"))->load();
-                    smoothingLabel.setText (juce::String (juce::roundToInt (sv * 100)) + "%",
-                                           juce::dontSendNotification);
+                juce::MessageManager::callAsync ([safeThis = juce::Component::SafePointer<DrawnCurveEditor>(this), L] {
+                    if (safeThis == nullptr) return;
+                    const float sv = safeThis->proc.apvts.getRawParameterValue (laneParam (L, "smoothing"))->load();
+                    safeThis->smoothingLabel.setText (juce::String (juce::roundToInt (sv * 100)) + "%",
+                                                      juce::dontSendNotification);
                 });
             }
             return;
@@ -3184,11 +3211,12 @@ void DrawnCurveEditor::parameterChanged (const juce::String& paramID, float)
             proc.updateLaneSnapshot (L);
             if (L == _focusedLane)
             {
-                juce::MessageManager::callAsync ([this, L] {
-                    const bool xq = proc.apvts.getRawParameterValue (laneParam (L, ParamID::xQuantize))->load() > 0.5f;
-                    const bool yq = proc.apvts.getRawParameterValue (laneParam (L, ParamID::yQuantize))->load() > 0.5f;
-                    xQuantizeBtn.setToggleState (xq, juce::dontSendNotification);
-                    yQuantizeBtn.setToggleState (yq, juce::dontSendNotification);
+                juce::MessageManager::callAsync ([safeThis = juce::Component::SafePointer<DrawnCurveEditor>(this), L] {
+                    if (safeThis == nullptr) return;
+                    const bool xq = safeThis->proc.apvts.getRawParameterValue (laneParam (L, ParamID::xQuantize))->load() > 0.5f;
+                    const bool yq = safeThis->proc.apvts.getRawParameterValue (laneParam (L, ParamID::yQuantize))->load() > 0.5f;
+                    safeThis->xQuantizeBtn.setToggleState (xq, juce::dontSendNotification);
+                    safeThis->yQuantizeBtn.setToggleState (yq, juce::dontSendNotification);
                 });
             }
             return;
@@ -3204,12 +3232,13 @@ void DrawnCurveEditor::parameterChanged (const juce::String& paramID, float)
             proc.updateLaneSnapshot (L);
             if (L == _focusedLane)
             {
-                juce::MessageManager::callAsync ([this, L] {
-                    const int xDiv = static_cast<int> (proc.apvts.getRawParameterValue (laneParam (L, ParamID::xDivisions))->load());
-                    const int yDiv = static_cast<int> (proc.apvts.getRawParameterValue (laneParam (L, ParamID::yDivisions))->load());
-                    curveDisplay.setXDivisions (xDiv);
-                    curveDisplay.setYDivisions (yDiv);
-                    refreshTickLabels();
+                juce::MessageManager::callAsync ([safeThis = juce::Component::SafePointer<DrawnCurveEditor>(this), L] {
+                    if (safeThis == nullptr) return;
+                    const int xDiv = static_cast<int> (safeThis->proc.apvts.getRawParameterValue (laneParam (L, ParamID::xDivisions))->load());
+                    const int yDiv = static_cast<int> (safeThis->proc.apvts.getRawParameterValue (laneParam (L, ParamID::yDivisions))->load());
+                    safeThis->curveDisplay.setXDivisions (xDiv);
+                    safeThis->curveDisplay.setYDivisions (yDiv);
+                    safeThis->refreshTickLabels();
                 });
             }
             return;
@@ -3220,12 +3249,13 @@ void DrawnCurveEditor::parameterChanged (const juce::String& paramID, float)
     if (paramID == "scaleMode" || paramID == "scaleRoot" || paramID == "scaleMask")
     {
         proc.updateAllLaneScales();
-        juce::MessageManager::callAsync ([this] {
-            scaleLattice.setMask (calcAbsLatticeMask (proc, 0));
-            scaleLattice.setRoot (static_cast<int> (
-                proc.apvts.getRawParameterValue ("scaleRoot")->load()));
-            updateScaleStatus();
-            curveDisplay.repaint();
+        juce::MessageManager::callAsync ([safeThis = juce::Component::SafePointer<DrawnCurveEditor>(this)] {
+            if (safeThis == nullptr) return;
+            safeThis->scaleLattice.setMask (calcAbsLatticeMask (safeThis->proc, 0));
+            safeThis->scaleLattice.setRoot (static_cast<int> (
+                safeThis->proc.apvts.getRawParameterValue ("scaleRoot")->load()));
+            safeThis->updateScaleStatus();
+            safeThis->curveDisplay.repaint();
         });
     }
 }
