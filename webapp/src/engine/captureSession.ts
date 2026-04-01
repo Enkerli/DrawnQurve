@@ -75,6 +75,8 @@ export class CaptureSession {
       messageType: params.messageType,
       noteVelocity: params.noteVelocity,
       phaseOffset: 0,
+      xSteps: params.xSteps,
+      ySteps: params.ySteps,
       valid: true,
     }
   }

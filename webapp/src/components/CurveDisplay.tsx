@@ -15,8 +15,10 @@ interface CurveDisplayProps {
   theme: 'light' | 'dark'
   engineRef: React.RefObject<GestureEngine>
   onCurveDrawn: (lane: number, snapshot: LaneSnapshot) => void
-  gridX?: number  // number of vertical grid lines (2-32)
-  gridY?: number  // number of horizontal grid lines (2-24)
+  gridX?: number      // number of vertical divisions
+  gridY?: number      // number of horizontal divisions
+  xQuantized?: boolean  // true = grid is an active step grid
+  yQuantized?: boolean
 }
 
 export function CurveDisplay({
@@ -28,6 +30,8 @@ export function CurveDisplay({
   onCurveDrawn,
   gridX = 8,
   gridY = 4,
+  xQuantized = false,
+  yQuantized = false,
 }: CurveDisplayProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const captureRef = useRef(new CaptureSession())
@@ -41,11 +45,15 @@ export function CurveDisplay({
   const themeRef = useRef(theme)
   const gridXRef = useRef(gridX)
   const gridYRef = useRef(gridY)
+  const xQuantizedRef = useRef(xQuantized)
+  const yQuantizedRef = useRef(yQuantized)
   snapshotsRef.current = snapshots
   focusedLaneRef.current = focusedLane
   themeRef.current = theme
   gridXRef.current = gridX
   gridYRef.current = gridY
+  xQuantizedRef.current = xQuantized
+  yQuantizedRef.current = yQuantized
 
   const draw = useCallback(() => {
     const canvas = canvasRef.current
@@ -65,12 +73,17 @@ export function CurveDisplay({
     ctx.fillRect(0, 0, W, H)
 
     // Grid
-    ctx.strokeStyle = gridColor
-    ctx.lineWidth = 1
     const gx = gridXRef.current
     const gy = gridYRef.current
+    const xQ = xQuantizedRef.current
+    const yQ = yQuantizedRef.current
+
+    ctx.lineWidth = 1
     for (let i = 1; i < gx; i++) {
       const x = (i / gx) * W
+      ctx.strokeStyle = xQ
+        ? dark ? 'rgba(255,255,255,0.18)' : 'rgba(0,0,0,0.14)'
+        : gridColor
       ctx.beginPath()
       ctx.moveTo(x, 0)
       ctx.lineTo(x, H)
@@ -78,6 +91,9 @@ export function CurveDisplay({
     }
     for (let i = 1; i < gy; i++) {
       const y = (i / gy) * H
+      ctx.strokeStyle = yQ
+        ? dark ? 'rgba(255,255,255,0.18)' : 'rgba(0,0,0,0.14)'
+        : gridColor
       ctx.beginPath()
       ctx.moveTo(0, y)
       ctx.lineTo(W, y)

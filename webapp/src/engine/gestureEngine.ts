@@ -214,10 +214,17 @@ export class GestureEngine {
       phase = rt.playheadSeconds / effectiveDur
     }
 
-    this.lanePhases[lane] = phase
+    // X quantization: snap phase to step grid
+    const displayPhase = snap.xSteps > 1
+      ? Math.floor(phase * snap.xSteps) / snap.xSteps
+      : phase
+    this.lanePhases[lane] = displayPhase
 
-    // Apply phase offset
-    const sampledPhase = ((phase + snap.phaseOffset) % 1 + 1) % 1
+    // Apply phase offset then X quantization for sampling
+    let sampledPhase = ((phase + snap.phaseOffset) % 1 + 1) % 1
+    if (snap.xSteps > 1) {
+      sampledPhase = Math.floor(sampledPhase * snap.xSteps) / snap.xSteps
+    }
     const target = this.sampleCurve(snap, sampledPhase)
 
     // ── One-pole smoother ────────────────────────────────────────────────────
@@ -228,7 +235,12 @@ export class GestureEngine {
     rt.smoothedValue += alpha * (target - rt.smoothedValue)
 
     // ── Output range mapping ─────────────────────────────────────────────────
-    const ranged = snap.minOut + rt.smoothedValue * (snap.maxOut - snap.minOut)
+    let ranged = snap.minOut + rt.smoothedValue * (snap.maxOut - snap.minOut)
+
+    // Y quantization: snap to N discrete levels (CC/AT/PB only)
+    if (snap.ySteps > 1 && snap.messageType !== MessageType.Note) {
+      ranged = Math.round(ranged * (snap.ySteps - 1)) / (snap.ySteps - 1)
+    }
 
     // ── Emit MIDI ────────────────────────────────────────────────────────────
     switch (snap.messageType) {
