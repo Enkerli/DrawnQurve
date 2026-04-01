@@ -132,13 +132,6 @@ export function Toolbar({
       <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
         <span style={{ fontSize: 11, color: dark ? '#888' : '#888' }}>Dir</span>
         <button
-          onClick={() => onDirectionChange(PlaybackDirection.Forward)}
-          style={activeBtnStyle(direction === PlaybackDirection.Forward)}
-          title="Forward"
-        >
-          ▶
-        </button>
-        <button
           onClick={() => onDirectionChange(PlaybackDirection.Reverse)}
           style={activeBtnStyle(direction === PlaybackDirection.Reverse)}
           title="Reverse"
@@ -151,6 +144,13 @@ export function Toolbar({
           title="Ping-Pong"
         >
           ↔
+        </button>
+        <button
+          onClick={() => onDirectionChange(PlaybackDirection.Forward)}
+          style={activeBtnStyle(direction === PlaybackDirection.Forward)}
+          title="Forward"
+        >
+          ▶
         </button>
       </div>
 
