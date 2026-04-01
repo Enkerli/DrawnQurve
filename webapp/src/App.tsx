@@ -22,7 +22,7 @@ function makeDefaultLanes(): LaneParams[] {
 }
 
 export function App() {
-  const [theme, setTheme] = useState<'light' | 'dark'>('dark')
+  const [theme, setTheme] = useState<'light' | 'dark'>('light')
   const [focusedLane, setFocusedLane] = useState(0)
   const [laneParams, setLaneParams] = useState<LaneParams[]>(makeDefaultLanes)
   const [snapshots, setSnapshots] = useState<(LaneSnapshot | null)[]>(new Array(NUM_LANES).fill(null))

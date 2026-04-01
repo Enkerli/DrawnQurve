@@ -74,14 +74,14 @@ export interface LaneParams {
 
 export function defaultLaneParams(ccNumber = 74): LaneParams {
   return {
-    messageType: MessageType.CC,
+    messageType: MessageType.Note,
     ccNumber,
     midiChannel: 0,
     minOut: 0,
     maxOut: 1,
     smoothing: 0.08,
     noteVelocity: 100,
-    scaleConfig: { mask: 0xfff, root: 0 },
+    scaleConfig: { mask: 0xad5, root: 0 },  // C Major
     enabled: true,
   }
 }
