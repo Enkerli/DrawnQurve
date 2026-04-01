@@ -159,6 +159,23 @@ export class GestureEngine {
 
   // ── Private ──────────────────────────────────────────────────────────────
 
+  /** Collect all scale notes in [minNote, maxNote], then pick `count` evenly distributed. */
+  private getScaleNotesInRange(sc: ScaleConfig, minNote: number, maxNote: number, count: number): number[] {
+    const all: number[] = []
+    for (let n = Math.round(minNote); n <= Math.round(maxNote); n++) {
+      const interval = ((n % 12) - sc.root + 12) % 12
+      if ((sc.mask >> (11 - interval)) & 1) all.push(n)
+    }
+    if (all.length === 0) return []
+    if (count >= all.length || all.length === 1) return all
+    const result: number[] = []
+    for (let i = 0; i < count; i++) {
+      const idx = Math.round(i * (all.length - 1) / (count - 1))
+      result.push(all[idx])
+    }
+    return result
+  }
+
   private sampleCurve(snap: LaneSnapshot, phase: number): number {
     const idx = phase * 255
     const i0 = Math.floor(idx) & 255
@@ -273,25 +290,43 @@ export class GestureEngine {
 
       case MessageType.Note: {
         // Use raw target (not smoothed) for note detection — avoids glissando artefacts.
-        const rawNoteF = (snap.minOut + target * (snap.maxOut - snap.minOut)) * 127
         const committed = rt.lastSentValue
         const sc = this.scaleConfigs[lane]
-        const movingUp = committed < 0 || rawNoteF > committed
-        const candidate = GestureEngine.quantizeNote(Math.round(rawNoteF), sc, movingUp)
+        const ch = snap.midiChannel & 0x0f
+        let candidate: number
 
-        if (candidate !== committed) {
-          const kClearance = 0.35
-          if (committed >= 0) {
-            const mid = (committed + candidate) * 0.5
-            const crossedClearly =
-              (candidate > committed && rawNoteF >= mid + kClearance) ||
-              (candidate < committed && rawNoteF <= mid - kClearance)
-            if (!crossedClearly) break
+        if (snap.ySteps > 1) {
+          // Discrete scale steps: pick N evenly-distributed notes from the scale
+          // within the output range, then index into them with target.
+          const notes = this.getScaleNotesInRange(sc, snap.minOut * 127, snap.maxOut * 127, snap.ySteps)
+          if (notes.length === 0) break
+          const idx = Math.min(Math.floor(target * notes.length), notes.length - 1)
+          candidate = notes[idx]
+
+          if (candidate !== committed) {
+            if (committed >= 0) midiOut(0x80 | ch, committed, 0)
+            midiOut(0x90 | ch, candidate, snap.noteVelocity)
+            rt.lastSentValue = candidate
           }
-          if (committed >= 0)
-            midiOut(0x80 | (snap.midiChannel & 0x0f), committed, 0)
-          midiOut(0x90 | (snap.midiChannel & 0x0f), candidate, snap.noteVelocity)
-          rt.lastSentValue = candidate
+        } else {
+          // Continuous path: map Y to MIDI range, snap to nearest scale degree.
+          const rawNoteF = (snap.minOut + target * (snap.maxOut - snap.minOut)) * 127
+          const movingUp = committed < 0 || rawNoteF > committed
+          candidate = GestureEngine.quantizeNote(Math.round(rawNoteF), sc, movingUp)
+
+          if (candidate !== committed) {
+            const kClearance = 0.35
+            if (committed >= 0) {
+              const mid = (committed + candidate) * 0.5
+              const crossedClearly =
+                (candidate > committed && rawNoteF >= mid + kClearance) ||
+                (candidate < committed && rawNoteF <= mid - kClearance)
+              if (!crossedClearly) break
+            }
+            if (committed >= 0) midiOut(0x80 | ch, committed, 0)
+            midiOut(0x90 | ch, candidate, snap.noteVelocity)
+            rt.lastSentValue = candidate
+          }
         }
         break
       }
