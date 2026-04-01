@@ -232,15 +232,16 @@ export class GestureEngine {
     }
 
     // X quantization: snap phase to step grid
-    const displayPhase = snap.xSteps > 1
-      ? Math.floor(phase * snap.xSteps) / snap.xSteps
+    const xQ = snap.xQuantize && snap.xDivisions >= 2
+    const displayPhase = xQ
+      ? Math.floor(phase * snap.xDivisions) / snap.xDivisions
       : phase
     this.lanePhases[lane] = displayPhase
 
     // Apply phase offset then X quantization for sampling
     let sampledPhase = ((phase + snap.phaseOffset) % 1 + 1) % 1
-    if (snap.xSteps > 1) {
-      sampledPhase = Math.floor(sampledPhase * snap.xSteps) / snap.xSteps
+    if (xQ) {
+      sampledPhase = Math.floor(sampledPhase * snap.xDivisions) / snap.xDivisions
     }
     const target = this.sampleCurve(snap, sampledPhase)
 
@@ -255,8 +256,8 @@ export class GestureEngine {
     let ranged = snap.minOut + rt.smoothedValue * (snap.maxOut - snap.minOut)
 
     // Y quantization: snap to N discrete levels (CC/AT/PB only)
-    if (snap.ySteps > 1 && snap.messageType !== MessageType.Note) {
-      ranged = Math.round(ranged * (snap.ySteps - 1)) / (snap.ySteps - 1)
+    if (snap.yQuantize && snap.yDivisions >= 2 && snap.messageType !== MessageType.Note) {
+      ranged = Math.round(ranged * (snap.yDivisions - 1)) / (snap.yDivisions - 1)
     }
 
     // ── Emit MIDI ────────────────────────────────────────────────────────────
@@ -295,10 +296,10 @@ export class GestureEngine {
         const ch = snap.midiChannel & 0x0f
         let candidate: number
 
-        if (snap.ySteps > 1) {
+        if (snap.yQuantize && snap.yDivisions >= 2) {
           // Discrete scale steps: pick N evenly-distributed notes from the scale
           // within the output range, then index into them with target.
-          const notes = this.getScaleNotesInRange(sc, snap.minOut * 127, snap.maxOut * 127, snap.ySteps)
+          const notes = this.getScaleNotesInRange(sc, snap.minOut * 127, snap.maxOut * 127, snap.yDivisions)
           if (notes.length === 0) break
           const idx = Math.min(Math.floor(target * notes.length), notes.length - 1)
           candidate = notes[idx]

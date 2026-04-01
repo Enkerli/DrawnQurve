@@ -284,65 +284,6 @@ export function LaneControls({
 
       <div style={dividerStyle} />
 
-      {/* Step quantization */}
-      <div style={sectionStyle}>
-        <div style={rowStyle}>
-          <span style={{ ...labelStyle, marginBottom: 0, width: 20 }}>X</span>
-          <div style={{ display: 'flex', gap: 3, flexWrap: 'wrap' }}>
-            {[1, 2, 3, 4, 6, 8, 12, 16].map(n => (
-              <button
-                key={n}
-                onClick={() => update({ xSteps: n })}
-                style={{
-                  padding: '3px 6px',
-                  fontSize: 10,
-                  borderRadius: 4,
-                  border: `1px solid ${params.xSteps === n ? color : (dark ? '#444' : '#ccc')}`,
-                  background: params.xSteps === n
-                    ? dark ? 'rgba(74,144,226,0.2)' : 'rgba(26,96,200,0.1)'
-                    : 'transparent',
-                  color: params.xSteps === n ? color : (dark ? '#aaa' : '#777'),
-                  cursor: 'pointer',
-                  fontWeight: params.xSteps === n ? 700 : 400,
-                }}
-              >
-                {n === 1 ? '—' : n}
-              </button>
-            ))}
-          </div>
-        </div>
-        <div style={rowStyle}>
-          <span style={{ ...labelStyle, marginBottom: 0, width: 20 }}>Y</span>
-          <div style={{ display: 'flex', gap: 3, flexWrap: 'wrap' }}>
-            {(params.messageType === MessageType.Note
-              ? [1, 2, 3, 4, 5, 6, 7, 8]
-              : [1, 2, 4, 8, 16]
-            ).map(n => (
-              <button
-                key={n}
-                onClick={() => update({ ySteps: n })}
-                style={{
-                  padding: '3px 6px',
-                  fontSize: 10,
-                  borderRadius: 4,
-                  border: `1px solid ${params.ySteps === n ? color : (dark ? '#444' : '#ccc')}`,
-                  background: params.ySteps === n
-                    ? dark ? 'rgba(74,144,226,0.2)' : 'rgba(26,96,200,0.1)'
-                    : 'transparent',
-                  color: params.ySteps === n ? color : (dark ? '#aaa' : '#777'),
-                  cursor: 'pointer',
-                  fontWeight: params.ySteps === n ? 700 : 400,
-                }}
-              >
-                {n === 1 ? '—' : n}
-              </button>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      <div style={dividerStyle} />
-
       {/* Mute + Clear */}
       <div style={rowStyle}>
         <button

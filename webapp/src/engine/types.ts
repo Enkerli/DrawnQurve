@@ -40,8 +40,10 @@ export interface LaneSnapshot {
   messageType: MessageType
   noteVelocity: number      // 1-127, used in Note mode
   phaseOffset: number       // [0, 1) shifts start position
-  xSteps: number            // 1 = continuous; >1 = number of time steps
-  ySteps: number            // 1 = continuous; >1 = value steps (CC/AT/PB)
+  xDivisions: number        // tick count on time axis (2–32)
+  yDivisions: number        // tick count on value axis (2–24)
+  xQuantize: boolean        // snap playhead to X-grid tick boundaries
+  yQuantize: boolean        // snap output to Y-grid tick levels
   valid: boolean
 }
 
@@ -57,8 +59,10 @@ export function defaultSnapshot(): LaneSnapshot {
     messageType: MessageType.CC,
     noteVelocity: 100,
     phaseOffset: 0,
-    xSteps: 1,
-    ySteps: 1,
+    xDivisions: 4,
+    yDivisions: 4,
+    xQuantize: false,
+    yQuantize: false,
     valid: false,
   }
 }
@@ -74,8 +78,10 @@ export interface LaneParams {
   noteVelocity: number  // 1-127
   scaleConfig: ScaleConfig
   enabled: boolean      // false = muted
-  xSteps: number        // 1 = continuous; >1 = number of time steps (rhythm grid)
-  ySteps: number        // 1 = continuous; >1 = number of value steps (CC/AT/PB only)
+  xDivisions: number    // tick count on time axis (2–32)
+  yDivisions: number    // tick count on value axis (2–24)
+  xQuantize: boolean    // lock X ticks → snap playhead
+  yQuantize: boolean    // lock Y ticks → snap output
 }
 
 export function defaultLaneParams(ccNumber = 74): LaneParams {
@@ -89,8 +95,10 @@ export function defaultLaneParams(ccNumber = 74): LaneParams {
     noteVelocity: 100,
     scaleConfig: { mask: 0xad5, root: 0 },  // C Major
     enabled: true,
-    xSteps: 1,
-    ySteps: 1,
+    xDivisions: 4,
+    yDivisions: 4,
+    xQuantize: false,
+    yQuantize: false,
   }
 }
 

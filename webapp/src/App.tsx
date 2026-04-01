@@ -119,8 +119,10 @@ export function App() {
               smoothing: next[lane].smoothing,
               messageType: next[lane].messageType,
               noteVelocity: next[lane].noteVelocity,
-              xSteps: next[lane].xSteps,
-              ySteps: next[lane].ySteps,
+              xDivisions: next[lane].xDivisions,
+              yDivisions: next[lane].yDivisions,
+              xQuantize: next[lane].xQuantize,
+              yQuantize: next[lane].yQuantize,
             }
             engineRef.current.setSnapshot(lane, updated)
             const nextSnaps = [...prevSnaps]
@@ -260,10 +262,7 @@ export function App() {
             theme={theme}
             engineRef={engineRef}
             onCurveDrawn={handleCurveDrawn}
-            gridX={laneParams[focusedLane].xSteps > 1 ? laneParams[focusedLane].xSteps : 8}
-            gridY={laneParams[focusedLane].ySteps > 1 ? laneParams[focusedLane].ySteps : 4}
-            xQuantized={laneParams[focusedLane].xSteps > 1}
-            yQuantized={laneParams[focusedLane].ySteps > 1}
+            onUpdateParams={handleUpdateParams}
           />
         </div>
 
