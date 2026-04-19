@@ -200,6 +200,10 @@ public:
     float currentPhase()            const noexcept;
     float currentPhaseForLane (int lane) const noexcept;
 
+    /// Last MIDI value emitted on this lane (-1 = nothing sent yet).
+    /// Used by the cursor readout in CurveDisplay; updated by the render thread.
+    int   currentSentValueForLane (int lane) const noexcept;
+
     /// Copy of the 256-sample lookup table for the given lane (zero-filled if empty).
     std::array<float, 256> getCurveTable (int lane = 0) const noexcept;
 

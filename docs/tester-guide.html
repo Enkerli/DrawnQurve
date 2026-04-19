@@ -1,0 +1,468 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DrawnQurve — Alpha Tester Guide</title>
+<style>
+  :root {
+    --bg: #faf8f6;
+    --text: #2d2b27;
+    --dim: #7a766d;
+    --accent: #6746d9;
+    --accent-light: #efe7ff;
+    --card-bg: #f0ede5;
+    --card-border: #ddd6ca;
+    --code-bg: #f5f2ed;
+    --link: #6746d9;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #1a1a2e;
+      --text: #e8e6e0;
+      --dim: #9a96a0;
+      --accent: #a78bfa;
+      --accent-light: #2a2545;
+      --card-bg: #252538;
+      --card-border: #3a3a55;
+      --code-bg: #20203a;
+      --link: #a78bfa;
+    }
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.6;
+    max-width: 680px;
+    margin: 0 auto;
+    padding: 2rem 1.5rem 4rem;
+  }
+  h1 { font-size: 1.8rem; margin-bottom: 0.3rem; }
+  h2 { font-size: 1.3rem; margin: 2rem 0 0.8rem; color: var(--accent); }
+  h3 { font-size: 1.05rem; margin: 1.5rem 0 0.5rem; }
+  p, li { margin-bottom: 0.6rem; }
+  a { color: var(--link); }
+  ul, ol { padding-left: 1.4rem; }
+  code { background: var(--code-bg); padding: 0.15em 0.4em; border-radius: 4px; font-size: 0.9em; }
+  .subtitle { color: var(--dim); font-size: 1rem; margin-bottom: 2rem; }
+  .card {
+    background: var(--card-bg);
+    border: 1px solid var(--card-border);
+    border-radius: 12px;
+    padding: 1.2rem 1.4rem;
+    margin: 1rem 0;
+  }
+  .card h3 { margin-top: 0; }
+  .branch {
+    display: flex;
+    flex-direction: column;
+    gap: 0.8rem;
+    margin: 1rem 0;
+  }
+  .branch-btn {
+    display: block;
+    background: var(--accent-light);
+    border: 1px solid var(--accent);
+    border-radius: 10px;
+    padding: 0.9rem 1.2rem;
+    color: var(--accent);
+    font-weight: 600;
+    font-size: 1rem;
+    text-decoration: none;
+    cursor: pointer;
+    transition: opacity 0.15s;
+  }
+  .branch-btn:hover { opacity: 0.85; }
+  .branch-btn small { display: block; font-weight: 400; color: var(--dim); margin-top: 0.2rem; font-size: 0.85rem; }
+  .hidden { display: none; }
+  .midisplainer {
+    background: var(--accent-light);
+    border-left: 3px solid var(--accent);
+    padding: 0.8rem 1rem;
+    border-radius: 0 8px 8px 0;
+    margin: 0.8rem 0;
+    font-size: 0.92rem;
+  }
+  .midisplainer strong { color: var(--accent); }
+  .known-issue {
+    border-left: 3px solid #e6a817;
+    padding-left: 0.8rem;
+    margin: 0.5rem 0;
+    color: var(--dim);
+    font-size: 0.92rem;
+  }
+  .step-num {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.6rem;
+    height: 1.6rem;
+    background: var(--accent);
+    color: white;
+    border-radius: 50%;
+    font-weight: 700;
+    font-size: 0.85rem;
+    margin-right: 0.4rem;
+    flex-shrink: 0;
+  }
+  .step {
+    display: flex;
+    align-items: flex-start;
+    margin-bottom: 1rem;
+  }
+  .step p { margin-bottom: 0.2rem; }
+  footer { margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid var(--card-border); color: var(--dim); font-size: 0.85rem; }
+</style>
+</head>
+<body>
+
+<h1>DrawnQurve</h1>
+<p class="subtitle">Alpha Tester Guide &middot; v0.1 &middot; March 2026</p>
+
+<p>
+  Welcome. You're about to play with a MIDI looper that you <em>draw</em>.
+  Trace a shape on the screen, press play, and your curve becomes a looping
+  stream of MIDI &mdash; controlling pitch, modulation, whatever you connect it
+  to. It's weird. It's fun. We want to know if it's <em>satisfying</em>.
+</p>
+
+<h2>Pick your path</h2>
+<p>How do you feel about MIDI?</p>
+
+<div class="branch">
+  <a class="branch-btn" href="#path-new" onclick="showPath('new')">
+    "I don't really know what MIDI is. I just wanna play."
+    <small>Perfect. We'll get you drawing in 2 minutes.</small>
+  </a>
+  <a class="branch-btn" href="#path-midi" onclick="showPath('midi')">
+    "What even is MIDI? Explain it to me."
+    <small>A quick #MIDIsplainer, then we'll get you drawing.</small>
+  </a>
+  <a class="branch-btn" href="#path-ready" onclick="showPath('ready')">
+    "I'm cool with MIDI. Let's go."
+    <small>Setup checklist, then you're on your own.</small>
+  </a>
+</div>
+
+<!-- ================================================================== -->
+<!-- PATH: JUST WANNA PLAY                                               -->
+<!-- ================================================================== -->
+<div id="path-new">
+
+<h2 id="just-play">Let's just play</h2>
+
+<h3>What you need</h3>
+<ul>
+  <li>An iPad (any model, iPadOS 16+)</li>
+  <li>A synth app &mdash; <strong>AudioKit Synth One</strong> is free on the App Store</li>
+  <li>DrawnQurve (you got it via TestFlight)</li>
+</ul>
+
+<p>
+  That's the whole setup. No cables, no routing, no host app.
+  DrawnQurve talks directly to your synth through an invisible connection.
+</p>
+
+<h3>Your first playflow</h3>
+
+<div class="step">
+  <span class="step-num">1</span>
+  <div>
+    <p><strong>Open your synth app</strong> (AudioKit Synth One).</p>
+    <p>Tap a key on screen &mdash; you should hear sound. Good. Leave it running.</p>
+  </div>
+</div>
+
+<div class="step">
+  <span class="step-num">2</span>
+  <div>
+    <p><strong>Switch to DrawnQurve.</strong></p>
+    <p>You'll see a big empty canvas. That's where you draw.</p>
+  </div>
+</div>
+
+<div class="step">
+  <span class="step-num">3</span>
+  <div>
+    <p><strong>Draw a curve.</strong> Drag your finger across the canvas &mdash;
+    any shape. A swoop, a zigzag, a mountain range. Whatever feels right.</p>
+  </div>
+</div>
+
+<div class="step">
+  <span class="step-num">4</span>
+  <div>
+    <p><strong>Tap Play</strong> (top left). Your curve is now looping,
+    and the synth should be responding. You're musicking.</p>
+  </div>
+</div>
+
+<p>
+  What you hear depends on the <em>mode</em> DrawnQurve is in. By default it's
+  in <strong>Note mode</strong> &mdash; the height of your curve becomes pitch.
+  High points = high notes, low points = low notes. The curve loops, and you
+  hear a melody. (Probably a fast glissando &mdash; that's normal! Keep reading.)
+</p>
+
+<div class="known-issue">
+  <strong>Heads up:</strong> DrawnQurve has its own play button (top left).
+  If you're also using GarageBand, its play button controls GarageBand's
+  transport &mdash; not DrawnQurve's. They're independent.
+</div>
+
+<h3>What's a qurve?</h3>
+
+<p>
+  Your first drawing probably produced a rapid stream of notes &mdash; a
+  glissando. That's because a freehand curve is <em>smooth</em>, and smooth
+  means every tiny movement becomes a different note.
+</p>
+
+<p>
+  Now try this: tap one of the <strong>lock</strong> icons next to the grid.
+  The Y-lock snaps your curve's output to the grid lines. Instead of sliding
+  between every possible value, it jumps between grid levels. What was a
+  smooth curve is now a <em>step pattern</em>.
+</p>
+
+<p>
+  That's a qurve. Part curve, part staircase. The Q is for
+  <strong>quantize</strong> &mdash; snapping to a grid. And it changes
+  everything about how your drawing sounds.
+</p>
+
+<div class="card">
+  <h3>The a-ha moment</h3>
+  <p>
+    Draw any shape. Listen to the glissando. Now tap Y-lock. <em>Same shape,
+    completely different feel.</em> Add X-lock (snaps the <em>timing</em> to the
+    grid) and suddenly your freehand scribble is a crisp rhythmic pattern.
+    You're drawing step sequences.
+  </p>
+  <p>
+    This is the moment where drawn curves become qurves &mdash; and where
+    DrawnQurve starts to feel like a musical instrument.
+  </p>
+</div>
+
+<h3>More things to explore</h3>
+<ul>
+  <li><strong>Draw again</strong> while it's playing &mdash; the new curve replaces the old one instantly</li>
+  <li><strong>Speed</strong> &mdash; the slider in the top bar makes the loop faster or slower</li>
+  <li><strong>Direction</strong> &mdash; the three-way control (top left, next to Play) lets you play forward, reverse, or ping-pong</li>
+  <li><strong>The grid</strong> &mdash; the small +/&minus; buttons on the edges of the canvas change how many grid divisions there are. More divisions = finer steps</li>
+  <li><strong>Scales</strong> &mdash; tap the note badge on the canvas to open the scale browser. Pick a scale and your notes snap to it</li>
+</ul>
+
+</div><!-- /path-new -->
+
+<!-- ================================================================== -->
+<!-- PATH: MIDISPLAINER                                                  -->
+<!-- ================================================================== -->
+<div id="path-midi" class="hidden">
+
+<h2 id="midisplainer">#MIDIsplainer</h2>
+
+<p>
+  If MIDI feels confusing, that's not on you. It's a standard from 1983
+  that has been explained badly for decades. You're not a "MIDIot" &mdash;
+  that's a word some people use, and it's unfair. MIDI is genuinely
+  confusing, and the best way to understand it is to <em>play with it</em>.
+</p>
+
+<p>That's exactly what DrawnQurve lets you do.</p>
+
+<div class="midisplainer">
+  <strong>#MIDIsplainer &mdash; the 30-second version:</strong>
+  MIDI is how music apps and instruments talk to each other. It doesn't carry
+  sound &mdash; it carries <em>instructions</em>. "Play this note." "Bend the
+  pitch." "Turn this knob to 73." A synth receives those instructions and
+  makes sound from them.
+</div>
+
+<p>
+  DrawnQurve draws those instructions. You trace a shape, and it becomes a
+  looping stream of MIDI messages that a synth interprets as music. Different
+  modes send different kinds of messages:
+</p>
+
+<ul>
+  <li><strong>Note mode</strong> &mdash; your curve's height becomes pitch. You're drawing a melody.</li>
+  <li><strong>CC mode</strong> &mdash; "continuous control." Like drawing the movement of a knob or slider on someone else's synth.</li>
+  <li><strong>Pitch Bend</strong> &mdash; bends notes up and down, like a guitar whammy bar.</li>
+  <li><strong>Pressure</strong> &mdash; aftertouch. On synths that support it, it's like varying how hard you press a key after it's already down.</li>
+</ul>
+
+<p>
+  You don't need to memorize any of this. Just start drawing and listen to
+  what happens. The understanding follows from the experience.
+</p>
+
+<p>
+  Ready? Follow the <a href="#just-play" onclick="showPath('new')">playflow steps above</a>.
+</p>
+
+</div><!-- /path-midi -->
+
+<!-- ================================================================== -->
+<!-- PATH: MIDI-READY                                                    -->
+<!-- ================================================================== -->
+<div id="path-ready">
+
+<h2>Setup</h2>
+
+<h3>Standalone (simplest)</h3>
+<p>
+  DrawnQurve creates a virtual MIDI source port called <strong>"DrawnQurve"</strong>.
+  Any MIDI-aware app on your iPad will see it as a source automatically.
+  Open a synth, open DrawnQurve, draw, play. Done.
+</p>
+<ul>
+  <li><strong>AudioKit Synth One</strong> &mdash; free, responds to Note/CC/PB</li>
+  <li><strong>GarageBand</strong> &mdash; free, first-party. Create an <strong>Instrument</strong> track (Keyboard, Strings, whatever you like). DrawnQurve's virtual port feeds it directly.</li>
+</ul>
+
+<div class="known-issue">
+  <strong>GarageBand notes:</strong> (1) Background audio must be enabled manually:
+  iPad Settings &rarr; GarageBand &rarr; "Run in Background." Without this,
+  GarageBand stops receiving MIDI when it's not the foreground app.
+  (2) GarageBand's play button controls GarageBand's transport, not DrawnQurve's.
+  They're separate &mdash; DrawnQurve has its own Play in the top-left corner.
+</div>
+
+<p>
+  The <strong>MIDI Out</strong> button in the toolbar opens a picker where you can:
+</p>
+<ul>
+  <li>Toggle the virtual port on/off (for when you don't want DrawnQurve broadcasting to every synth)</li>
+  <li>Add a direct target device (sends to that device <em>in addition to</em> the virtual port)</li>
+</ul>
+
+<h3>AUv3 host (advanced)</h3>
+<p>
+  DrawnQurve is an AUv3 MIDI Effect (<code>aumi</code>). Load it as a MIDI FX
+  plugin in any compatible host:
+</p>
+<ul>
+  <li><strong>AUM</strong> &mdash; add as MIDI FX on a channel strip, route output to an instrument</li>
+  <li><strong>Logic for iPad</strong> &mdash; insert on a Software Instrument track as MIDI FX</li>
+  <li><strong>Loopy Pro</strong> &mdash; add as a MIDI FX node, route to a synth node</li>
+  <li><strong>Audiobus 3</strong> &mdash; place in the MIDI FX slot between source and destination</li>
+</ul>
+
+<h2>What's a qurve?</h2>
+
+<p>
+  A freehand curve produces smooth, continuous output &mdash; every micro-movement
+  becomes a slightly different value. In Note mode, that means rapid glissandi.
+  In CC mode, it's a wobbly knob.
+</p>
+<p>
+  Tap a <strong>lock</strong> button to <em>quantize</em> the output. Y-lock
+  snaps values to grid levels. X-lock snaps timing to grid columns. With both
+  on, your fluid gesture becomes a crisp step pattern &mdash; part curve, part
+  staircase. That's a qurve.
+</p>
+<p>
+  The grid density (+/&minus; buttons) controls how many steps you get. More
+  divisions = finer resolution. Fewer = bold, blocky jumps. In sync mode, the
+  beat presets (&#x2669; &#x266a; &#x266c;) give those steps rhythmic meaning.
+</p>
+
+<h2>Features at a glance</h2>
+<ul>
+  <li><strong>4 lanes</strong> &mdash; each with its own curve, MIDI routing (Note/CC/PB/Pressure), and loop settings</li>
+  <li><strong>X/Y quantize</strong> &mdash; snap time and value to grid divisions. This is the curve &rarr; qurve transformation</li>
+  <li><strong>Beat presets</strong> (sync mode) &mdash; step subdivisions (&#x266c; &#x266a; &#x2669;) and loop durations (1&ndash;32 beats)</li>
+  <li><strong>Y presets</strong> &mdash; octave/dozen/PB range and step size, mode-dependent</li>
+  <li><strong>Scale quantization</strong> &mdash; Note mode output snapped to a chosen scale + root (musical zone, bottom of screen)</li>
+  <li><strong>Host sync</strong> &mdash; lock loop speed to host BPM (sync button, top bar)</li>
+  <li><strong>Per-lane direction &amp; speed</strong> &mdash; each lane can run forward/reverse/ping-pong at its own rate</li>
+  <li><strong>Legato mode</strong> &mdash; Note mode: new note starts before old note ends (overlapping ties)</li>
+</ul>
+
+</div><!-- /path-ready -->
+
+<!-- ================================================================== -->
+<!-- SHARED: WHAT WE'RE TESTING                                          -->
+<!-- ================================================================== -->
+
+<h2>What we're testing</h2>
+
+<p>
+  The core question: <strong>does DrawnQurve enable satisfying playflows?</strong>
+</p>
+
+<p>
+  A "playflow" is the full arc: drawing a curve, hearing it loop, refining it
+  into something that makes you want to keep going. We're testing whether that
+  sequence feels fluid, rewarding, and worth coming back to.
+</p>
+
+<div class="card">
+  <h3>Things to try</h3>
+  <ol>
+    <li>Draw a slow, simple shape. Play it. Does it feel immediate?</li>
+    <li>Draw something fast and complex. Does the result surprise you?</li>
+    <li>Turn on Y-lock (quantize). Draw the same shape. Different feel?</li>
+    <li>Turn on X-lock too. Now you're drawing step sequences &mdash; qurves.</li>
+    <li>Open the scale browser (tap the note badge on the canvas). Pick a scale. Draw again. Sound more musical?</li>
+    <li>Add a second lane. Set it to CC mode. Now you're modulating <em>and</em> playing notes.</li>
+    <li>Try sync mode (top bar). Set the duration to 4 beats. The step presets (&#x2669; &#x266a; &#x266c;) now mean something rhythmic.</li>
+  </ol>
+</div>
+
+<div class="card">
+  <h3>What to tell us</h3>
+  <ul>
+    <li>What moment, if any, felt <strong>satisfying</strong>? What got in the way?</li>
+    <li>Was there anything you <strong>couldn't figure out</strong> without help?</li>
+    <li>Did anything feel <strong>broken, laggy, or wrong</strong>?</li>
+    <li>What would make you want to <strong>use this in a real session</strong>?</li>
+    <li>Were any <strong>touch targets too small</strong> to hit reliably? (We expect this &mdash; tell us which ones.)</li>
+  </ul>
+</div>
+
+<h2>Known issues &amp; limitations</h2>
+
+<ul>
+  <li><strong>Touch targets are likely too small</strong> on many screens. This is a known issue we're actively sizing. Please report which controls are hardest to tap.</li>
+  <li><strong>No cross-app sync.</strong> Host sync works within AUv3 hosts, but standalone DrawnQurve can't sync its transport to GarageBand's tempo or transport. Ableton Link is on the roadmap.</li>
+  <li><strong>GarageBand background audio</strong> must be enabled manually in iPad Settings &rarr; GarageBand &rarr; "Run in Background."</li>
+  <li><strong>DrawnQurve's Play &ne; GarageBand's Play.</strong> Each app has its own transport. DrawnQurve's is in the top-left corner of the app.</li>
+  <li><strong>CoreMIDI errors in console</strong> (372, 388, etc.) may appear when switching between apps. These are transient and don't affect playback.</li>
+  <li><strong>Console noise</strong> &mdash; "CA Event launch measurement" and "Tracking element window" warnings in Xcode are benign iOS system artefacts, not DrawnQurve bugs.</li>
+</ul>
+
+<h2>About DrawnQurve</h2>
+
+<p>
+  DrawnQurve is a MIDI looper for iPad. You draw a shape; it loops as MIDI.
+  Notes, continuous control, pitch bend, aftertouch &mdash; whatever you route it
+  to. It's a tool for musicking: for anyone involved in music, not just
+  musicians. Playing <em>with</em> music, not just playing music.
+</p>
+
+<p>
+  This is an alpha. Things will change. Your experience right now shapes what
+  this becomes. Thank you for drawing with us.
+</p>
+
+<footer>
+  <p>DrawnQurve &middot; Enkerli &middot; Public Domain</p>
+  <p>Built with JUCE. Alpha distributed via TestFlight.</p>
+</footer>
+
+<script>
+function showPath(which) {
+  document.getElementById('path-new').classList.toggle('hidden', which !== 'new');
+  document.getElementById('path-midi').classList.toggle('hidden', which !== 'midi');
+  document.getElementById('path-ready').classList.toggle('hidden', which !== 'ready');
+}
+// Start with all paths visible (full scrollable doc); clicking a branch focuses one
+</script>
+
+</body>
+</html>

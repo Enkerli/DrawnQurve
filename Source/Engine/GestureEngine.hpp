@@ -112,6 +112,11 @@ public:
     float getCurrentPhase() const;
     /// Per-lane phase (0-1); returns 0 if the lane has no valid snapshot.
     float getCurrentPhaseForLane (int lane) const;
+    /// Last MIDI value emitted on this lane (-1 = nothing committed yet).
+    /// For Note: MIDI note number; for CC/AT: 0–127; for PB: 0–16383.
+    /// Mirror of LaneRuntime::lastSentValue, written by the render thread
+    /// after every commit so the UI thread can read it lock-free.
+    int   getLastSentValue (int lane) const noexcept;
 
     // ── Render-thread API ─────────────────────────────────────────────────────
     /**
@@ -145,6 +150,11 @@ private:
     std::atomic<bool> _lanesSynced  { false };
 
     std::array<LaneRuntime, kMaxLanes> _runtimes;   ///< Render-thread only
+
+    /// UI-readable mirror of LaneRuntime::lastSentValue.  Updated by the render
+    /// thread immediately after every rt.lastSentValue write so the cursor
+    /// readout (CurveDisplay) can fetch the last committed value lock-free.
+    std::array<std::atomic<int>, kMaxLanes> _lastSentMirror;
 
     /// Render-thread-only master clock used when _lanesSynced is true.
     double _syncMasterPlayhead  { 0.0 };

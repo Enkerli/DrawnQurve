@@ -1,6 +1,6 @@
 #pragma once
 
-#include <juce_gui_basics/juce_gui_basics.h>
+#include <JuceHeader.h>
 
 namespace dcui
 {
@@ -18,8 +18,6 @@ enum class IconType
     range,
     gridX,
     gridY,
-    lock,
-    lockOpen,
     directionLeft,
     directionRight,
     directionPingPong,
@@ -46,6 +44,7 @@ class IconFactory
 public:
     static juce::Path createIcon (IconType type, juce::Rectangle<float> bounds, const IconStyle& style = {})
     {
+        using Rect = juce::Rectangle<float>;
         auto b = bounds.reduced (bounds.getWidth() * 0.08f, bounds.getHeight() * 0.08f);
 
         switch (type)
@@ -61,8 +60,6 @@ public:
             case IconType::range:             return makeRange (b, style);
             case IconType::gridX:             return makeGridX (b, style);
             case IconType::gridY:             return makeGridY (b, style);
-            case IconType::lock:              return makeLock (b, style);
-            case IconType::lockOpen:          return makeLockOpen (b, style);
             case IconType::directionLeft:     return makeDirectionLeft (b, style);
             case IconType::directionRight:    return makeDirectionRight (b, style);
             case IconType::directionPingPong: return makeDirectionPingPong (b, style);
@@ -185,6 +182,7 @@ private:
 
         juce::Path arc;
         auto r = size * 0.28f;
+        auto arcRect = juce::Rectangle<float> (r * 2.0f, r * 2.0f).withCentre (c);
         arc.addCentredArc (c.x, c.y, r, r, 0.0f, juce::MathConstants<float>::pi * 0.20f,
                            juce::MathConstants<float>::pi * 1.72f, true);
         p.addPath (arc);
@@ -196,7 +194,6 @@ private:
 
     static juce::Path makeLengthSync (juce::Rectangle<float> b, const IconStyle& s)
     {
-        juce::ignoreUnused (s);
         juce::Path p;
         auto size = std::min (b.getWidth(), b.getHeight());
         auto c = b.getCentre();
@@ -267,7 +264,6 @@ private:
 
     static juce::Path makeMute (juce::Rectangle<float> b, const IconStyle& s)
     {
-        juce::ignoreUnused (s);
         juce::Path p;
         auto size = std::min (b.getWidth(), b.getHeight());
         auto c = b.getCentre();
@@ -329,7 +325,6 @@ private:
 
     static juce::Path makeGridX (juce::Rectangle<float> b, const IconStyle& s)
     {
-        juce::ignoreUnused (s);
         juce::Path p;
         auto w = b.getWidth();
         auto h = b.getHeight();
@@ -352,7 +347,6 @@ private:
 
     static juce::Path makeGridY (juce::Rectangle<float> b, const IconStyle& s)
     {
-        juce::ignoreUnused (s);
         juce::Path p;
         auto w = b.getWidth();
         auto h = b.getHeight();
@@ -369,85 +363,6 @@ private:
 
         addLine (p, { cx - r, cy }, { cx + r, cy });
         addLine (p, { cx, cy - r }, { cx, cy + r });
-
-        return p;
-    }
-
-    static juce::Path makeLock (juce::Rectangle<float> b, const IconStyle& s)
-    {
-        juce::Path p;
-        const auto w  = b.getWidth();
-        const auto h  = b.getHeight();
-        const auto cx = b.getCentreX();
-
-        // Body: rounded rect in the lower 52% of the icon
-        const float bodyL = b.getX() + w * 0.22f;
-        const float bodyW = w * 0.56f;
-        const float bodyT = b.getY() + h * 0.44f;
-        const float bodyH = h * 0.48f;
-        p.addRoundedRectangle (bodyL, bodyT, bodyW, bodyH, s.cornerRadius * 0.45f);
-
-        // Keyhole dot
-        addDot (p, { cx, bodyT + bodyH * 0.50f }, s.dotRadius * 0.9f);
-
-        // Shackle (U-shape over the top)
-        const float sr    = w * 0.18f;            // arc radius = leg half-gap
-        const float arcCY = bodyT - sr * 0.85f;   // arc centre sits above body top
-
-        // Left leg: down from arc start to body top
-        p.startNewSubPath (cx - sr, bodyT + h * 0.02f);
-        p.lineTo (cx - sr, arcCY);
-
-        // Top arc: from left (pi) over the top to right (2*pi) in JUCE y-down coords
-        juce::Path arc;
-        arc.addCentredArc (cx, arcCY, sr, sr, 0.0f,
-                           juce::MathConstants<float>::pi,
-                           juce::MathConstants<float>::twoPi, true);
-        p.addPath (arc);
-
-        // Right leg: down from arc end to body top
-        p.startNewSubPath (cx + sr, arcCY);
-        p.lineTo (cx + sr, bodyT + h * 0.02f);
-
-        return p;
-    }
-
-    static juce::Path makeLockOpen (juce::Rectangle<float> b, const IconStyle& s)
-    {
-        // Same as makeLock except the right leg of the shackle is raised —
-        // it does not enter the body, showing the lock is unlatched.
-        juce::Path p;
-        const auto w  = b.getWidth();
-        const auto h  = b.getHeight();
-        const auto cx = b.getCentreX();
-
-        // Body (same as closed lock)
-        const float bodyL = b.getX() + w * 0.22f;
-        const float bodyW = w * 0.56f;
-        const float bodyT = b.getY() + h * 0.44f;
-        const float bodyH = h * 0.48f;
-        p.addRoundedRectangle (bodyL, bodyT, bodyW, bodyH, s.cornerRadius * 0.45f);
-
-        // No keyhole dot when open — the lock is disengaged
-
-        const float sr    = w * 0.18f;
-        const float arcCY = bodyT - sr * 0.85f;
-
-        // Left leg: still goes into body (pivot point)
-        p.startNewSubPath (cx - sr, bodyT + h * 0.02f);
-        p.lineTo (cx - sr, arcCY);
-
-        // Top arc: same semicircle
-        juce::Path arc;
-        arc.addCentredArc (cx, arcCY, sr, sr, 0.0f,
-                           juce::MathConstants<float>::pi,
-                           juce::MathConstants<float>::twoPi, true);
-        p.addPath (arc);
-
-        // Right leg: terminates at arc height — the shackle is unlatched (raised)
-        // Only a tiny stub so the open shape reads clearly
-        p.startNewSubPath (cx + sr, arcCY);
-        p.lineTo (cx + sr, arcCY - h * 0.10f);   // points upward, clearly not in body
 
         return p;
     }
@@ -535,14 +450,6 @@ private:
 class IconButton : public juce::Button
 {
 public:
-    /// Default constructor — lets std::array<IconButton, N> compile.
-    /// Call setIconType() and setBaseColour() before adding to parent.
-    IconButton()
-        : juce::Button (""),
-          icon (IconType::mute),
-          colour (juce::Colours::white)
-    {}
-
     IconButton (const juce::String& name,
                 IconType iconType,
                 juce::Colour baseColour = juce::Colours::white)
@@ -554,15 +461,6 @@ public:
 
     void setIconType (IconType t)            { icon = t; repaint(); }
     void setBaseColour (juce::Colour c)      { colour = c; repaint(); }
-
-    /// When set, draws \p onIcon when toggled on and \p offIcon when toggled off.
-    void setToggleIcons (IconType onIcon, IconType offIcon)
-    {
-        icon       = onIcon;
-        _offIcon   = offIcon;
-        _hasOff    = true;
-        repaint();
-    }
     void setShowPauseOverlay (bool shouldShow)
     {
         showPauseOverlay = shouldShow;
@@ -586,32 +484,20 @@ public:
 
         auto iconColour = IconFactory::colourForState (colour, state);
 
-        // visual-audit-2026-04 §3 P4: idle state is chrome-free — only the icon
-        // glyph shows so the editor canvas reads as uncluttered.  Hover, active
-        // (toggled-on or pressed) and disabled states still draw a pill so user
-        // feedback is preserved.
-        const float bgAlpha      = state == IconVisualState::active ? 0.22f
-                                 : state == IconVisualState::hover  ? 0.14f
-                                 : 0.0f;
-        const float outlineAlpha = state == IconVisualState::active ? 0.40f
-                                 : state == IconVisualState::hover  ? 0.18f
-                                 : 0.0f;
+        auto bg = juce::Colours::black.withAlpha (state == IconVisualState::active ? 0.22f
+                                  : state == IconVisualState::hover ? 0.14f
+                                  : 0.08f);
 
-        if (bgAlpha > 0.0f)
-        {
-            g.setColour (juce::Colours::black.withAlpha (bgAlpha));
-            g.fillRoundedRectangle (r, cornerRadius);
-        }
+        auto outline = colour.withAlpha (state == IconVisualState::active ? 0.40f : 0.18f);
 
-        if (outlineAlpha > 0.0f)
-        {
-            g.setColour (colour.withAlpha (outlineAlpha));
-            g.drawRoundedRectangle (r, cornerRadius, 1.0f);
-        }
+        g.setColour (bg);
+        g.fillRoundedRectangle (r, cornerRadius);
+
+        g.setColour (outline);
+        g.drawRoundedRectangle (r, cornerRadius, 1.0f);
 
         auto iconBounds = r.reduced (r.getWidth() * 0.18f, r.getHeight() * 0.18f);
-        const auto iconToDraw = (_hasOff && ! getToggleState()) ? _offIcon : icon;
-        IconFactory::drawIcon (g, iconToDraw, iconBounds, iconColour);
+        IconFactory::drawIcon (g, icon, iconBounds, iconColour);
 
         if (showPauseOverlay)
         {
@@ -623,8 +509,6 @@ public:
 
 private:
     IconType icon;
-    IconType _offIcon      = IconType::mute;   ///< Icon drawn when toggled off (if _hasOff)
-    bool     _hasOff       = false;            ///< true → use _offIcon when not toggled
     juce::Colour colour;
     bool showPauseOverlay = false;
     float cornerRadius = 8.0f;

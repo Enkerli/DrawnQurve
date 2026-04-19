@@ -18,8 +18,14 @@
  * every C–C#–D (and F–F#–G, etc.) triple forms an equilateral triangle.
  *
  * Interaction:
- *   Short tap   → toggle pitch class in / out of the custom scale mask.
- *   Long press  → set that pitch class as the scale root (outer ring appears).
+ *   Short tap     → toggle pitch class in / out of the custom scale mask.
+ *   Long press    → set that pitch class as the scale root (outer ring appears).
+ *   Double-tap    → also sets the root.  Matches the webapp's usePressGesture
+ *                   shared between rows and wheel — second tap on the same node
+ *                   within kDoubleTapMs is treated as "set root", not as a
+ *                   second toggle.  The first tap's mask change is reverted so
+ *                   double-tapping a previously-inactive note doesn't leave it
+ *                   toggled in addition to becoming the root.
  *
  * Integration with APVTS:
  *   setMask(uint16_t) / setRoot(int)  — called from parameterChanged(); no callbacks fired.
@@ -116,6 +122,15 @@ private:
     bool     _longFired      { false };
     bool     _rootSelectMode { false };
     bool     _useFlats       { false };
+
+    // Double-tap detection (matches webapp's usePressGesture).
+    // _lastTapMs is juce::Time::getMillisecondCounter() at the previous tap;
+    // _lastTapNode is the index that was tapped.  A new tap on the same node
+    // within kDoubleTapMs upgrades to "set root".
+    static constexpr unsigned int kLongPressMs = 500;
+    static constexpr unsigned int kDoubleTapMs = 350;
+    juce::uint32 _lastTapMs   { 0 };
+    int          _lastTapNode { -1 };
 
     std::vector<Node> _nodes;   ///< [0..6] = naturals, [7..11] = chromatics
 
@@ -218,7 +233,7 @@ inline void ScaleLattice::mouseDown (const juce::MouseEvent& e)
     // In root-select mode (◆ button active), any short tap sets the root —
     // suppress the long-press timer to avoid the two paths firing at once.
     if (_pressed >= 0 && !_rootSelectMode)
-        startTimer (400);
+        startTimer (static_cast<int> (kLongPressMs));
 }
 
 inline void ScaleLattice::timerCallback()
@@ -228,6 +243,10 @@ inline void ScaleLattice::timerCallback()
     {
         _longFired = true;
         _root = _nodes[static_cast<size_t> (_pressed)].pc;
+        // Long-press counts as a fresh "set root" event, not a tap — reset
+        // the double-tap window so a follow-up tap toggles cleanly.
+        _lastTapMs   = 0;
+        _lastTapNode = -1;
         repaint();
         if (onRootChanged) onRootChanged (_root);
     }
@@ -243,16 +262,40 @@ inline void ScaleLattice::mouseUp (const juce::MouseEvent& /*e*/)
             // Root-select mode: set root instead of toggling mask.
             _root = _nodes[static_cast<size_t> (_pressed)].pc;
             _rootSelectMode = false;   // one-shot: deactivate after use
+            _lastTapMs   = 0;
+            _lastTapNode = -1;
             repaint();
             if (onRootChanged) onRootChanged (_root);
         }
         else
         {
-            // Bitmask convention: bit (11 - pc) = pitch class pc active.
+            const auto now = juce::Time::getMillisecondCounter();
+            const bool isDoubleTap = (_pressed == _lastTapNode)
+                                  && (_lastTapMs != 0)
+                                  && ((now - _lastTapMs) < kDoubleTapMs);
             const uint16_t bit = static_cast<uint16_t> (1u << (11 - _nodes[static_cast<size_t> (_pressed)].pc));
-            _mask ^= bit;
-            repaint();
-            if (onMaskChanged) onMaskChanged (_mask);
+
+            if (isDoubleTap)
+            {
+                // Revert the first tap's mask flip so the visible state stays
+                // consistent — double-tap is a "set root" gesture, not a toggle.
+                _mask ^= bit;
+                _root = _nodes[static_cast<size_t> (_pressed)].pc;
+                _lastTapMs   = 0;
+                _lastTapNode = -1;
+                repaint();
+                if (onMaskChanged) onMaskChanged (_mask);
+                if (onRootChanged) onRootChanged (_root);
+            }
+            else
+            {
+                // Bitmask convention: bit (11 - pc) = pitch class pc active.
+                _mask ^= bit;
+                _lastTapMs   = now;
+                _lastTapNode = _pressed;
+                repaint();
+                if (onMaskChanged) onMaskChanged (_mask);
+            }
         }
     }
     _pressed = -1;

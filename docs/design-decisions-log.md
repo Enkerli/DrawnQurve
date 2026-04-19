@@ -20,6 +20,41 @@ Each entry has:
 
 ---
 
+### 2026-04 | OPEN | Visual design audit triggered
+
+**Context**: Several iterative micro-fixes (Option-B family-bar refactor,
+vertical mask-button column, label sidebar move, wheel label clearance) each
+cleaned up one zone, but a screenshot review (AUv3 in AUM, iPad, 2026-04-18)
+showed the editor still reads as multiple design dialects glued together.
+User flagged the immediate symptom — *"the scalename and bitmap are on a
+layer above a scale pill with some additional chrome around"* — and called
+for a structural audit rather than another local tweak.
+
+**Audit scope** (after 2026-04-18 user feedback): all zones — eyebrow,
+canvas, musical zone, multi-lane right rail, overlays (scale browser,
+routing, help), and theming as a cross-cutting concern. Roadmap items
+with layout implications (preset save/load, MIDI input → curve generation,
+lane scaling beyond 4) explicitly scoped in for layout reservation,
+deferred for detail design.
+
+**Two organising frames** adopted to structure the audit:
+* *Surface discipline* — minimise distinct chrome surfaces; §§ 2.1, 3-P1,
+  3-P3, 3-P4
+* *Playflow tiering* — performance-hot / deliberate / setup /
+  session-stable / emergency tiers, with visual prominence and touch
+  targets matching tier; §§ 0.1, 2.5, 2.6, 3-P5, 3-P6
+
+**Decision**: Defer further per-zone tweaks until the audit's Tier 1 items
+land. No design principles adopted yet; § 3 of the audit (P1–P7) is a
+starting position, not policy.
+
+**Status**: OPEN — pending discussion of the audit's proposed principles
+(P1–P7) and the prioritized fix list (Tier 1 → Tier 2 → Tier 3).
+
+**Cross-reference**: `docs/visual-audit-2026-04.md` (full audit document).
+
+---
+
 ### 2026-03 | DECIDED | Multi-lane architecture shipped
 
 **Context**: Three independent lanes, each with its own curve table, output type,

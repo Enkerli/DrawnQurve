@@ -1,0 +1,180 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="900" viewBox="0 0 1400 900">
+  <defs>
+    <style>
+      .bg { fill: #101317; }
+      .panel { fill: #171c22; stroke: #2d3642; stroke-width: 2; }
+      .panel2 { fill: #1b222b; stroke: #34404e; stroke-width: 1.5; }
+      .txt { fill: #d9e1eb; font-family: Inter, Arial, sans-serif; font-size: 20px; }
+      .sub { fill: #9fb0c3; font-family: Inter, Arial, sans-serif; font-size: 15px; }
+      .tiny { fill: #93a2b3; font-family: Inter, Arial, sans-serif; font-size: 13px; }
+      .tab { fill: #242d37; stroke: #425061; stroke-width: 1.5; }
+      .tabActive { fill: #2d3745; stroke: #8ba0b8; stroke-width: 2; }
+      .chip { fill: #242d37; stroke: #425061; stroke-width: 1.5; }
+      .chipActive { fill: #314359; stroke: #9cb5d1; stroke-width: 2; }
+      .line { stroke: #afc2d7; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; fill: none; }
+      .mutedLine { stroke: #7f91a4; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; fill: none; }
+      .noteOn { fill: #c9d6e3; stroke: #dce7f0; stroke-width: 1; }
+      .noteOff { fill: #222a33; stroke: #5f7286; stroke-width: 1.4; }
+      .accent { fill: #dfeaf6; }
+      .accentStroke { stroke: #dfeaf6; }
+      .green { fill: #7fd3b0; stroke: #9ce7c9; }
+    </style>
+  </defs>
+
+  <rect class="bg" x="0" y="0" width="1400" height="900"/>
+
+  <text class="txt" x="60" y="58">Scale Selection Refactor — Mockup Direction</text>
+  <text class="sub" x="60" y="84">Diatonic expanded by default; nearby families visible; transformations and previews exposed progressively.</text>
+
+  <rect class="panel" x="50" y="110" width="1300" height="740" rx="22"/>
+
+  <!-- Family bar -->
+  <text class="sub" x="80" y="150">Families</text>
+  <rect class="tabActive" x="80" y="165" width="150" height="44" rx="12"/>
+  <text class="txt" x="116" y="194">Diatonic</text>
+
+  <rect class="tab" x="242" y="165" width="150" height="44" rx="12"/>
+  <text class="txt" x="273" y="194">Pentatonic</text>
+
+  <rect class="tab" x="404" y="165" width="150" height="44" rx="12"/>
+  <text class="txt" x="437" y="194">Jazz Minor</text>
+
+  <rect class="tab" x="566" y="165" width="170" height="44" rx="12"/>
+  <text class="txt" x="594" y="194">Harmonic Minor</text>
+
+  <rect class="tab" x="748" y="165" width="135" height="44" rx="12"/>
+  <text class="txt" x="780" y="194">Symmetric</text>
+
+  <rect class="tab" x="895" y="165" width="100" height="44" rx="12"/>
+  <text class="txt" x="925" y="194">Bebop</text>
+
+  <rect class="tab" x="1007" y="165" width="92" height="44" rx="12"/>
+  <text class="txt" x="1032" y="194">Blues</text>
+
+  <rect class="tab" x="1111" y="165" width="110" height="44" rx="12"/>
+  <text class="txt" x="1138" y="194">Chordal</text>
+
+  <rect class="tab" x="1233" y="165" width="95" height="44" rx="12"/>
+  <text class="txt" x="1257" y="194">Recent</text>
+
+  <!-- Expanded diatonic area -->
+  <rect class="panel2" x="80" y="230" width="1240" height="180" rx="18"/>
+  <text class="sub" x="100" y="262">Diatonic modes</text>
+  <text class="tiny" x="1150" y="262">default expanded</text>
+
+  <!-- mode chips -->
+  <rect class="chipActive" x="100" y="280" width="130" height="38" rx="12"/>
+  <text class="txt" x="141" y="306">Ionian</text>
+  <rect class="chip" x="242" y="280" width="130" height="38" rx="12"/>
+  <text class="txt" x="286" y="306">Dorian</text>
+  <rect class="chip" x="384" y="280" width="140" height="38" rx="12"/>
+  <text class="txt" x="423" y="306">Phrygian</text>
+  <rect class="chip" x="536" y="280" width="126" height="38" rx="12"/>
+  <text class="txt" x="581" y="306">Lydian</text>
+  <rect class="chip" x="674" y="280" width="150" height="38" rx="12"/>
+  <text class="txt" x="700" y="306">Mixolydian</text>
+  <rect class="chip" x="836" y="280" width="136" height="38" rx="12"/>
+  <text class="txt" x="878" y="306">Aeolian</text>
+  <rect class="chip" x="984" y="280" width="126" height="38" rx="12"/>
+  <text class="txt" x="1025" y="306">Locrian</text>
+
+  <!-- previews -->
+  <text class="sub" x="100" y="348">Mini previews</text>
+
+  <g transform="translate(110,365)">
+    <text class="tiny" x="0" y="0">Ionian</text>
+    <g transform="translate(0,18)">
+      <circle class="noteOn" cx="12" cy="8" r="5"/><circle class="noteOff" cx="32" cy="8" r="5"/><circle class="noteOn" cx="52" cy="8" r="5"/><circle class="noteOff" cx="72" cy="8" r="5"/><circle class="noteOn" cx="92" cy="8" r="5"/><circle class="noteOn" cx="112" cy="8" r="5"/><circle class="noteOff" cx="132" cy="8" r="5"/><circle class="noteOn" cx="152" cy="8" r="5"/><circle class="noteOff" cx="172" cy="8" r="5"/><circle class="noteOn" cx="192" cy="8" r="5"/><circle class="noteOff" cx="212" cy="8" r="5"/><circle class="noteOn" cx="232" cy="8" r="5"/>
+    </g>
+  </g>
+
+  <g transform="translate(390,365)">
+    <text class="tiny" x="0" y="0">Dorian</text>
+    <g transform="translate(0,18)">
+      <circle class="noteOn" cx="12" cy="8" r="5"/><circle class="noteOff" cx="32" cy="8" r="5"/><circle class="noteOn" cx="52" cy="8" r="5"/><circle class="noteOn" cx="72" cy="8" r="5"/><circle class="noteOff" cx="92" cy="8" r="5"/><circle class="noteOn" cx="112" cy="8" r="5"/><circle class="noteOff" cx="132" cy="8" r="5"/><circle class="noteOn" cx="152" cy="8" r="5"/><circle class="noteOff" cx="172" cy="8" r="5"/><circle class="noteOn" cx="192" cy="8" r="5"/><circle class="noteOn" cx="212" cy="8" r="5"/><circle class="noteOff" cx="232" cy="8" r="5"/>
+    </g>
+  </g>
+
+  <g transform="translate(670,365)">
+    <text class="tiny" x="0" y="0">Lydian</text>
+    <g transform="translate(0,18)">
+      <circle class="noteOn" cx="12" cy="8" r="5"/><circle class="noteOff" cx="32" cy="8" r="5"/><circle class="noteOn" cx="52" cy="8" r="5"/><circle class="noteOff" cx="72" cy="8" r="5"/><circle class="noteOn" cx="92" cy="8" r="5"/><circle class="noteOn" cx="112" cy="8" r="5"/><circle class="noteOn" cx="132" cy="8" r="5"/><circle class="noteOff" cx="152" cy="8" r="5"/><circle class="noteOn" cx="172" cy="8" r="5"/><circle class="noteOff" cx="192" cy="8" r="5"/><circle class="noteOn" cx="212" cy="8" r="5"/><circle class="noteOff" cx="232" cy="8" r="5"/>
+    </g>
+  </g>
+
+  <g transform="translate(950,365)">
+    <text class="tiny" x="0" y="0">Aeolian</text>
+    <g transform="translate(0,18)">
+      <circle class="noteOn" cx="12" cy="8" r="5"/><circle class="noteOff" cx="32" cy="8" r="5"/><circle class="noteOn" cx="52" cy="8" r="5"/><circle class="noteOn" cx="72" cy="8" r="5"/><circle class="noteOff" cx="92" cy="8" r="5"/><circle class="noteOn" cx="112" cy="8" r="5"/><circle class="noteOff" cx="132" cy="8" r="5"/><circle class="noteOn" cx="152" cy="8" r="5"/><circle class="noteOn" cx="172" cy="8" r="5"/><circle class="noteOff" cx="192" cy="8" r="5"/><circle class="noteOn" cx="212" cy="8" r="5"/><circle class="noteOff" cx="232" cy="8" r="5"/>
+    </g>
+  </g>
+
+  <!-- Transformations -->
+  <rect class="panel2" x="80" y="430" width="450" height="120" rx="18"/>
+  <text class="sub" x="100" y="462">Transformations</text>
+
+  <g transform="translate(112,487)">
+    <circle class="noteOff" cx="18" cy="18" r="18"/><path class="line" d="M8 25 Q18 8 30 12"/><text class="tiny" x="48" y="23">Rotate</text>
+  </g>
+  <g transform="translate(112,523)">
+    <circle class="noteOff" cx="18" cy="18" r="18"/><path class="line" d="M10 12 Q18 26 26 12"/><path class="line" d="M18 4 L18 32"/><text class="tiny" x="48" y="23">Invert</text>
+  </g>
+  <g transform="translate(278,487)">
+    <circle class="noteOff" cx="18" cy="18" r="18"/><path class="line" d="M18 0 A18 18 0 0 1 18 36"/><path class="line" d="M18 0 A18 18 0 0 0 18 36" stroke-dasharray="4 4"/><text class="tiny" x="48" y="23">Complement</text>
+  </g>
+  <g transform="translate(278,523)">
+    <circle class="noteOff" cx="18" cy="18" r="18"/><circle class="accent" cx="18" cy="18" r="3.5"/><text class="tiny" x="48" y="23">Canonical</text>
+  </g>
+
+  <!-- Main PCS editor -->
+  <rect class="panel2" x="560" y="430" width="760" height="360" rx="18"/>
+  <text class="sub" x="585" y="462">Current PCS editor</text>
+  <text class="tiny" x="1115" y="462">Custom from Diatonic</text>
+
+  <!-- staggered note layout -->
+  <g transform="translate(615,505)">
+    <!-- top row black keys style -->
+    <circle class="noteOff" cx="75" cy="0" r="18"/><text class="tiny" x="65" y="5">C♯</text>
+    <circle class="noteOff" cx="155" cy="0" r="18"/><text class="tiny" x="145" y="5">D♯</text>
+    <circle class="noteOn" cx="315" cy="0" r="18"/><text class="tiny" x="305" y="5">F♯</text>
+    <circle class="noteOff" cx="395" cy="0" r="18"/><text class="tiny" x="385" y="5">G♯</text>
+    <circle class="noteOff" cx="475" cy="0" r="18"/><text class="tiny" x="465" y="5">A♯</text>
+
+    <!-- bottom row white keys style -->
+    <circle class="noteOn" cx="35" cy="72" r="22"/><text class="sub" x="29" y="77">C</text>
+    <circle class="noteOn" cx="115" cy="72" r="22"/><text class="sub" x="109" y="77">D</text>
+    <circle class="noteOn" cx="195" cy="72" r="22"/><text class="sub" x="189" y="77">E</text>
+    <circle class="noteOn" cx="275" cy="72" r="22"/><text class="sub" x="269" y="77">F</text>
+    <circle class="noteOn" cx="355" cy="72" r="22"/><text class="sub" x="349" y="77">G</text>
+    <circle class="noteOn" cx="435" cy="72" r="22"/><text class="sub" x="429" y="77">A</text>
+    <circle class="noteOn" cx="515" cy="72" r="22"/><text class="sub" x="509" y="77">B</text>
+  </g>
+
+  <!-- footer info -->
+  <rect class="panel2" x="585" y="660" width="710" height="100" rx="14"/>
+  <text class="sub" x="610" y="690">Current set</text>
+  <text class="txt" x="610" y="723">Root: C  ·  Family: Diatonic  ·  Mode: Ionian  ·  Decimal: 2741  ·  Canonical: 1451</text>
+  <text class="tiny" x="610" y="747">Single-row preview: ○●○●○●●○●○●○</text>
+
+  <!-- recent block -->
+  <rect class="panel2" x="80" y="570" width="450" height="220" rx="18"/>
+  <text class="sub" x="100" y="602">Recent / Saved</text>
+  <rect class="chip" x="100" y="620" width="190" height="44" rx="12"/>
+  <text class="txt" x="126" y="648">C Dorian</text>
+  <text class="tiny" x="308" y="648">2741</text>
+
+  <rect class="chip" x="300" y="620" width="210" height="44" rx="12"/>
+  <text class="txt" x="322" y="648">C Jazz Minor</text>
+  <text class="tiny" x="474" y="648">2733</text>
+
+  <rect class="chip" x="100" y="676" width="190" height="44" rx="12"/>
+  <text class="txt" x="117" y="704">Whole-tone</text>
+  <text class="tiny" x="258" y="704">1365</text>
+
+  <rect class="chip" x="300" y="676" width="210" height="44" rx="12"/>
+  <text class="txt" x="322" y="704">Dom Bebop</text>
+  <text class="tiny" x="471" y="704">1717</text>
+
+  <rect class="chip" x="100" y="732" width="410" height="38" rx="12"/>
+  <text class="sub" x="120" y="756">Saved slot idea: quick switching for performance and future chord-scale workflows</text>
+</svg>

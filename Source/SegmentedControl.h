@@ -37,6 +37,39 @@
 #include <functional>
 
 //==============================================================================
+/**
+ * Shared visual metrics for all "pill-shaped" controls (segmented controls,
+ * family tabs, subfamily chips).  T2.1 (visual-audit-2026-04 §3 P4 / §4):
+ * unify chip / tab / segmented-control chrome so the user sees one consistent
+ * pill family across the editor instead of four related-but-different
+ * outlined-pill treatments.
+ *
+ * Anything that draws a pill shape — `SegmentedControl::paint`,
+ * `PluginEditor`'s `SymbolLF::drawButtonBackground`,
+ * `SubfamilyLF::drawButtonBackground` — should reference these constants
+ * so visual changes propagate through one place.
+ */
+namespace dcui::ChipChrome
+{
+    /** Corner-radius as a fraction of the control's height.  0.28 reads as
+     *  "iOS-segmented-control round" without going full circular. */
+    inline constexpr float kRadiusFactor    = 0.28f;
+
+    /** Inset (in pixels) used when drawing the active-segment highlight inside
+     *  a SegmentedControl, so the outer ring stays visible. */
+    inline constexpr float kActiveInset     = 2.0f;
+
+    /** Vertical inset (in pixels) for the divider lines between segments. */
+    inline constexpr float kDividerInset    = 5.0f;
+
+    /** Default text height as a fraction of the control's height. */
+    inline constexpr float kFontHeightFactor = 0.42f;
+
+    /** Hairline outline width. */
+    inline constexpr float kOutlineWidth    = 1.0f;
+}
+
+//==============================================================================
 class SegmentedControl : public juce::Component
 {
 public:
@@ -135,7 +168,9 @@ public:
         if (n == 0) return;
 
         const auto  b    = getLocalBounds().toFloat();
-        const float r    = b.getHeight() * 0.28f;   // corner radius
+        // T2.1: pill chrome shared with family tabs + subfamily chips —
+        // see dcui::ChipChrome (SegmentedControl.h).
+        const float r    = b.getHeight() * dcui::ChipChrome::kRadiusFactor;
 
         // ── Background ────────────────────────────────────────────────────────
         g.setColour (bgColour);
@@ -153,7 +188,7 @@ public:
             // Active highlight — slightly inset so the rounded outer ring shows.
             if (active)
             {
-                const float in = 2.0f;
+                const float in = dcui::ChipChrome::kActiveInset;
                 g.setColour (activeColour);
                 g.fillRoundedRectangle (sb.reduced (in, in), r * 0.65f);
             }
@@ -163,7 +198,8 @@ public:
             {
                 g.setColour (borderColour);
                 g.drawVerticalLine (juce::roundToInt (sb.getX()),
-                                    b.getY() + 5.0f, b.getBottom() - 5.0f);
+                                    b.getY() + dcui::ChipChrome::kDividerInset,
+                                    b.getBottom() - dcui::ChipChrome::kDividerInset);
             }
 
             // Content: custom painter or default text.
@@ -175,7 +211,8 @@ public:
             else
             {
                 g.setColour (active ? activeLabel : labelColour);
-                g.setFont (juce::Font (juce::FontOptions{}.withHeight (b.getHeight() * 0.42f)));
+                g.setFont (juce::Font (juce::FontOptions{}
+                               .withHeight (b.getHeight() * dcui::ChipChrome::kFontHeightFactor)));
                 g.drawText (_segments[static_cast<size_t>(i)].label, sb.toNearestInt(),
                             juce::Justification::centred, false);
             }
@@ -183,7 +220,7 @@ public:
 
         // ── Outer border ──────────────────────────────────────────────────────
         g.setColour (borderColour);
-        g.drawRoundedRectangle (b.reduced (0.5f), r, 1.0f);
+        g.drawRoundedRectangle (b.reduced (0.5f), r, dcui::ChipChrome::kOutlineWidth);
     }
 
     void mouseDown (const juce::MouseEvent& e) override

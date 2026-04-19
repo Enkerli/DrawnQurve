@@ -10,50 +10,84 @@
 // Colour palettes
 //==============================================================================
 
-struct Theme
-{
-    juce::Colour background;
-    juce::Colour stageBg;
-    juce::Colour gridLine;
-    juce::Colour curve;
-    juce::Colour capture;
-    juce::Colour playhead;
-    juce::Colour playheadDot;
-    juce::Colour hint;
-    juce::Colour border;
-    juce::Colour panelBg;
-    juce::Colour panelBorder;
-};
-
+// v2 Studio palette — paper-warm light, deep-navy dark.
+// Light mirrors webapp/src/index.css (--paper-* variables).
+// Lane-1 colour (kLaneColourLight[0]) is reused as `curve`/`playheadDot`
+// only as a default; CurveDisplay overrides per-lane when drawing.
+//
+// T2.9 (visual-audit-2026-04 §4): the UI-chrome tokens (textCol…lockColour)
+// were lifted out of inline ternaries scattered throughout DrawnCurveEditor
+// so the palette has one home.  Reach them via DrawnCurveLookAndFeel::theme(_lightMode).
 static const Theme kDark
 {
     /* background  */ juce::Colour { 0xff12121f },
     /* stageBg     */ juce::Colour { 0xff0a0a15 },
     /* gridLine    */ juce::Colour { 0x18ffffff },
-    /* curve       */ juce::Colour { 0xff00e5ff },
-    /* capture     */ juce::Colour { 0xffff6b35 },
-    /* playhead    */ juce::Colour { 0xffffffff },
-    /* playheadDot */ juce::Colour { 0xff00e5ff },
+    /* curve       */ juce::Colour { 0xff4A90E2 },   // matches kLaneColourDark[0]
+    /* capture     */ juce::Colour { 0xffE8A838 },   // amber accent (lane 1 dark)
+    /* playhead    */ juce::Colour { 0xffe6e2d6 },   // warm off-white
+    /* playheadDot */ juce::Colour { 0xff4A90E2 },
     /* hint        */ juce::Colour { 0x66ffffff },
     /* border      */ juce::Colour { 0x33ffffff },
     /* panelBg     */ juce::Colour { 0xff1c1c2e },
     /* panelBorder */ juce::Colour { 0x28ffffff },
+
+    // UI chrome tokens
+    /* textCol     */ juce::Colours::white,
+    /* dimText     */ juce::Colours::lightgrey,
+    /* btnBg       */ juce::Colour { 0xff333355 },
+    /* btnText     */ juce::Colours::white,
+    /* tbBg        */ juce::Colour { 0xff252538 },
+    /* tbLine      */ juce::Colour { 0x33ffffff },
+    /* accent      */ juce::Colour { 0xff4A90E2 },   // = kLaneColourDark[0]
+    /* chipOn      */ juce::Colour { 0xff60A5FA },
+    /* chipOff     */ juce::Colour { 0xff374151 },
+    /* chipTextOn  */ juce::Colours::white,
+    /* chipTextOff */ juce::Colour { 0xffD1D5DB },
+    /* famActive   */ juce::Colour { 0xff2979ff },
+    /* famBrowsed  */ juce::Colour { 0xff33557A },
+    /* famInactive */ juce::Colour { 0xff333355 },
+    /* famTextOff  */ juce::Colours::lightgrey,
+    /* lockColour  */ juce::Colour { 0xff8B5CF6 },   // violet accent
 };
 
 static const Theme kLight
 {
-    /* background  */ juce::Colour { 0xffF5F2EB },
-    /* stageBg     */ juce::Colour { 0xffEFEBE2 },
-    /* gridLine    */ juce::Colour { 0x14000000 },
-    /* curve       */ juce::Colour { 0xff7A4CFF },
-    /* capture     */ juce::Colour { 0xffD95C3A },
-    /* playhead    */ juce::Colour { 0xff2d2b27 },
-    /* playheadDot */ juce::Colour { 0xff7A4CFF },
-    /* hint        */ juce::Colour { 0x99000000 },
-    /* border      */ juce::Colour { 0x1E000000 },
-    /* panelBg     */ juce::Colour { 0xffFCFBF7 },
-    /* panelBorder */ juce::Colour { 0xffDDD6CA },
+    /* background  */ juce::Colour { 0xffF3EEE3 },   // --paper-bg
+    /* stageBg     */ juce::Colour { 0xffE8E1D1 },   // --paper-bg-deep
+    /* gridLine    */ juce::Colour { 0x18000000 },   // soft ink rule
+    /* curve       */ juce::Colour { 0xff3A4866 },   // matches kLaneColourLight[0]
+    /* capture     */ juce::Colour { 0xffCB9839 },   // --paper-amber (capture accent)
+    /* playhead    */ juce::Colour { 0xff2C2723 },   // --paper-ink
+    /* playheadDot */ juce::Colour { 0xff3A4866 },
+    /* hint        */ juce::Colour { 0xff837B6F },   // --paper-ink50 (no alpha — keep readable)
+    /* border      */ juce::Colour { 0xffD4CDB7 },   // --paper-rule
+    /* panelBg     */ juce::Colour { 0xffFAF6EB },   // --paper-card
+    /* panelBorder */ juce::Colour { 0xffD4CDB7 },   // --paper-rule
+
+    // UI chrome tokens
+    /* textCol     */ juce::Colour { 0xff2d2b27 },
+    /* dimText     */ juce::Colour { 0xff7a766d },
+    /* btnBg       */ juce::Colour { 0xffF0EDE5 },
+    /* btnText     */ juce::Colour { 0xff2d2b27 },
+    /* tbBg        */ juce::Colour { 0xffFCFBF7 },
+    /* tbLine      */ juce::Colour { 0xffDDD6CA },
+    /* accent      */ juce::Colour { 0xff3A4866 },   // = kLaneColourLight[0]
+    /* chipOn      */ juce::Colour { 0xff1D4ED8 },
+    /* chipOff     */ juce::Colour { 0xffE5E7EB },
+    /* chipTextOn  */ juce::Colours::white,
+    /* chipTextOff */ juce::Colour { 0xff374151 },
+    /* famActive   */ juce::Colour { 0xff0B6E4F },
+    /* famBrowsed  */ juce::Colour { 0xffA7C4A0 },
+    /* famInactive */ juce::Colour { 0xffF0EFE7 },
+    /* famTextOff  */ juce::Colour { 0xff706D64 },
+    /* lockColour  */ juce::Colour { 0xff7C3AED },   // violet accent (light)
 };
+
+const Theme& DrawnCurveLookAndFeel::theme (bool light) noexcept
+{
+    return light ? kLight : kDark;
+}
 
 //==============================================================================
 // Layout constants
@@ -72,7 +106,16 @@ namespace Layout
 
     // Musical zone (bottom, full width)
     static constexpr int musicalCollapsedH = 44;
-    static constexpr int musicalExpandedH  = 4 + 30 + 4 + 68 + 4 + 28 + 4 + 100 + 4 + 14 + 8;  // = 268
+    // Expanded layout (top-down): pad, header, gap, chips, gap, picker, pad.
+    //
+    // Option B (2026-04): the standalone action row is gone.  Family tabs now
+    // share a single 28 px header with the mask buttons, the rows/wheel/both
+    // selector, and the collapse arrow.  Scale-name + mask-number labels float
+    // as a translucent badge in the bottom-right corner of the picker (drawn
+    // by paint(), positioned in resized()).  This reclaims a whole row of
+    // chrome — picker grows from 140 to 184 px without changing the panel
+    // total, so the wheel finally has room to breathe.
+    static constexpr int musicalExpandedH  = 6 + 28 + 4 + 28 + 4 + 184 + 6;  // = 260
 
     // lanesPanelH removed — LANES matrix is now inside the focused lane panel.
 
@@ -82,9 +125,9 @@ namespace Layout
     static constexpr int xStepperH  = 28;
 
     // Note editor / musical zone — family browser strip heights
-    static constexpr int kFamilyBarH    = 30;   // family tab row
-    static constexpr int kSubfamilyRowH = 68;   // mode-chip row (name + dot preview)
-    static constexpr int kActionRowH    = 28;   // ↻ ● ○ ◑ ◆ + status labels
+    static constexpr int kFamilyBarH    = 28;   // unified header: family tabs + mask actions + selector + collapse arrow
+    static constexpr int kSubfamilyRowH = 28;   // mode-chip row (text-only at this height; the dot minimap was dropped in the Option-B refactor)
+    // kActionRowH removed — no longer used after Option-B + vertical-column refactors
 
     static constexpr int paramLabelH  = 14;
     static constexpr int paramSliderH = 30;
@@ -136,15 +179,20 @@ HelpOverlay::HelpOverlay()
 
 void HelpOverlay::paint (juce::Graphics& g)
 {
-    // ── Backdrop ─────────────────────────────────────────────────────────────
-    const auto bgCol  = _lightMode ? juce::Colour (0xe8f0f0f0) : juce::Colour (0xe8101018);
+    // ── Backdrop + elevated panel ────────────────────────────────────────────
+    // T2.8: shared overlay chrome (dcui::OverlayChrome) — dim backdrop with
+    // a centred panel, matching ScaleOverlay + RoutingOverlay.  Help reads
+    // as the same kind of object as the other modal overlays now, instead
+    // of a full-bleed screen takeover.
     const auto fgCol  = _lightMode ? juce::Colours::black       : juce::Colours::white;
     const auto acCol  = _lightMode ? juce::Colour (0xff0066cc)  : juce::Colour (0xff80d8ff);
     const auto dimCol = fgCol.withAlpha (0.55f);
 
-    g.fillAll (bgCol);
+    const auto panelRect = getLocalBounds().toFloat().reduced (16.0f, 16.0f);
+    dcui::OverlayChrome::paintBackdrop (g, _lightMode, getLocalBounds());
+    dcui::OverlayChrome::paintPanel    (g, _lightMode, panelRect);
 
-    const auto bounds = getLocalBounds().toFloat().reduced (24.0f, 20.0f);
+    const auto bounds = panelRect.reduced (16.0f, 14.0f);
 
     // ── Title ────────────────────────────────────────────────────────────────
     g.setColour (fgCol);
@@ -710,15 +758,9 @@ void RoutingOverlay::paint (juce::Graphics& g)
 {
     if (_panelRect.isEmpty()) return;
 
-    g.setColour (juce::Colour (0x40000000));
-    g.fillRect (getLocalBounds());
-
-    const auto panelBg = _lightMode ? juce::Colour (0xfffaf8f5) : juce::Colour (0xff1e1e2a);
-    const auto border  = _lightMode ? juce::Colour (0xffccc8c0) : juce::Colour (0xff3a3a4a);
-    g.setColour (panelBg);
-    g.fillRoundedRectangle (_panelRect.toFloat(), 10.0f);
-    g.setColour (border);
-    g.drawRoundedRectangle (_panelRect.toFloat().reduced (0.5f), 10.0f, 1.0f);
+    // T2.8: shared overlay chrome — backdrop + elevated panel.
+    dcui::OverlayChrome::paintBackdrop (g, _lightMode, getLocalBounds());
+    dcui::OverlayChrome::paintPanel    (g, _lightMode, _panelRect.toFloat());
 
     const auto titleCol = _lightMode ? juce::Colour (0xff2a2620) : juce::Colour (0xffcacad6);
     g.setColour (titleCol);
@@ -1094,6 +1136,76 @@ void CurveDisplay::paint (juce::Graphics& g)
             // lane is at which Y value even when curves overlap.
             g.setColour (col.withAlpha (alpha * 0.8f));
             g.fillRect (plotX - 5.0f, headY - 2.0f, 5.0f, 4.0f);
+
+            // ── Cursor readout — focused lane only (keeps the canvas calm) ──
+            // Italic Domine pill at the playhead, lane-coloured border, paper-
+            // tinted fill, current emitted MIDI value as text.  Falls back to
+            // the table value (pre-emit) when nothing has committed yet.
+            if (L == _focusedLane)
+            {
+                const auto msgType = static_cast<MessageType> (
+                    static_cast<int> (proc.apvts.getRawParameterValue (laneParam (L, "msgType"))->load()));
+                const float minOut = proc.apvts.getRawParameterValue (laneParam (L, "minOutput"))->load();
+                const float maxOut = proc.apvts.getRawParameterValue (laneParam (L, "maxOutput"))->load();
+                const int   sent   = proc.currentSentValueForLane (L);
+
+                static const char* kSharp[] = { "C","C\u266f","D","D\u266f","E","F","F\u266f","G","G\u266f","A","A\u266f","B" };
+                static const char* kFlat [] = { "C","D\u266d","D","E\u266d","E","F","G\u266d","G","A\u266d","A","B\u266d","B" };
+                auto noteName = [&] (int n) {
+                    const auto* names = _useFlats ? kFlat : kSharp;
+                    return juce::String::fromUTF8 (names[n % 12]) + juce::String (n / 12 - 1);
+                };
+
+                juce::String label;
+                switch (msgType)
+                {
+                    case MessageType::Note:
+                        if (sent >= 0) label = noteName (sent);
+                        break;
+                    case MessageType::PitchBend:
+                    {
+                        const int v = (sent >= 0) ? sent
+                                                  : juce::roundToInt (minOut * 16383.0f);
+                        label = juce::String (v - 8192);
+                        break;
+                    }
+                    case MessageType::ChannelPressure:
+                    case MessageType::CC:
+                    default:
+                    {
+                        const float t = table[static_cast<size_t> (idx)];
+                        const int v = (sent >= 0) ? sent
+                                                  : juce::roundToInt ((minOut + t * (maxOut - minOut)) * 127.0f);
+                        label = juce::String (v);
+                        break;
+                    }
+                }
+
+                if (label.isNotEmpty())
+                {
+                    const auto pillFont = DrawnCurveLookAndFeel::makeSerifFont (12.0f, true);
+                    g.setFont (pillFont);
+                    const float padX = 5.0f, padY = 2.0f;
+                    const float textW = pillFont.getStringWidthFloat (label);
+                    const float w = textW + padX * 2.0f;
+                    const float h = 16.0f;
+                    // Place to the right of the nib; flip left if it would clip.
+                    float bx = headX + 9.0f;
+                    if (bx + w > plotX + plotW - 2.0f) bx = headX - 9.0f - w;
+                    const float by = juce::jlimit (plotY + 2.0f, plotY + plotH - h - 2.0f,
+                                                   headY - h * 0.5f);
+                    const auto pill = juce::Rectangle<float> (bx, by, w, h);
+
+                    g.setColour ((_lightMode ? juce::Colour (0xfffaf6eb)
+                                             : juce::Colour (0xff141414))
+                                 .withAlpha (0.92f));
+                    g.fillRoundedRectangle (pill, 3.0f);
+                    g.setColour (col);
+                    g.drawRoundedRectangle (pill, 3.0f, 1.0f);
+                    g.drawText (label, pill, juce::Justification::centred, false);
+                    (void) padY;   // padY only matters for canvas baseline math; JUCE drawText centres.
+                }
+            }
         }
     }
 
@@ -1968,6 +2080,12 @@ DrawnCurveEditor::DrawnCurveEditor (DrawnCurveProcessor& p)
     };
 
     // ── '#' combo: activates both X and Y quantize simultaneously ────────────
+    // visual-audit-2026-04 follow-up: apply _presetBtnLF so JUCE's default
+    // ComboBox::outlineColourId hairline is dropped — otherwise the OFF state
+    // would still render a faint pill outline around the '#' even with a
+    // transparent fill, which is exactly the chrome the empty-canvas state
+    // is trying to suppress.
+    xyLockBtn.setLookAndFeel (&_presetBtnLF);
     addAndMakeVisible (xyLockBtn);
     xyLockBtn.onClick = [this]
     {
@@ -2348,7 +2466,8 @@ DrawnCurveEditor::DrawnCurveEditor (DrawnCurveProcessor& p)
                     *pMode = 7;
                 proc.updateAllLaneScales();
                 scaleLattice.setMask (absMask);
-                addRecentMask (relMask);
+                chromaticWheel.setMask (absMask);
+                addRecentPalette (relMask, root);
                 updateScaleStatus();
                 curveDisplay.repaint();
             }
@@ -2376,19 +2495,19 @@ DrawnCurveEditor::DrawnCurveEditor (DrawnCurveProcessor& p)
         addChildComponent (btn);   // invisible until setActiveFamily() shows them
         btn.onClick = [this, i]
         {
-            // Determine the relative mask (root-relative interval set).
-            uint16_t relMask;
+            // Recent tab: restore the WHOLE palette (root + mask) atomically.
+            // Other family tabs: keep current root, swap mask only.
             if (_activeFamilyIdx == kRecentFamilyIdx)
             {
-                if (i >= static_cast<int> (_recentMasks.size())) return;
-                relMask = _recentMasks[static_cast<size_t>(i)];
+                if (i >= static_cast<int> (_palettes.size())) return;
+                applyPalette (_palettes[static_cast<size_t>(i)]);
+                return;
             }
-            else
-            {
-                const auto& fam = dcScale::kFamilies[_activeFamilyIdx];
-                if (i >= fam.count) return;
-                relMask = fam.modes[static_cast<size_t>(i)].mask;
-            }
+
+            const auto& fam = dcScale::kFamilies[_activeFamilyIdx];
+            if (i >= fam.count) return;
+            const uint16_t relMask = fam.modes[static_cast<size_t>(i)].mask;
+
             const int root = static_cast<int> (proc.apvts.getRawParameterValue ("scaleRoot")->load());
             // Root-relative → absolute: rotate left by (12 - root).
             const uint16_t absMask = dcScale::pcsRotate (relMask, 12 - root);
@@ -2398,18 +2517,38 @@ DrawnCurveEditor::DrawnCurveEditor (DrawnCurveProcessor& p)
                 *pMode = 7;
             proc.updateAllLaneScales();
             scaleLattice.setMask (absMask);
-            addRecentMask (relMask);   // record in history (idempotent for Recent tab re-clicks)
+            chromaticWheel.setMask (absMask);
+            addRecentPalette (relMask, root);   // record in history (idempotent for re-clicks)
             // Remember which mode was last used in this family so switching back restores it.
-            if (_activeFamilyIdx != kRecentFamilyIdx)
-                _lastModePerFamily[static_cast<size_t> (_activeFamilyIdx)] = i;
+            _lastModePerFamily[static_cast<size_t> (_activeFamilyIdx)] = i;
             updateScaleStatus();
             curveDisplay.repaint();
         };
     }
 
-    addAndMakeVisible (scaleLattice);
+    // T2.7: always-visible palette strip — six chips on the left side of the
+    // settings shelf row.  Each chip stores root + scale; tapping restores both
+    // atomically via applyPalette().  Chips are hidden when _palettes is empty
+    // and grow in as the user picks scales.  See dcui::ChipChrome (SymbolLF).
+    for (int i = 0; i < kMaxPaletteChips; ++i)
+    {
+        auto& chip = paletteChips[static_cast<size_t> (i)];
+        chip.setLookAndFeel (&_symbolLF);
+        addChildComponent (chip);    // hidden until _palettes has >= i+1 entries
+        chip.onClick = [this, i]
+        {
+            if (i < static_cast<int> (_palettes.size()))
+                applyPalette (_palettes[static_cast<size_t> (i)]);
+        };
+    }
 
-    scaleLattice.onMaskChanged = [this] (uint16_t mask)
+    addAndMakeVisible (scaleLattice);
+    addAndMakeVisible (chromaticWheel);
+
+    // Both pickers share identical mask/root semantics.  The wheel mirrors the
+    // rows so the user sees the same scale on both surfaces and either can
+    // drive edits.
+    auto onMaskFromPicker = [this] (uint16_t mask)
     {
         if (auto* pMask = dynamic_cast<juce::AudioParameterInt*> (proc.apvts.getParameter ("scaleMask")))
             *pMask = static_cast<int> (mask);
@@ -2418,13 +2557,24 @@ DrawnCurveEditor::DrawnCurveEditor (DrawnCurveProcessor& p)
         proc.updateAllLaneScales();
         // Convert abs mask → relative before storing in recent history.
         const int root = static_cast<int> (proc.apvts.getRawParameterValue ("scaleRoot")->load());
-        addRecentMask (dcScale::pcsRotate (mask, root));
+        addRecentPalette (dcScale::pcsRotate (mask, root), root);
+        // Keep the other picker in sync.
+        scaleLattice.setMask (mask);
+        chromaticWheel.setMask (mask);
         updateScaleStatus();
         curveDisplay.repaint();
     };
+    scaleLattice  .onMaskChanged = onMaskFromPicker;
+    chromaticWheel.onMaskChanged = onMaskFromPicker;
 
-    scaleLattice.setMask (calcAbsLatticeMask (proc, 0));
-    scaleLattice.setRoot (static_cast<int> (proc.apvts.getRawParameterValue ("scaleRoot")->load()));
+    {
+        const auto absMask = calcAbsLatticeMask (proc, 0);
+        const auto root    = static_cast<int> (proc.apvts.getRawParameterValue ("scaleRoot")->load());
+        scaleLattice  .setMask (absMask);
+        chromaticWheel.setMask (absMask);
+        scaleLattice  .setRoot (root);
+        chromaticWheel.setRoot (root);
+    }
 
     // Scale action buttons
     auto applyMask = [this] (uint16_t mask)
@@ -2434,7 +2584,8 @@ DrawnCurveEditor::DrawnCurveEditor (DrawnCurveProcessor& p)
         if (auto* pMode = dynamic_cast<juce::AudioParameterInt*> (proc.apvts.getParameter ("scaleMode")))
             *pMode = 7;
         proc.updateAllLaneScales();
-        scaleLattice.setMask (mask);
+        scaleLattice  .setMask (mask);
+        chromaticWheel.setMask (mask);
         updateScaleStatus();
         curveDisplay.repaint();
     };
@@ -2465,29 +2616,33 @@ DrawnCurveEditor::DrawnCurveEditor (DrawnCurveProcessor& p)
 
     addAndMakeVisible (scaleRootBtn);
 
+    // T2.9: pull btnBg / btnText / accent from the shared Theme so the
+    // root-select button stays in lockstep with all other btnBg-tier surfaces.
+    // Root-select uses an amber accent specifically (it's a "modal mode" cue),
+    // so that one stays a literal rather than the generic accent token.
     const auto resetRootBtn = [this]
     {
-        scaleLattice.setRootSelectMode (false);
-        const auto btnBg   = _lightMode ? juce::Colour (0xffF0EFE7) : juce::Colour (0xff333355);
-        const auto btnText = _lightMode ? juce::Colour (0xff28261F) : juce::Colours::white;
-        scaleRootBtn.setColour (juce::TextButton::buttonColourId,  btnBg);
-        scaleRootBtn.setColour (juce::TextButton::textColourOffId, btnText);
+        scaleLattice  .setRootSelectMode (false);
+        chromaticWheel.setRootSelectMode (false);
+        const auto& t = DrawnCurveLookAndFeel::theme (_lightMode);
+        scaleRootBtn.setColour (juce::TextButton::buttonColourId,  t.btnBg);
+        scaleRootBtn.setColour (juce::TextButton::textColourOffId, t.btnText);
     };
 
     scaleRootBtn.onClick = [this]
     {
         const bool entering = ! scaleLattice.isRootSelectMode();
-        scaleLattice.setRootSelectMode (entering);
-        const auto accent  = _lightMode ? juce::Colour (0xffF59E0B) : juce::Colour (0xffFBBF24);
-        const auto btnBg   = _lightMode ? juce::Colour (0xffF0EFE7) : juce::Colour (0xff333355);
-        const auto btnText = _lightMode ? juce::Colour (0xff28261F) : juce::Colours::white;
+        scaleLattice  .setRootSelectMode (entering);
+        chromaticWheel.setRootSelectMode (entering);
+        const auto& t = DrawnCurveLookAndFeel::theme (_lightMode);
+        const auto modalAccent = _lightMode ? juce::Colour (0xffF59E0B) : juce::Colour (0xffFBBF24);
         scaleRootBtn.setColour (juce::TextButton::buttonColourId,
-                                entering ? accent : btnBg);
+                                entering ? modalAccent : t.btnBg);
         scaleRootBtn.setColour (juce::TextButton::textColourOffId,
-                                entering ? juce::Colours::white : btnText);
+                                entering ? juce::Colours::white : t.btnText);
     };
 
-    scaleLattice.onRootChanged = [this, resetRootBtn] (int newRoot)
+    auto onRootFromPicker = [this, resetRootBtn] (int newRoot)
     {
         // Semantic: changing root TRANSPOSES the scale to the new root —
         // the root-relative interval pattern stays the same.
@@ -2508,17 +2663,36 @@ DrawnCurveEditor::DrawnCurveEditor (DrawnCurveProcessor& p)
             const uint16_t newAbs   = dcScale::pcsRotate (relMask, (12 - newRoot) % 12);
             if (auto* pMask = dynamic_cast<juce::AudioParameterInt*> (proc.apvts.getParameter ("scaleMask")))
                 *pMask = static_cast<int> (newAbs);
-            scaleLattice.setMask (newAbs);  // immediate visual update; async also fires
+            scaleLattice  .setMask (newAbs);
+            chromaticWheel.setMask (newAbs);
         }
 
         if (auto* pRoot = dynamic_cast<juce::AudioParameterInt*> (proc.apvts.getParameter ("scaleRoot")))
             *pRoot = newRoot;
         proc.updateAllLaneScales();
-        scaleLattice.setRoot (newRoot);
+        scaleLattice  .setRoot (newRoot);
+        chromaticWheel.setRoot (newRoot);
         curveDisplay.repaint();
         resetRootBtn();
         updateScaleStatus();
     };
+    scaleLattice  .onRootChanged = onRootFromPicker;
+    chromaticWheel.onRootChanged = onRootFromPicker;
+
+    // Scale-view selector — Rows / Wheel / Both — chooses which picker visualisation(s)
+    // appear in the musical zone.  Pure UI state; not persisted in APVTS.
+    scaleViewCtrl.setSegments ({
+        { "rows",  "Rows",  "Show piano rows only" },
+        { "wheel", "Wheel", "Show chromatic wheel only" },
+        { "both",  "Both",  "Show rows and wheel side-by-side" },
+    });
+    scaleViewCtrl.setSelectedIndex (_scaleViewMode, juce::dontSendNotification);
+    scaleViewCtrl.onChange = [this] (int idx)
+    {
+        _scaleViewMode = idx;
+        updateScaleVisibility();   // toggles visibility + triggers resized()
+    };
+    addAndMakeVisible (scaleViewCtrl);
 
     // Notation toggle — switches chromatic labels between ♯ (sharps) and ♭ (flats).
     scaleNotationBtn.setButtonText (juce::String::charToString (juce::juce_wchar (0x266F)));  // ♯
@@ -2526,7 +2700,8 @@ DrawnCurveEditor::DrawnCurveEditor (DrawnCurveProcessor& p)
     scaleNotationBtn.onClick = [this]
     {
         _useFlats = !_useFlats;
-        scaleLattice.setUseFlats (_useFlats);
+        scaleLattice  .setUseFlats (_useFlats);
+        chromaticWheel.setUseFlats (_useFlats);
         curveDisplay.setUseFlats (_useFlats);
         scaleNotationBtn.setButtonText (
             juce::String::charToString (juce::juce_wchar (_useFlats ? 0x266D : 0x266F)));
@@ -2556,8 +2731,9 @@ DrawnCurveEditor::DrawnCurveEditor (DrawnCurveProcessor& p)
         if (auto* pMo = dynamic_cast<juce::AudioParameterInt*> (proc.apvts.getParameter ("scaleMode")))
             *pMo = 7;   // Custom — mode-specific preset slots not used for mode cycling
         proc.updateAllLaneScales();
-        scaleLattice.setMask (absMask);
-        addRecentMask (relMask);
+        scaleLattice  .setMask (absMask);
+        chromaticWheel.setMask (absMask);
+        addRecentPalette (relMask, root);
 
         updateScaleStatus();
         if (_recognisedFamily >= 0 && _recognisedFamily != _activeFamilyIdx)
@@ -2580,7 +2756,15 @@ DrawnCurveEditor::DrawnCurveEditor (DrawnCurveProcessor& p)
 
     // Mask label — display only (no text editor, avoids UIKit tracking element warning).
     // The lattice is the primary editing surface for the scale mask.
-    maskLabel.setFont (DrawnCurveLookAndFeel::makeFont (11.0f));
+    // T1.1 (visual-audit-2026-04 §3 P1): the mask is metadata about the scale
+    // (a 12-bit fingerprint), not a primary control — render it as italic dim
+    // text so it reads as a caption next to the scale name rather than as a
+    // chip with its own surface.
+    {
+        auto maskFont = DrawnCurveLookAndFeel::makeFont (11.0f);
+        maskFont.setItalic (true);
+        maskLabel.setFont (maskFont);
+    }
     maskLabel.setJustificationType (juce::Justification::centred);
     addAndMakeVisible (maskLabel);
     updateScaleStatus();
@@ -2637,10 +2821,23 @@ DrawnCurveEditor::DrawnCurveEditor (DrawnCurveProcessor& p)
         if (safeThis == nullptr) return;
         safeThis->refreshTickLabels();
     });
+
+    // T2.4: paint the empty-canvas alpha immediately so the first frame
+    // already shows the de-emphasised rail; then start a 250 ms poll that
+    // flips alpha back to 1.0 the moment any lane gets a stroke (or back
+    // to 0.40 after a clear). 250 ms is plenty — the dim ↔ bright
+    // transition is purely a chrome cue, not a performance signal.
+    _canvasWasEmpty = ! proc.anyLaneHasCurve();
+    applyEmptyCanvasAlpha (_canvasWasEmpty);
+    startTimer (250);
 }
 
 DrawnCurveEditor::~DrawnCurveEditor()
 {
+    // T2.4: stop the empty-canvas poll first so no async tick fires after
+    // members start being torn down.
+    stopTimer();
+
     // Restore defaults before _appLF is destroyed.
     juce::LookAndFeel::setDefaultLookAndFeel (nullptr);
     setLookAndFeel (nullptr);
@@ -2652,8 +2849,10 @@ DrawnCurveEditor::~DrawnCurveEditor()
     for (auto& b : familyBtns)   b.setLookAndFeel (nullptr);
     recentFamilyBtn.setLookAndFeel (nullptr);
     for (auto& b : subfamilyBtns) b.setLookAndFeel (nullptr);
+    for (auto& b : paletteChips)  b.setLookAndFeel (nullptr);   // T2.7
     for (auto* b : { &tickYMinusBtn, &tickYPlusBtn, &tickXMinusBtn, &tickXPlusBtn })
         b->setLookAndFeel (nullptr);
+    xyLockBtn.setLookAndFeel (nullptr);   // visual-audit-2026-04 follow-up
     // scaleAllBtn / None / Inv / Root use no custom LF; nothing to reset here.
 
     // Remove all APVTS listeners.
@@ -2678,6 +2877,56 @@ DrawnCurveEditor::~DrawnCurveEditor()
     // Disconnect standalone MIDI outputs before destroying them.
     proc.setVirtualMidiOutput (nullptr);
     proc.setDirectMidiOutput (nullptr);
+}
+
+//==============================================================================
+// T2.4 — empty-canvas treatment
+//==============================================================================
+
+void DrawnCurveEditor::timerCallback()
+{
+    const bool nowEmpty = ! proc.anyLaneHasCurve();
+    if (nowEmpty != _canvasWasEmpty)
+    {
+        _canvasWasEmpty = nowEmpty;
+        applyEmptyCanvasAlpha (nowEmpty);
+    }
+}
+
+void DrawnCurveEditor::applyEmptyCanvasAlpha (bool empty)
+{
+    // Dim factor — keeps the rail readable but visibly de-emphasised so the
+    // user's eye lands on the canvas first when nothing has been drawn yet.
+    const float a = empty ? 0.40f : 1.0f;
+
+    // Y-axis (left rail) stepper cluster + lock.
+    for (juce::Component* c : { static_cast<juce::Component*> (&tickYPlusBtn),
+                                static_cast<juce::Component*> (&tickYMinusBtn),
+                                static_cast<juce::Component*> (&tickYCountLabel),
+                                static_cast<juce::Component*> (&yTickStepLabel),
+                                static_cast<juce::Component*> (&yQuantizeBtn),
+                                static_cast<juce::Component*> (&xyLockBtn) })
+        c->setAlpha (a);
+
+    // X-axis (bottom rail) stepper cluster + lock.
+    for (juce::Component* c : { static_cast<juce::Component*> (&tickXPlusBtn),
+                                static_cast<juce::Component*> (&tickXMinusBtn),
+                                static_cast<juce::Component*> (&tickXCountLabel),
+                                static_cast<juce::Component*> (&xTickStepLabel),
+                                static_cast<juce::Component*> (&xQuantizeBtn) })
+        c->setAlpha (a);
+
+    // Y-axis preset rows (range above the stepper, step below).
+    for (auto& b : yOctavePresetBtns)   b.setAlpha (a);
+    for (auto& b : yNoteStepPresetBtns) b.setAlpha (a);
+    for (auto& b : yDozenPresetBtns)    b.setAlpha (a);
+    for (auto& b : yCCStepPresetBtns)   b.setAlpha (a);
+    for (auto& b : yPBRangePresetBtns)  b.setAlpha (a);
+    for (auto& b : yPBStepPresetBtns)   b.setAlpha (a);
+
+    // X-axis preset rows (sync beats + step presets).
+    for (auto& b : xStepPresetBtns)     b.setAlpha (a);
+    for (auto& b : syncBeatsPresetBtns) b.setAlpha (a);
 }
 
 //==============================================================================
@@ -3251,9 +3500,13 @@ void DrawnCurveEditor::parameterChanged (const juce::String& paramID, float)
         proc.updateAllLaneScales();
         juce::MessageManager::callAsync ([safeThis = juce::Component::SafePointer<DrawnCurveEditor>(this)] {
             if (safeThis == nullptr) return;
-            safeThis->scaleLattice.setMask (calcAbsLatticeMask (safeThis->proc, 0));
-            safeThis->scaleLattice.setRoot (static_cast<int> (
-                safeThis->proc.apvts.getRawParameterValue ("scaleRoot")->load()));
+            const auto absMask = calcAbsLatticeMask (safeThis->proc, 0);
+            const auto root    = static_cast<int> (
+                safeThis->proc.apvts.getRawParameterValue ("scaleRoot")->load());
+            safeThis->scaleLattice  .setMask (absMask);
+            safeThis->chromaticWheel.setMask (absMask);
+            safeThis->scaleLattice  .setRoot (root);
+            safeThis->chromaticWheel.setRoot (root);
             safeThis->updateScaleStatus();
             safeThis->curveDisplay.repaint();
         });
@@ -3342,7 +3595,9 @@ void DrawnCurveEditor::updateScaleVisibility()
 
     scaleLabel    .setVisible (showDetail);
     maskLabel     .setVisible (showDetail);
-    scaleLattice  .setVisible (showDetail);
+    scaleViewCtrl .setVisible (showDetail);
+    scaleLattice  .setVisible (showDetail && _scaleViewMode != ViewWheel);
+    chromaticWheel.setVisible (showDetail && _scaleViewMode != ViewRows);
     // scaleNotationBtn lives in the utility bar — visible whenever any Note lane is active.
     scaleNotationBtn.setVisible (anyNote);
     scaleRotateBtn  .setVisible (showDetail);
@@ -3358,15 +3613,28 @@ void DrawnCurveEditor::updateScaleVisibility()
 
     if (anyNote)
     {
-        scaleLattice.setMask (calcAbsLatticeMask (proc, 0));
-        scaleLattice.setRoot (static_cast<int> (
-            proc.apvts.getRawParameterValue ("scaleRoot")->load()));
+        const auto absMask = calcAbsLatticeMask (proc, 0);
+        const auto root    = static_cast<int> (
+            proc.apvts.getRawParameterValue ("scaleRoot")->load());
+        scaleLattice  .setMask (absMask);
+        chromaticWheel.setMask (absMask);
+        scaleLattice  .setRoot (root);
+        chromaticWheel.setRoot (root);
         updateScaleStatus();
         if (showDetail)
             setActiveFamily (_activeFamilyIdx);   // refresh chip visibility
     }
 
     resized();
+
+    // visual-audit-2026-04 follow-up: paint() reads _musicalExpanded to decide
+    // whether to draw _musicalPanel chrome (and which collapsed-summary code
+    // path to take).  resized() alone does NOT re-run the editor's paint() —
+    // it only repaints children whose bounds changed.  Without this explicit
+    // repaint, toggling the musical zone leaves stale panel chrome on screen
+    // (the user's reported "open the scale section, the visual glitch
+    // appears; close, some of it remains").
+    repaint();
 }
 
 void DrawnCurveEditor::setActiveFamily (int familyIdx)
@@ -3377,20 +3645,17 @@ void DrawnCurveEditor::setActiveFamily (int familyIdx)
     if (_activeFamilyIdx == kRecentFamilyIdx)
     {
         // ── Recent history tab ────────────────────────────────────────────────
-        _numSubfamilyChips = static_cast<int> (_recentMasks.size());
+        _numSubfamilyChips = static_cast<int> (_palettes.size());
         for (int i = 0; i < kMaxModes; ++i)
         {
             const bool vis = (i < _numSubfamilyChips);
             if (vis)
             {
-                const uint16_t m  = _recentMasks[static_cast<size_t>(i)];
-                // Use recognised name if available, otherwise "Custom"
-                const auto    id  = dcScale::pcsRecognise (m);
-                const juce::String name = id.exact
-                    ? juce::String::fromUTF8 (dcScale::kFamilies[id.family].modes[id.mode].name)
-                    : juce::String ("Custom");
-                subfamilyBtns[static_cast<size_t>(i)].setButtonText (name);
-                _subfamilyLF  [static_cast<size_t>(i)].mask = m;
+                const auto& p     = _palettes[static_cast<size_t>(i)];
+                // Show "Maj C" / "Dor F#" — palette label includes the root
+                // because Recent represents whole palettes, not bare scales.
+                subfamilyBtns[static_cast<size_t>(i)].setButtonText (paletteShortLabel (p));
+                _subfamilyLF  [static_cast<size_t>(i)].mask = p.relMask;
             }
             subfamilyBtns[static_cast<size_t>(i)].setVisible (vis);
         }
@@ -3415,18 +3680,96 @@ void DrawnCurveEditor::setActiveFamily (int familyIdx)
     resized();
 }
 
-void DrawnCurveEditor::addRecentMask (uint16_t relMask)
+void DrawnCurveEditor::addRecentPalette (uint16_t relMask, int root)
 {
+    const ScalePalette p { relMask, static_cast<uint8_t> (juce::jlimit (0, 11, root)) };
+
     // De-duplicate: remove if already present, then prepend.
-    _recentMasks.erase (std::remove (_recentMasks.begin(), _recentMasks.end(), relMask),
-                        _recentMasks.end());
-    _recentMasks.insert (_recentMasks.begin(), relMask);
-    if (static_cast<int> (_recentMasks.size()) > kMaxRecentMasks)
-        _recentMasks.resize (static_cast<size_t> (kMaxRecentMasks));
+    _palettes.erase (std::remove (_palettes.begin(), _palettes.end(), p), _palettes.end());
+    _palettes.insert (_palettes.begin(), p);
+    if (static_cast<int> (_palettes.size()) > kMaxRecentMasks)
+        _palettes.resize (static_cast<size_t> (kMaxRecentMasks));
 
     // If the Recent tab is currently open, refresh it immediately.
     if (_activeFamilyIdx == kRecentFamilyIdx)
         setActiveFamily (kRecentFamilyIdx);
+
+    // T2.7: keep the always-visible palette strip in sync.
+    updatePaletteChips();
+}
+
+juce::String DrawnCurveEditor::paletteShortLabel (const ScalePalette& p) const
+{
+    // Family/mode short name + root letter — e.g. "Maj C", "Dor F#".
+    const auto id = dcScale::pcsRecognise (p.relMask);
+    const juce::String scaleName = id.exact
+        ? juce::String::fromUTF8 (dcScale::kFamilies[id.family].modes[id.mode].name)
+        : juce::String ("Custom");
+
+    static const char* sharps[12] = { "C","C#","D","D#","E","F","F#","G","G#","A","A#","B" };
+    static const char* flats [12] = { "C","Db","D","Eb","E","F","Gb","G","Ab","A","Bb","B" };
+    const auto* names = _useFlats ? flats : sharps;
+    const int   ri    = juce::jlimit (0, 11, static_cast<int> (p.root));
+
+    return scaleName + " " + juce::String (names[ri]);
+}
+
+void DrawnCurveEditor::applyPalette (const ScalePalette& p)
+{
+    // Atomic: apply BOTH root and mask, then refresh everything that watches them.
+    const int newRoot = juce::jlimit (0, 11, static_cast<int> (p.root));
+    const uint16_t absMask = dcScale::pcsRotate (p.relMask, (12 - newRoot) % 12);
+
+    if (auto* pRoot = dynamic_cast<juce::AudioParameterInt*> (proc.apvts.getParameter ("scaleRoot")))
+        *pRoot = newRoot;
+    if (auto* pMask = dynamic_cast<juce::AudioParameterInt*> (proc.apvts.getParameter ("scaleMask")))
+        *pMask = static_cast<int> (absMask);
+    if (auto* pMode = dynamic_cast<juce::AudioParameterInt*> (proc.apvts.getParameter ("scaleMode")))
+        *pMode = 7;   // Custom mode — mask is the source of truth
+
+    proc.updateAllLaneScales();
+    scaleLattice  .setMask (absMask);
+    chromaticWheel.setMask (absMask);
+    scaleLattice  .setRoot (newRoot);
+    chromaticWheel.setRoot (newRoot);
+
+    // Re-record so a tap on a Recent chip moves it back to the front.
+    addRecentPalette (p.relMask, newRoot);
+
+    updateScaleStatus();
+    updateScalePresetButtons();
+    curveDisplay.repaint();
+}
+
+void DrawnCurveEditor::updatePaletteChips()
+{
+    // T2.9: pull chip colours from the Theme so the strip stays in lockstep
+    // with the subfamily chips that briefly mirror it on the Recent tab.
+    const auto& t = DrawnCurveLookAndFeel::theme (_lightMode);
+    const auto& chipOff = t.chipOff;
+    const auto& textOff = t.chipTextOff;
+
+    bool visibilityChanged = false;
+    for (int i = 0; i < kMaxPaletteChips; ++i)
+    {
+        auto& chip   = paletteChips[static_cast<size_t> (i)];
+        const bool vis = (i < static_cast<int> (_palettes.size()));
+        if (chip.isVisible() != vis)
+        {
+            chip.setVisible (vis);
+            visibilityChanged = true;
+        }
+        if (vis)
+        {
+            chip.setButtonText (paletteShortLabel (_palettes[static_cast<size_t> (i)]));
+            chip.setColour (juce::TextButton::buttonColourId,  chipOff);
+            chip.setColour (juce::TextButton::textColourOffId, textOff);
+            chip.repaint();
+        }
+    }
+
+    if (visibilityChanged)
+        resized();   // chip count drives strip width
 }
 
 void DrawnCurveEditor::updateScalePresetButtons()
@@ -3440,11 +3783,13 @@ void DrawnCurveEditor::updateScalePresetButtons()
     //   Active (browsed)           → famActive  (strong)
     //   Recognised, not active     → famBrowsed (dim "scale lives here" cue)
     //   All others                 → famInactive
-    const juce::Colour famActive    = _lightMode ? juce::Colour (0xff0B6E4F) : juce::Colour (0xff2979ff);
-    const juce::Colour famBrowsed   = _lightMode ? juce::Colour (0xffA7C4A0) : juce::Colour (0xff33557A);
-    const juce::Colour famInactive  = _lightMode ? juce::Colour (0xffF0EFE7) : juce::Colour (0xff333355);
-    const juce::Colour famTextAct   = juce::Colours::white;
-    const juce::Colour famTextOff   = _lightMode ? juce::Colour (0xff706D64) : juce::Colours::lightgrey;
+    // T2.9: tokens come from Theme so palette tweaks ripple through one place.
+    const auto& t          = DrawnCurveLookAndFeel::theme (_lightMode);
+    const auto& famActive  = t.famActive;
+    const auto& famBrowsed = t.famBrowsed;
+    const auto& famInactive = t.famInactive;
+    const auto  famTextAct = juce::Colours::white;
+    const auto& famTextOff = t.famTextOff;
 
     for (int f = 0; f < dcScale::kNumFamilies; ++f)
     {
@@ -3468,17 +3813,21 @@ void DrawnCurveEditor::updateScalePresetButtons()
 
     // ── Subfamily chip colours ────────────────────────────────────────────────
     // Highlight the chip whose mode matches the current scale within the active family.
-    const juce::Colour chipOn   = _lightMode ? juce::Colour (0xff1D4ED8) : juce::Colour (0xff60A5FA);
-    const juce::Colour chipOff  = _lightMode ? juce::Colour (0xffE5E7EB) : juce::Colour (0xff374151);
-    const juce::Colour dotOn    = _lightMode ? juce::Colour (0xff1E40AF) : juce::Colour (0xff93C5FD);
-    const juce::Colour dotOff   = _lightMode ? juce::Colour (0xffBFDBFE) : juce::Colour (0xff1E3A5F);
+    // T2.9: chipOn/chipOff/chipTextOff come from Theme.  dotOn/dotOff are the
+    // small "this is the recognised mode" indicators inside each chip — they
+    // stay local because they're a derived per-widget styling rather than a
+    // palette-wide token.
+    const auto& chipOn      = t.chipOn;
+    const auto& chipOff     = t.chipOff;
+    const auto& chipTextOff = t.chipTextOff;
+    const juce::Colour dotOn  = _lightMode ? juce::Colour (0xff1E40AF) : juce::Colour (0xff93C5FD);
+    const juce::Colour dotOff = _lightMode ? juce::Colour (0xffBFDBFE) : juce::Colour (0xff1E3A5F);
 
     for (int i = 0; i < _numSubfamilyChips; ++i)
     {
         const bool match = (_recognisedFamily == _activeFamilyIdx) && (_recognisedMode == i);
         subfamilyBtns[static_cast<size_t>(i)].setColour (juce::TextButton::buttonColourId,   match ? chipOn : chipOff);
-        subfamilyBtns[static_cast<size_t>(i)].setColour (juce::TextButton::textColourOffId,   match ? juce::Colours::white
-                                                         : (_lightMode ? juce::Colour (0xff374151) : juce::Colour (0xffD1D5DB)));
+        subfamilyBtns[static_cast<size_t>(i)].setColour (juce::TextButton::textColourOffId,   match ? juce::Colours::white : chipTextOff);
         _subfamilyLF[static_cast<size_t>(i)].colOn  = dotOn;
         _subfamilyLF[static_cast<size_t>(i)].colOff = dotOff;
         subfamilyBtns[static_cast<size_t>(i)].repaint();
@@ -3850,7 +4199,7 @@ void DrawnCurveEditor::updateScaleStatus()
         scaleLabel.setText (juce::String::fromUTF8 (dcScale::kFamilies[id.family].modes[id.mode].name),
                             juce::dontSendNotification);
     else
-        scaleLabel.setText ((relMask == 0x0FFF) ? "Chrom." : "Custom",
+        scaleLabel.setText ((relMask == 0x0FFF) ? "Chromatic" : "Custom",
                             juce::dontSendNotification);
 
     // ── 4. Colour highlight for tabs + chips ─────────────────────────────────
@@ -3865,13 +4214,17 @@ void DrawnCurveEditor::applyTheme()
 {
     const bool light = _lightMode;
 
-    const juce::Colour textCol  = light ? juce::Colour (0xff2d2b27) : juce::Colours::white;
-    const juce::Colour dimText  = light ? juce::Colour (0xff7a766d) : juce::Colours::lightgrey;
-    const juce::Colour tbBg     = light ? juce::Colour (0xffFCFBF7) : juce::Colour (0xff252538);
-    const juce::Colour tbLine   = light ? juce::Colour (0xffDDD6CA) : juce::Colour (0x33ffffff);
-    const juce::Colour accent   = light ? kLaneColourLight[0] : kLaneColourDark[0];   // purple
-    const juce::Colour btnBg    = light ? juce::Colour (0xffF0EDE5) : juce::Colour (0xff333355);
-    const juce::Colour btnText  = light ? juce::Colour (0xff2d2b27) : juce::Colours::white;
+    // T2.9 (visual-audit-2026-04 §4): single palette source.  Tokens replace
+    // the inline `light ? Colour(0x…) : Colour(0x…)` ternaries that were
+    // duplicated dozens of times in this function — one home for everything.
+    const auto& t = DrawnCurveLookAndFeel::theme (light);
+    const auto& textCol = t.textCol;
+    const auto& dimText = t.dimText;
+    const auto& tbBg    = t.tbBg;
+    const auto& tbLine  = t.tbLine;
+    const auto& accent  = t.accent;     // = kLaneColour[0]
+    const auto& btnBg   = t.btnBg;
+    const auto& btnText = t.btnText;
 
     // Sliders
     for (auto* s : { &smoothingSlider, &speedSlider, &phaseOffsetSlider
@@ -3900,15 +4253,17 @@ void DrawnCurveEditor::applyTheme()
                    })
         l->setColour (juce::Label::textColourId, dimText);
 
-    // Editable value labels — styled like small buttons so they read as tappable,
-    // with explicit editing colours to prevent the blank-while-editing bug.
+    // T2.2 (visual-audit-2026-04 §3 P1, §4): editable value labels are
+    // readouts first, inputs second. Strip the idle background + outline so
+    // they read as plain dim text above their sliders. The editing chrome
+    // (bg + accent outline) re-appears only while the user is actually
+    // typing — the affordance flips on at the moment of intent, not in
+    // the resting state.  Pairs with T1.2's enlarged slider thumbs.
     {
-        const auto editBg     = light ? juce::Colour (0xfff0ede8) : juce::Colour (0xff32323e);
-        const auto editBorder = light ? juce::Colour (0xffc0bab2) : juce::Colour (0xff55556a);
         for (auto* l : { &rangeLabel, &speedLabel, &smoothingLabel })
         {
-            l->setColour (juce::Label::backgroundColourId,            editBg);
-            l->setColour (juce::Label::outlineColourId,               editBorder);
+            l->setColour (juce::Label::backgroundColourId,            juce::Colours::transparentBlack);
+            l->setColour (juce::Label::outlineColourId,               juce::Colours::transparentBlack);
             l->setColour (juce::Label::textWhenEditingColourId,       textCol);
             l->setColour (juce::Label::backgroundWhenEditingColourId, tbBg);
             l->setColour (juce::Label::outlineWhenEditingColourId,    accent);
@@ -3916,7 +4271,7 @@ void DrawnCurveEditor::applyTheme()
     }
 
     // clearButton is a dcui::IconButton
-    clearButton.setBaseColour (light ? juce::Colour (0xff706D64) : juce::Colours::lightgrey);
+    clearButton.setBaseColour (t.famTextOff);   // T2.9: same dim-grey as inactive family-tab text
 
     // Musical toggle button
     musicalToggleBtn.setColour (juce::TextButton::buttonColourId,  btnBg);
@@ -3960,34 +4315,43 @@ void DrawnCurveEditor::applyTheme()
     panicButton.setColour (juce::TextButton::textColourOffId,
                            light ? juce::Colour (0xffC0392B) : juce::Colour (0xffFF6B6B));
 
-    // Direction control — purple accent matching Lane 0 colour
-    dirControl.bgColour     = light ? juce::Colour (0xffEFE7FF) : btnBg;
-    dirControl.activeColour = light ? juce::Colour (0xffffffff) : juce::Colour (0xff2979ff);
-    dirControl.labelColour  = light ? juce::Colour (0xff6746d9) : juce::Colours::lightgrey;
-    dirControl.activeLabel  = light ? juce::Colour (0xff6746d9) : juce::Colours::white;
-    dirControl.borderColour = light ? juce::Colour (0xffDDD2FF) : juce::Colour (0x33ffffff);
+    // T2.3 (visual-audit-2026-04 §2.5, §3 P5): direction is a deliberate-tier
+    // control — set per piece, not touched mid-musicking. Drop the saturated
+    // purple light-mode chrome (was overweighted vs. its scope tier) and
+    // reuse the neutral btnBg / btnText / accent tokens so it sits in the
+    // same family as the other deliberate-tier controls. Resized 40 → 32 px
+    // tall in resized() to match the eyebrow's general control floor.
+    dirControl.bgColour     = btnBg;
+    dirControl.activeColour = accent;
+    dirControl.labelColour  = light ? btnText.withMultipliedAlpha (0.65f) : dimText;
+    dirControl.activeLabel  = juce::Colours::white;
+    // T2.9: shared "subtle border" — black-on-light, white-on-dark, both at 0x33 alpha.
+    dirControl.borderColour = light ? juce::Colour (0x33000000) : juce::Colour (0x33ffffff);
     dirControl.repaint();
 
     // Lane focus control — active segment uses lane colour (lanes) or neutral accent (*).
     {
+        // T2.9: "all-lanes" sentinel uses chip-text neutrals (grey-blue family).
         const auto activeLaneCol = _showingAllLanes
-            ? (light ? juce::Colour (0xff374151) : juce::Colour (0xff94A3B8))
+            ? t.chipTextOff
             : (light ? kLaneColourLight[_focusedLane] : kLaneColourDark[_focusedLane]);
         const auto activeLabelCol = (activeLaneCol.getBrightness() > 0.55f)
                                     ? juce::Colour (0xdd1a1a1a)
                                     : juce::Colours::white;
-        laneFocusCtrl.bgColour     = light ? juce::Colour (0xffF0EDE5) : btnBg;
+        laneFocusCtrl.bgColour     = btnBg;
         laneFocusCtrl.activeColour = activeLaneCol;
         laneFocusCtrl.labelColour  = dimText;
         laneFocusCtrl.activeLabel  = activeLabelCol;
-        laneFocusCtrl.borderColour = light ? juce::Colour (0xffDDD6CA) : juce::Colour (0x33ffffff);
+        laneFocusCtrl.borderColour = light ? tbLine : juce::Colour (0x33ffffff);
         laneFocusCtrl.repaint();
     }
 
     // Beat preset buttons (sync mode) + Y-axis preset buttons — same palette as density buttons
     {
-        const juce::Colour presetBg   = light ? juce::Colour (0xffF0EFE7) : btnBg;
-        const juce::Colour presetText = light ? juce::Colour (0xff5B6985) : juce::Colours::lightgrey;
+        // T2.9: presets share the family-tab "inactive" pill background so all
+        // pill-shaped read-only controls in the rail land in the same family.
+        const juce::Colour presetBg   = t.famInactive;
+        const juce::Colour presetText = dimText;
         auto colourPreset = [&] (juce::TextButton& b)
         {
             b.setColour (juce::TextButton::buttonColourId,  presetBg);
@@ -4003,13 +4367,11 @@ void DrawnCurveEditor::applyTheme()
         for (auto& b : yPBStepPresetBtns)   colourPreset (b);
     }
 
-    // Density buttons
+    // Density buttons — same family-tab "inactive" pill palette as the presets above.
     for (auto* b : { &tickYMinusBtn, &tickYPlusBtn, &tickXMinusBtn, &tickXPlusBtn })
     {
-        b->setColour (juce::TextButton::buttonColourId,
-                      light ? juce::Colour (0xffF0EFE7) : btnBg);
-        b->setColour (juce::TextButton::textColourOffId,
-                      light ? juce::Colour (0xff5B6985) : juce::Colours::lightgrey);
+        b->setColour (juce::TextButton::buttonColourId,  t.famInactive);
+        b->setColour (juce::TextButton::textColourOffId, dimText);
     }
 
     // Routing matrix rows
@@ -4062,7 +4424,12 @@ void DrawnCurveEditor::applyTheme()
     _routingOverlay.setLightMode (light);
 
     // Scale controls
-    scaleLabel.setColour (juce::Label::textColourId, dimText);
+    // T1.1 (visual-audit-2026-04 §3 P1): scaleLabel is plain text on the
+    // editor background — no chip chrome.  We zero bg + outline defensively
+    // in case JUCE defaults or a future theme path leaks a fill in.
+    scaleLabel.setColour (juce::Label::textColourId,       dimText);
+    scaleLabel.setColour (juce::Label::backgroundColourId, juce::Colours::transparentBlack);
+    scaleLabel.setColour (juce::Label::outlineColourId,    juce::Colours::transparentBlack);
 
     scaleLattice.colBg           = light ? juce::Colours::white          : juce::Colour (0xff252538);
     scaleLattice.colBorder       = light ? juce::Colour (0xffA9BAD5)     : juce::Colour (0x55ffffff);
@@ -4076,6 +4443,34 @@ void DrawnCurveEditor::applyTheme()
     scaleLattice.colRootText     = light ? juce::Colour (0xff92400E)     : juce::Colours::black;
     scaleLattice.repaint();
 
+    // Chromatic wheel — paper palette in light mode, dark siblings in dark mode.
+    // Active PCs read as ink dots so the polygon silhouette dominates.
+    chromaticWheel.colBg            = light ? juce::Colour (0xffFAF6EB) : juce::Colour (0xff252538);
+    chromaticWheel.colBorder        = light ? juce::Colour (0xff2C2723) : juce::Colour (0xff8a8a9a);
+    chromaticWheel.colTextOff       = light ? juce::Colour (0xffAAA195) : juce::Colour (0x88ffffff);
+    chromaticWheel.colActive        = light ? juce::Colour (0xff2C2723) : juce::Colour (0xffeae3d2);
+    chromaticWheel.colActiveBorder  = light ? juce::Colour (0xff2C2723) : juce::Colour (0xffeae3d2);
+    chromaticWheel.colTextOn        = light ? juce::Colour (0xff2C2723) : juce::Colours::white;
+    chromaticWheel.colRoot          = light ? juce::Colour (0xff2C2723) : juce::Colour (0xffeae3d2);
+    chromaticWheel.colRootBorder    = light ? juce::Colour (0xffCB9839) : juce::Colour (0xffE8A838);
+    chromaticWheel.colRootRing      = light ? juce::Colour (0xffCB9839) : juce::Colour (0xffE8A838);
+    chromaticWheel.colRootText      = light ? juce::Colour (0xff92400E) : juce::Colour (0xffFDE68A);
+    chromaticWheel.colSpoke         = light ? juce::Colour (0xffD4CDB7) : juce::Colour (0x55ffffff);
+    chromaticWheel.colPolygonStroke = light ? juce::Colour (0xffCB9839) : juce::Colour (0xffE8A838);
+    chromaticWheel.colPolygonFill   = light ? juce::Colour (0x30CB9839) : juce::Colour (0x30E8A838);
+    chromaticWheel.colCentreInk     = light ? juce::Colour (0xff2C2723) : juce::Colour (0xffeae3d2);
+    chromaticWheel.colCentreSub     = light ? juce::Colour (0xff837B6F) : juce::Colour (0x99ffffff);
+    chromaticWheel.setUseFlats (_useFlats);
+    chromaticWheel.repaint();
+
+    // Scale-view selector — paper palette in light, dark siblings in dark.
+    scaleViewCtrl.bgColour     = light ? juce::Colour (0xffEFE9D8) : juce::Colour (0xff333355);
+    scaleViewCtrl.activeColour = light ? juce::Colour (0xffCB9839) : juce::Colour (0xffE8A838);
+    scaleViewCtrl.labelColour  = light ? juce::Colour (0xff706D64) : juce::Colour (0x99ffffff);
+    scaleViewCtrl.activeLabel  = light ? juce::Colour (0xff2C2723) : juce::Colours::black;
+    scaleViewCtrl.borderColour = light ? juce::Colour (0xffD4CDB7) : juce::Colour (0x33ffffff);
+    scaleViewCtrl.repaint();
+
     for (auto* b : { &scaleRotateBtn, &scaleAllBtn, &scaleNoneBtn, &scaleInvBtn, &scaleRootBtn })
     {
         b->setColour (juce::TextButton::buttonColourId,  btnBg);
@@ -4083,10 +4478,13 @@ void DrawnCurveEditor::applyTheme()
     }
     updateScalePresetButtons();   // re-colour family tabs + chips for new theme
 
-    maskLabel.setColour (juce::Label::textColourId,            textCol);
-    maskLabel.setColour (juce::Label::backgroundColourId,      btnBg);
-    maskLabel.setColour (juce::Label::outlineColourId,         dimText);
-    maskLabel.setColour (juce::Label::textWhenEditingColourId, textCol);
+    // T1.1 (visual-audit-2026-04 §3 P1): mask reads as italic dim caption,
+    // not a chip — drop the button-bg fill and outline; use dimText so it
+    // sits visually below the bold scaleLabel above it.
+    maskLabel.setColour (juce::Label::textColourId,            dimText);
+    maskLabel.setColour (juce::Label::backgroundColourId,      juce::Colours::transparentBlack);
+    maskLabel.setColour (juce::Label::outlineColourId,         juce::Colours::transparentBlack);
+    maskLabel.setColour (juce::Label::textWhenEditingColourId, dimText);
 
     // syncButton is a dcui::IconButton — use setBaseColour
     syncButton.setBaseColour (light ? juce::Colour (0xff6D28D9) : juce::Colour (0xff2979ff));
@@ -4094,20 +4492,24 @@ void DrawnCurveEditor::applyTheme()
 
     // xQuantize / yQuantize lock buttons — use lane 0's colour when focused on lane 0,
     // otherwise use a neutral accent that reads clearly in both themes.
-    const auto lockColour = light ? juce::Colour (0xff706D64) : juce::Colours::lightgrey;
+    // T2.9: lockColour is the same dim-grey as inactive family-tab text — keeps
+    // all "inactive utility" surfaces in one tonal family.
+    const auto lockColour = t.famTextOff;
     xQuantizeBtn.setBaseColour (lockColour);
     yQuantizeBtn.setBaseColour (lockColour);
     xQuantizeBtn.repaint();
     yQuantizeBtn.repaint();
 
-    // '#' combo button — neutral style, slightly smaller text
-    xyLockBtn.setColour (juce::TextButton::buttonColourId,
-        light ? juce::Colour (0xffe0dcd5) : juce::Colour (0xff2a2a38));
+    // '#' combo button — chrome-free in idle; only the toggled-on state shows a pill.
+    xyLockBtn.setColour (juce::TextButton::buttonColourId,   juce::Colours::transparentBlack);
     xyLockBtn.setColour (juce::TextButton::buttonOnColourId, lockColour.withAlpha (0.3f));
-    xyLockBtn.setColour (juce::TextButton::textColourOffId, lockColour);
-    xyLockBtn.setColour (juce::TextButton::textColourOnId,  lockColour.brighter (0.4f));
+    xyLockBtn.setColour (juce::TextButton::textColourOffId,  lockColour);
+    xyLockBtn.setColour (juce::TextButton::textColourOnId,   lockColour.brighter (0.4f));
 
     _scaleOverlay.setLightMode (_lightMode);
+
+    // T2.7: re-theme the always-visible palette chip strip.
+    updatePaletteChips();
 
     repaint();
 }
@@ -4129,6 +4531,8 @@ void DrawnCurveEditor::openScaleOverlay()
     _scaleOverlay.addAndMakeVisible (recentFamilyBtn);
     for (auto& b : subfamilyBtns)  _scaleOverlay.addAndMakeVisible (b);
     _scaleOverlay.addAndMakeVisible (scaleLattice);
+    _scaleOverlay.addAndMakeVisible (chromaticWheel);
+    _scaleOverlay.addAndMakeVisible (scaleViewCtrl);
     _scaleOverlay.addAndMakeVisible (scaleRotateBtn);
     _scaleOverlay.addAndMakeVisible (scaleAllBtn);
     _scaleOverlay.addAndMakeVisible (scaleNoneBtn);
@@ -4154,6 +4558,8 @@ void DrawnCurveEditor::closeScaleOverlay()
     addChildComponent (recentFamilyBtn);
     for (auto& b : subfamilyBtns)  addChildComponent (b);
     addChildComponent (scaleLattice);
+    addChildComponent (chromaticWheel);
+    addChildComponent (scaleViewCtrl);
     addChildComponent (scaleRotateBtn);
     addChildComponent (scaleAllBtn);
     addChildComponent (scaleNoneBtn);
@@ -4196,10 +4602,25 @@ void DrawnCurveEditor::paint (juce::Graphics& g)
     drawPanel (_stagePanel, T.stageBg, panelBorder, kR + 4.0f);
 
     // ── Right-rail panels ─────────────────────────────────────────────────────
+    // T2.5 (visual-audit-2026-04 §3 P1, §4): the right rail is one elevated
+    // surface, not three. `_globalPanel` and `_lanesPanel` are reserved for
+    // the >4-lane scrolling rail roadmap (§ 6.3); both are empty in current
+    // builds so their drawPanel calls early-exit. `_focusedLanePanel` drops
+    // its 1-px border so the rail reads as a single fill against the editor
+    // background — lane identity is carried by the colour dots + focused-row
+    // tint inside, not by chrome competing with them.
     drawPanel (_globalPanel,       panelFill, panelBorder, kR);
-    drawPanel (_focusedLanePanel,  panelFill, panelBorder, kR);
+    drawPanel (_focusedLanePanel,  panelFill, juce::Colours::transparentBlack, kR);
     drawPanel (_lanesPanel,        panelFill, panelBorder, kR);
-    drawPanel (_musicalPanel,      panelFill, panelBorder, kR);
+    // visual-audit-2026-04 follow-up: only paint the musical panel chrome when
+    // expanded (when it actually houses the family/chip/key picker grid).  In
+    // the collapsed state the strip holds only a tiny summary chip and the
+    // up/down toggle — drawing a full panel bg + border there leaves a heavy
+    // rounded rectangle floating across the editor bottom long after the user
+    // has dismissed the picker.  The summary text + chips drawn below still
+    // render; they sit directly on the editor background.
+    if (_musicalExpanded)
+        drawPanel (_musicalPanel, panelFill, panelBorder, kR);
 
     const juce::Colour eyebrowCol = T.hint;
 
@@ -4267,12 +4688,13 @@ void DrawnCurveEditor::paint (juce::Graphics& g)
             const auto inner = _musicalPanel.reduced (panelPad, 0)
                                             .withHeight (musicalCollapsedH);
 
-            // Scale summary chip
+            // visual-audit-2026-04 follow-up: collapsed-state summary is now
+            // text-only — no chip backgrounds or borders so it sits quietly on
+            // the editor background instead of competing with the canvas as
+            // two more pills.  Scale name retains its lavender accent so the
+            // user can still spot the active scale at a glance; range stays in
+            // the eyebrow tone.
             const juce::String scaleSummary = scaleLabel.getText();
-            const juce::Colour chipCol = _lightMode ? juce::Colour (0xffF3EEFF)
-                                                    : juce::Colour (0xff2a1f4a);
-            const juce::Colour chipBorder = _lightMode ? juce::Colour (0xffCCBFFF)
-                                                       : juce::Colour (0xff5a4a9a);
             const juce::Colour chipText = _lightMode ? juce::Colour (0xff5e40bf)
                                                      : juce::Colour (0xffA78BFA);
 
@@ -4280,14 +4702,10 @@ void DrawnCurveEditor::paint (juce::Graphics& g)
             const float y = static_cast<float> (inner.getCentreY() - 11);
             const float chipH = 22.0f;
 
-            // Scale chip
+            // Scale label (text only)
             {
                 const float chipW = juce::jmin (110.0f, static_cast<float> (scaleSummary.length() * 9 + 20));
                 const juce::Rectangle<float> chip (x, y, chipW, chipH);
-                g.setColour (chipCol);
-                g.fillRoundedRectangle (chip, 11.0f);
-                g.setColour (chipBorder);
-                g.drawRoundedRectangle (chip.reduced (0.5f), 11.0f, 1.0f);
                 g.setColour (chipText);
                 g.setFont (DrawnCurveLookAndFeel::makeFont (12.0f));
                 g.drawText (scaleSummary, chip.toNearestInt(),
@@ -4295,17 +4713,13 @@ void DrawnCurveEditor::paint (juce::Graphics& g)
                 x += chipW + 8.0f;
             }
 
-            // Range chip
+            // Range label (text only)
             {
                 const juce::String rangeSummary = rangeLabel.getText();
                 if (rangeSummary.isNotEmpty())
                 {
                     const float chipW = juce::jmin (100.0f, static_cast<float> (rangeSummary.length() * 8 + 20));
                     const juce::Rectangle<float> rangeChip (x, y, chipW, chipH);
-                    g.setColour (panelFill);
-                    g.fillRoundedRectangle (rangeChip, 11.0f);
-                    g.setColour (panelBorder);
-                    g.drawRoundedRectangle (rangeChip.reduced (0.5f), 11.0f, 1.0f);
                     g.setColour (eyebrowCol);
                     g.setFont (DrawnCurveLookAndFeel::makeFont (12.0f));
                     g.drawText (rangeSummary, rangeChip.toNearestInt(),
@@ -4316,16 +4730,10 @@ void DrawnCurveEditor::paint (juce::Graphics& g)
     }
 
     // ── Scale overlay panel background (drawn on top of stage, below the ScaleOverlay component) ──
+    // T2.8 / T2.9: use the same OverlayChrome helper as ScaleOverlay::paint
+    // so the pre-paint matches the overlay's own panel exactly (no fallback drift).
     if (_scaleOverlayOpen && _scaleOverlay.isVisible() && ! _scaleOverlay.panelRect.isEmpty())
-    {
-        const auto& pRect = _scaleOverlay.panelRect;
-        const juce::Colour overlayBg     = _lightMode ? juce::Colour (0xfffaf8f6) : juce::Colour (0xff1e1e2c);
-        const juce::Colour overlayBorder = _lightMode ? juce::Colour (0x33000000) : juce::Colour (0x33ffffff);
-        g.setColour (overlayBg);
-        g.fillRoundedRectangle (pRect.toFloat(), 12.0f);
-        g.setColour (overlayBorder);
-        g.drawRoundedRectangle (pRect.toFloat().reduced (0.5f), 12.0f, 1.0f);
-    }
+        dcui::OverlayChrome::paintPanel (g, _lightMode, _scaleOverlay.panelRect.toFloat());
 
 }
 
@@ -4337,36 +4745,103 @@ void DrawnCurveEditor::resized()
 {
     using namespace Layout;
 
-    auto area = getLocalBounds().reduced (pad);
+    auto area = getLocalBounds();
+
+   #if JUCE_IOS
+    // T1.4 (visual-audit-2026-04 §5): standalone iPad respects the OS safe
+    // area (status bar at top, home indicator at bottom, sometimes a side
+    // inset in landscape).  AUv3 hosts already crop to their content rect,
+    // so don't apply the inset there — it would double-pad the layout.
+    if (juce::JUCEApplicationBase::isStandaloneApp())
+    {
+        if (auto* display = juce::Desktop::getInstance().getDisplays().getPrimaryDisplay())
+        {
+            const auto sa = display->safeAreaInsets;
+            area.removeFromTop    (juce::roundToInt (sa.getTop()));
+            area.removeFromBottom (juce::roundToInt (sa.getBottom()));
+            area.removeFromLeft   (juce::roundToInt (sa.getLeft()));
+            area.removeFromRight  (juce::roundToInt (sa.getRight()));
+        }
+    }
+   #endif
+
+    area = area.reduced (pad);
     // "singleLane" now means the rail is hidden, regardless of lane count.
     // This drives the layout branch: full-width canvas + eyebrow controls vs. two-column.
     const bool singleLane = !_railExpanded;
 
-    // ── Eyebrow / utility bar ─────────────────────────────────────────────────
-    // Single-lane mode: one expanded 52px bar with performance controls + utilities.
-    // Multi-lane mode:  36px bar with sync/speed on the left, utilities on the right.
+    // ── Settings shelf (top-right) ────────────────────────────────────────────
+    // T2.6 (visual-audit-2026-04 §3 P5, §4): session-stable controls live in
+    // their own shelf above the eyebrow so they're scope-separated from the
+    // performance-hot + deliberate-tier controls.
+    //   shelf = [palette chips ──────── | midiOutBtn (standalone only) | helpButton | themeButton]
+    // T2.7 (visual-audit-2026-04 §4): the left half holds the always-visible
+    // palette chip strip — recently-used scale palettes (root + mask) the user
+    // can recall mid-musicking with a single tap.
     {
-        const int eyebrowH = singleLane ? 52 : utilityRowH;
+        auto shelf = area.removeFromTop (28);
+        themeButton.setBounds (shelf.removeFromRight (32).withSizeKeepingCentre (32, 28));
+        shelf.removeFromRight (4);
+        helpButton .setBounds (shelf.removeFromRight (28).withSizeKeepingCentre (28, 28));
+
+        if (juce::JUCEApplicationBase::isStandaloneApp())
+        {
+            shelf.removeFromRight (8);
+            midiOutBtn.setBounds (shelf.removeFromRight (72).withSizeKeepingCentre (72, 28));
+        }
+
+        // T2.7: palette chip strip (left side).  Each visible chip gets equal
+        // share of the available width up to a comfortable cap; the reservation
+        // shrinks with each filled palette so the strip never feels stretched
+        // when the user has only picked two or three scales.
+        constexpr int kPaletteChipW   = 80;
+        constexpr int kPaletteChipGap = 4;
+        const int visibleChips = juce::jmin (kMaxPaletteChips,
+                                             static_cast<int> (_palettes.size()));
+        if (visibleChips > 0)
+        {
+            shelf.removeFromLeft (4);   // breathing room from window edge
+            const int availW = shelf.getWidth();
+            const int wantedW = visibleChips * kPaletteChipW
+                              + (visibleChips - 1) * kPaletteChipGap;
+            const int stripW  = juce::jmin (availW, wantedW);
+            auto strip = shelf.removeFromLeft (stripW);
+            const int chipW = (stripW - (visibleChips - 1) * kPaletteChipGap) / visibleChips;
+            for (int i = 0; i < kMaxPaletteChips; ++i)
+            {
+                auto& chip = paletteChips[static_cast<size_t> (i)];
+                if (i < visibleChips)
+                {
+                    chip.setBounds (strip.removeFromLeft (chipW).withSizeKeepingCentre (chipW, 24));
+                    if (i < visibleChips - 1) strip.removeFromLeft (kPaletteChipGap);
+                }
+            }
+        }
+    }
+    area.removeFromTop (4);
+
+    // ── Eyebrow / utility bar ─────────────────────────────────────────────────
+    // Single-lane mode: one expanded 60px bar with performance controls + utilities.
+    // Multi-lane mode:  36px bar with sync/speed on the left, utilities on the right.
+    //
+    // T1.2 (visual-audit-2026-04 §3 P6): single-lane eyebrow grew from 52 to
+    // 60 px so the range / speed / smooth sliders fit a 32 px tall section
+    // (was 24) — gives the enlarged 16 px thumb radius the room it needs
+    // for a comfortable performance-hot touch target on iPad.
+    {
+        const int eyebrowH = singleLane ? 60 : utilityRowH;
         auto row = area.removeFromTop (eyebrowH);
 
-        // ── Right side: utility buttons (always present) ─────────────────────
-        themeButton     .setBounds (row.removeFromRight (32).withSizeKeepingCentre (32, 28));
-        row.removeFromRight (4);
-        helpButton      .setBounds (row.removeFromRight (28).withSizeKeepingCentre (28, 28));
-        row.removeFromRight (4);
+        // ── Right side: operational + lane-context buttons ───────────────────
+        // T2.6: session-stable controls (☾ theme, ? help, MIDI Out) moved up
+        // to the settings shelf above. Eyebrow right side is now a single
+        // operational cluster — no need for the T1.3 grouping gap.
         panicButton     .setBounds (row.removeFromRight (28).withSizeKeepingCentre (28, 28));
         row.removeFromRight (4);
         clearButton     .setBounds (row.removeFromRight (44).withSizeKeepingCentre (44, 28));
         row.removeFromRight (6);
         scaleNotationBtn.setBounds (row.removeFromRight (28).withSizeKeepingCentre (28, 28));
-        row.removeFromRight (8);   // visual separator gap
-
-        // Standalone only: MIDI output device picker
-        if (juce::JUCEApplicationBase::isStandaloneApp())
-        {
-            midiOutBtn.setBounds (row.removeFromRight (72).withSizeKeepingCentre (72, 28));
-            row.removeFromRight (6);
-        }
+        row.removeFromRight (8);   // breathing room before the lane-context cluster begins
 
         if (singleLane)
         {
@@ -4405,7 +4880,10 @@ void DrawnCurveEditor::resized()
             row.removeFromRight (6);
 
             // ── Fixed: direction + sync (left edge) ───────────────────────────
-            dirControl.setBounds (row.removeFromLeft (100).withSizeKeepingCentre (100, 40));
+            // T2.3: dirControl shrunk 40 → 32 px tall to match the eyebrow's
+            // general control floor (was overweighted for a deliberate-tier
+            // control — set per piece, not touched mid-musicking).
+            dirControl.setBounds (row.removeFromLeft (100).withSizeKeepingCentre (100, 32));
             row.removeFromLeft (8);
 
             // ── Lane selector — always visible: ✤ + lane numbers ─────────────
@@ -4466,14 +4944,17 @@ void DrawnCurveEditor::resized()
 
             // Range / Speed / Smooth — label on top, slider below.
             // Labels get a 22 px strip (full width, full height) so the touch
-            // target is reliably tappable; slider gets the remaining ~30 px.
+            // target is reliably tappable; slider gets a 32 px section
+            // (T1.2, visual-audit-2026-04 §3 P6) so the 16 px thumb radius
+            // from DrawnCurveLookAndFeel::getSliderThumbRadius isn't clipped.
             constexpr int kLblH = 22;
+            constexpr int kSldH = 32;
 
             if (rangeW > 0)
             {
                 auto rangeSection = row.removeFromLeft (rangeW);
                 rangeLabel .setBounds (rangeSection.removeFromTop (kLblH));
-                rangeSlider.setBounds (rangeSection.withSizeKeepingCentre (rangeW, 24));
+                rangeSlider.setBounds (rangeSection.withSizeKeepingCentre (rangeW, kSldH));
             }
             else
             {
@@ -4486,7 +4967,7 @@ void DrawnCurveEditor::resized()
                 row.removeFromLeft (kSliderGap);
                 auto speedSection = row.removeFromLeft (speedW);
                 speedLabel .setBounds (speedSection.removeFromTop (kLblH));
-                speedSlider.setBounds (speedSection.withSizeKeepingCentre (speedW, 24));
+                speedSlider.setBounds (speedSection.withSizeKeepingCentre (speedW, kSldH));
             }
             else
             {
@@ -4499,7 +4980,7 @@ void DrawnCurveEditor::resized()
                 row.removeFromLeft (kSliderGap);
                 auto smoothSection = row.removeFromLeft (smoothW);
                 smoothingLabel .setBounds (smoothSection.removeFromTop (kLblH));
-                smoothingSlider.setBounds (smoothSection.withSizeKeepingCentre (smoothW, 24));
+                smoothingSlider.setBounds (smoothSection.withSizeKeepingCentre (smoothW, kSldH));
             }
             else
             {
@@ -4565,28 +5046,49 @@ void DrawnCurveEditor::resized()
 
         if (anyNoteMode && _musicalExpanded && ! _scaleOverlayOpen)
         {
-            auto ne = _musicalPanel;
-            ne.removeFromTop (musicalCollapsedH);   // skip the summary header strip
-            ne.removeFromTop (4);
+            // Inset by panelPad horizontally so children clear the rounded panel border.
+            // Top pad is small — the unified header sits flush against it.
+            auto ne = _musicalPanel.reduced (panelPad, 0);
+            ne.removeFromTop (6);
 
-            // ── Family tab bar — toggle button shares this row ────────────────
+            // ── Unified header (28 px) ────────────────────────────────────────
+            // Layout (right → left):
+            //   [collapse ▴] [selector Rows|Wheel|Both]
+            // remaining width on the LEFT goes to family tabs + recent.
+            //
+            // Mask buttons (↻ ● ○ ◑ ◆) live in a vertical column on the LEFT
+            // of the picker row (see below) — moved out of the header to give
+            // family tabs more breathing room.
             {
-                auto fRow = ne.removeFromTop (kFamilyBarH);
-                // Reserve space for the collapse (▴) button at the right end
-                musicalToggleBtn.setBounds (fRow.removeFromRight (28));
-                fRow.removeFromRight (4);
+                auto hdr = ne.removeFromTop (kFamilyBarH);
+
+                // Collapse arrow — far right.
+                musicalToggleBtn.setBounds (hdr.removeFromRight (28));
+                hdr.removeFromRight (8);
+
+                // Rows / Wheel / Both selector — sized between 90 and 120 px wide
+                // based on available space.  Uses the full row height for comfortable
+                // touch on iPad (Apple HIG: 44 pt minimum is impractical here, but
+                // 28 pt is the floor for the surrounding action chrome).
+                {
+                    const int selW = juce::jlimit (90, 120, hdr.getWidth() - 100);
+                    scaleViewCtrl.setBounds (hdr.removeFromRight (selW));
+                    hdr.removeFromRight (8);
+                }
+
+                // Family tabs (+ recent) fill the remaining left space.
                 const int N    = dcScale::kNumFamilies + 1;
-                const int btnW = (fRow.getWidth() - (N - 1)) / N;
+                const int btnW = juce::jmax (16, (hdr.getWidth() - (N - 1)) / N);
                 for (int f = 0; f < dcScale::kNumFamilies; ++f)
                 {
-                    familyBtns[static_cast<size_t>(f)].setBounds (fRow.removeFromLeft (btnW));
-                    fRow.removeFromLeft (1);
+                    familyBtns[static_cast<size_t>(f)].setBounds (hdr.removeFromLeft (btnW));
+                    hdr.removeFromLeft (1);
                 }
-                recentFamilyBtn.setBounds (fRow.removeFromLeft (btnW));
+                recentFamilyBtn.setBounds (hdr.removeFromLeft (btnW));
             }
             ne.removeFromTop (4);
 
-            // ── Subfamily chip row ─────────────────────────────────────────────
+            // ── Subfamily chip row (28 px, text-only) ────────────────────────
             {
                 auto sRow = ne.removeFromTop (kSubfamilyRowH);
                 const int N = _numSubfamilyChips;
@@ -4606,31 +5108,88 @@ void DrawnCurveEditor::resized()
             }
             ne.removeFromTop (4);
 
-            // ── Action row ────────────────────────────────────────────────────
+            // ── Scale picker row (184 px) — layout switches on _scaleViewMode.
+            //   Rows  → lattice fills width; wheel hidden.
+            //   Wheel → centred square sized to the row height; lattice hidden.
+            //   Both  → rows on the left, square wheel on the right.
+            //
+            // Left sidebar (left → right):
+            //   28 px button column (↻ ● ○ ◑ ◆)
+            //   4 px gap
+            //   80 px label column (scale name top, bitmask bottom, both centred)
+            //   8 px gap
+            //   picker fills remainder
+            //
+            // Labels are in the sidebar so they never overlap the wheel.
             {
-                auto aRow = ne.removeFromTop (kActionRowH);
-                maskLabel .setBounds (aRow.removeFromRight (52).withSizeKeepingCentre (52, 20));
-                aRow.removeFromRight (3);
-                scaleLabel.setBounds (aRow.removeFromRight (84).withSizeKeepingCentre (84, 14));
-                aRow.removeFromRight (8);
-                // scaleNotationBtn has moved to the utility bar (global section)
-                scaleRotateBtn.setBounds (aRow.removeFromLeft (28)); aRow.removeFromLeft (6);
-                scaleAllBtn   .setBounds (aRow.removeFromLeft (28)); aRow.removeFromLeft (2);
-                scaleNoneBtn  .setBounds (aRow.removeFromLeft (28)); aRow.removeFromLeft (2);
-                scaleInvBtn   .setBounds (aRow.removeFromLeft (28)); aRow.removeFromLeft (2);
-                scaleRootBtn  .setBounds (aRow.removeFromLeft (28));
-            }
-            ne.removeFromTop (4);
+                const auto pickerBand = ne.removeFromTop (kScaleLatticeH);
+                auto       pickerRow  = pickerBand;   // working copy — mutated below
 
-            // ── Scale lattice: full width ──────────────────────────────────────
-            scaleLattice.setBounds (ne.removeFromTop (kScaleLatticeH));
+                // ── Button column ─────────────────────────────────────────────
+                {
+                    const int colW   = 28;
+                    const int btnH   = 32;
+                    const int btnGap = 4;
+                    const int totalH = 5 * btnH + 4 * btnGap;   // 176
+                    auto col = pickerRow.removeFromLeft (colW);
+                    pickerRow.removeFromLeft (4);                // gap → label column
+
+                    auto stack = col.withSizeKeepingCentre (colW, totalH);
+                    scaleRotateBtn.setBounds (stack.removeFromTop (btnH)); stack.removeFromTop (btnGap);
+                    scaleAllBtn   .setBounds (stack.removeFromTop (btnH)); stack.removeFromTop (btnGap);
+                    scaleNoneBtn  .setBounds (stack.removeFromTop (btnH)); stack.removeFromTop (btnGap);
+                    scaleInvBtn   .setBounds (stack.removeFromTop (btnH)); stack.removeFromTop (btnGap);
+                    scaleRootBtn  .setBounds (stack.removeFromTop (btnH));
+                }
+
+                // ── Label column: scale name (top) + bitmask (bottom) ─────────
+                {
+                    const int lblColW  = 80;
+                    const int lblH     = 16;
+                    const int lblGap   = 6;
+                    const int lblTotal = 2 * lblH + lblGap;
+                    auto lblCol = pickerRow.removeFromLeft (lblColW);
+                    pickerRow.removeFromLeft (8);                // gap → picker
+
+                    const int lblTop = lblCol.getY() + (lblCol.getHeight() - lblTotal) / 2;
+                    scaleLabel.setBounds (lblCol.getX(), lblTop,              lblColW, lblH);
+                    maskLabel .setBounds (lblCol.getX(), lblTop + lblH + lblGap, lblColW, lblH);
+                }
+
+                // ── Picker (fills remaining width) ────────────────────────────
+                if (_scaleViewMode == ViewRows)
+                {
+                    scaleLattice  .setBounds (pickerRow);
+                    chromaticWheel.setBounds ({});
+                }
+                else if (_scaleViewMode == ViewWheel)
+                {
+                    const int side = juce::jmin (pickerRow.getHeight(), pickerRow.getWidth());
+                    auto wheelBox = juce::Rectangle<int> (0, 0, side, side)
+                                       .withCentre (pickerRow.getCentre());
+                    chromaticWheel.setBounds (wheelBox);
+                    scaleLattice  .setBounds ({});
+                }
+                else  // ViewBoth
+                {
+                    const int gutter    = 8;
+                    const int wheelSide = juce::jmin (pickerRow.getHeight(),
+                                                      pickerRow.getWidth() / 4);
+                    auto wheelBox = pickerRow.removeFromRight (wheelSide);
+                    pickerRow.removeFromRight (gutter);
+                    scaleLattice  .setBounds (pickerRow);
+                    chromaticWheel.setBounds (wheelBox);
+                }
+            }
             _secNotes = _musicalPanel;
         }
         else
         {
             // Zone is collapsed (or no note lanes): explicitly clear component bounds
             // so previously-expanded components don't paint over the stage canvas.
-            scaleLattice.setBounds ({});
+            scaleLattice  .setBounds ({});
+            chromaticWheel.setBounds ({});
+            scaleViewCtrl .setBounds ({});
             for (auto& b : familyBtns)    b.setBounds ({});
             recentFamilyBtn.setBounds ({});
             for (auto& b : subfamilyBtns) b.setBounds ({});
@@ -4721,7 +5280,8 @@ void DrawnCurveEditor::resized()
             fp.removeFromTop (6);
 
             // Direction segmented control (full width)
-            dirControl.setBounds (fp.removeFromTop (40));
+            // T2.3: 40 → 32 px to match deliberate-tier sizing.
+            dirControl.setBounds (fp.removeFromTop (32));
             fp.removeFromTop (6);
 
 #if defined(DC_HAVE_PER_LANE_PLAYBACK_PARAMS)
@@ -4985,12 +5545,16 @@ void DrawnCurveEditor::resized()
     }
 
     // ── Scale browser overlay panel ────────────────────────────────────────────
+    // Mirrors the inline expanded layout exactly (Option-B refactor): one
+    // unified header, subfamily chip row, picker with bottom-right badge.
+    // Selector is hidden — view mode is set inline; the overlay just shows
+    // whichever picker(s) the user has chosen.
     if (_scaleOverlayOpen && ! _musicalPanel.isEmpty())
     {
         using namespace Layout;
         constexpr int kOvW   = 340;
         constexpr int kOvPad = 8;
-        constexpr int kOvH   = kOvPad + kFamilyBarH + 4 + kSubfamilyRowH + 4 + kActionRowH + 4 + kScaleLatticeH + kOvPad;
+        constexpr int kOvH   = kOvPad + kFamilyBarH + 4 + kSubfamilyRowH + 4 + kScaleLatticeH + kOvPad;
         const int kOvX = getWidth() - kOvW - 10;
         const int kOvY = (curveDisplay.isVisible()
                           ? curveDisplay.getBoundsInParent().getY() + 8 : 60);
@@ -5004,7 +5568,9 @@ void DrawnCurveEditor::resized()
         // Restore subfamily chip visibility directly instead.
         for (auto& b : familyBtns) b.setVisible (true);
         recentFamilyBtn.setVisible (true);
-        scaleLattice   .setVisible (true);
+        scaleLattice   .setVisible (_scaleViewMode != ViewWheel);
+        chromaticWheel .setVisible (_scaleViewMode != ViewRows);
+        scaleViewCtrl  .setVisible (false);   // inline only — overlay too narrow
         scaleRotateBtn .setVisible (true);
         scaleAllBtn    .setVisible (true);
         scaleNoneBtn   .setVisible (true);
@@ -5018,21 +5584,26 @@ void DrawnCurveEditor::resized()
 
         auto ne = ovPanel.reduced (kOvPad, kOvPad);
 
-        // Family tab bar
+        // ── Unified header ───────────────────────────────────────────────────
+        // 340-wide overlay, kOvPad inset = 324 usable.  Family tabs fill the
+        // entire row — mask buttons live in a vertical column on the left of
+        // the picker row (same as inline).  No selector, no collapse arrow
+        // here (overlay is dismissed via tap-outside, handled by ScaleOverlay).
         {
-            auto fRow = ne.removeFromTop (kFamilyBarH);
+            auto hdr = ne.removeFromTop (kFamilyBarH);
+
             const int N    = dcScale::kNumFamilies + 1;
-            const int btnW = (fRow.getWidth() - (N - 1)) / N;
+            const int btnW = juce::jmax (16, (hdr.getWidth() - (N - 1)) / N);
             for (int f = 0; f < dcScale::kNumFamilies; ++f)
             {
-                familyBtns[static_cast<size_t>(f)].setBounds (fRow.removeFromLeft (btnW));
-                fRow.removeFromLeft (1);
+                familyBtns[static_cast<size_t>(f)].setBounds (hdr.removeFromLeft (btnW));
+                hdr.removeFromLeft (1);
             }
-            recentFamilyBtn.setBounds (fRow.removeFromLeft (btnW));
+            recentFamilyBtn.setBounds (hdr.removeFromLeft (btnW));
         }
         ne.removeFromTop (4);
 
-        // Subfamily chips
+        // ── Subfamily chips ─────────────────────────────────────────────────
         {
             auto sRow = ne.removeFromTop (kSubfamilyRowH);
             const int N = _numSubfamilyChips;
@@ -5052,23 +5623,68 @@ void DrawnCurveEditor::resized()
         }
         ne.removeFromTop (4);
 
-        // Action row
+        // ── Picker row ─────────────────────────────────────────────────────
+        // Same sidebar layout as inline: button column → label column → picker.
+        // Slimmer (24-px buttons, 68-px label column) to fit the 340-px panel.
         {
-            auto aRow = ne.removeFromTop (kActionRowH);
-            maskLabel .setBounds (aRow.removeFromRight (52).withSizeKeepingCentre (52, 20));
-            aRow.removeFromRight (3);
-            scaleLabel.setBounds (aRow.removeFromRight (84).withSizeKeepingCentre (84, 14));
-            aRow.removeFromRight (8);
-            scaleRotateBtn.setBounds (aRow.removeFromLeft (28)); aRow.removeFromLeft (6);
-            scaleAllBtn   .setBounds (aRow.removeFromLeft (28)); aRow.removeFromLeft (2);
-            scaleNoneBtn  .setBounds (aRow.removeFromLeft (28)); aRow.removeFromLeft (2);
-            scaleInvBtn   .setBounds (aRow.removeFromLeft (28)); aRow.removeFromLeft (2);
-            scaleRootBtn  .setBounds (aRow.removeFromLeft (28));
-        }
-        ne.removeFromTop (4);
+            const auto pickerBand = ne.removeFromTop (kScaleLatticeH);
+            auto       pickerRow  = pickerBand;
 
-        // Lattice
-        scaleLattice.setBounds (ne.removeFromTop (kScaleLatticeH));
+            // ── Button column ─────────────────────────────────────────────
+            {
+                const int colW   = 24;
+                const int btnH   = 28;
+                const int btnGap = 4;
+                const int totalH = 5 * btnH + 4 * btnGap;   // 156
+                auto col = pickerRow.removeFromLeft (colW);
+                pickerRow.removeFromLeft (4);                // gap → label column
+
+                auto stack = col.withSizeKeepingCentre (colW, totalH);
+                scaleRotateBtn.setBounds (stack.removeFromTop (btnH)); stack.removeFromTop (btnGap);
+                scaleAllBtn   .setBounds (stack.removeFromTop (btnH)); stack.removeFromTop (btnGap);
+                scaleNoneBtn  .setBounds (stack.removeFromTop (btnH)); stack.removeFromTop (btnGap);
+                scaleInvBtn   .setBounds (stack.removeFromTop (btnH)); stack.removeFromTop (btnGap);
+                scaleRootBtn  .setBounds (stack.removeFromTop (btnH));
+            }
+
+            // ── Label column ──────────────────────────────────────────────
+            {
+                const int lblColW  = 68;
+                const int lblH     = 16;
+                const int lblGap   = 6;
+                const int lblTotal = 2 * lblH + lblGap;
+                auto lblCol = pickerRow.removeFromLeft (lblColW);
+                pickerRow.removeFromLeft (6);                // gap → picker
+
+                const int lblTop = lblCol.getY() + (lblCol.getHeight() - lblTotal) / 2;
+                scaleLabel.setBounds (lblCol.getX(), lblTop,              lblColW, lblH);
+                maskLabel .setBounds (lblCol.getX(), lblTop + lblH + lblGap, lblColW, lblH);
+            }
+
+            // ── Picker ────────────────────────────────────────────────────
+            if (_scaleViewMode == ViewRows)
+            {
+                scaleLattice  .setBounds (pickerRow);
+                chromaticWheel.setBounds ({});
+            }
+            else if (_scaleViewMode == ViewWheel)
+            {
+                const int side = juce::jmin (pickerRow.getHeight(), pickerRow.getWidth());
+                auto wheelBox = juce::Rectangle<int> (0, 0, side, side)
+                                   .withCentre (pickerRow.getCentre());
+                chromaticWheel.setBounds (wheelBox);
+                scaleLattice  .setBounds ({});
+            }
+            else
+            {
+                const int gutter    = 6;
+                const int wheelSide = juce::jmin (pickerRow.getWidth() / 3, kScaleLatticeH);
+                auto wheelBox = pickerRow.removeFromRight (wheelSide);
+                pickerRow.removeFromRight (gutter);
+                scaleLattice  .setBounds (pickerRow);
+                chromaticWheel.setBounds (wheelBox);
+            }
+        }
     }
 
     // ── Full-editor overlays ──────────────────────────────────────────────────

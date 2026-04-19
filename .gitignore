@@ -23,3 +23,12 @@ JUCE
 CMakeCache.txt
 CMakeFiles/
 cmake_install.cmake
+
+# Claude Code session state
+.claude/
+
+# Sample MIDI files (test data, not source)
+*.mid
+
+# Large mockup binaries (design references, not source)
+mockups/*.heic

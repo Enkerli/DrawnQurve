@@ -121,36 +121,29 @@ add_compile_options($<$<CXX_COMPILER_ID:GNU,Clang>:-finput-charset=UTF-8>)
 # For MSVC, ensure /source-charset:utf-8 is used (uncomment if needed):
 # add_compile_options($<$<CXX_COMPILER_ID:MSVC>:/source-charset:utf-8>)
 
-# ── Symbol font binary data (currently disabled) ──────────────────────────────
+# ── Bundled fonts (v2 Studio typography) ──────────────────────────────────────
 #
-# This is the JUCE equivalent of declaring a font in iOS Info.plist (UIAppFonts).
-# Uncomment when a TTF/OTF symbol font (e.g. Material Symbols, or an exported
-# SF Symbol set) is available at Assets/SymbolFont.ttf.
+# JUCE compiles each .ttf into a C++ static array via juce_add_binary_data.
+# Generated symbols: '.' is replaced with '_' but '-' is *stripped* outright.
+# So the filenames below resolve to:
+#   BinaryData::Domine_ttf           BinaryData::Domine_ttfSize
+#   BinaryData::InterTight_ttf       BinaryData::InterTight_ttfSize
+#   BinaryData::InterTightItalic_ttf BinaryData::InterTightItalic_ttfSize  (no underscore!)
+#   BinaryData::Caveat_ttf           BinaryData::Caveat_ttfSize
 #
-# How it works:
-#   1. juce_add_binary_data compiles the font file into a C++ static array.
-#   2. BinaryData::SymbolFont_ttf / BinaryData::SymbolFont_ttfSize are the
-#      resulting symbols (name follows the filename, with '.' → '_').
-#   3. In PluginEditor.cpp (or wherever the font is needed):
+# All four are variable fonts (wght axis). Domine has no italic master; the
+# editor synthesises italic via juce::Font::italic where needed (matches the
+# webapp, which also lacks a true Domine italic).
 #
-#        static const juce::Typeface::Ptr symbolTypeface =
-#            juce::Typeface::createSystemTypefaceFor (
-#                BinaryData::SymbolFont_ttf,
-#                BinaryData::SymbolFont_ttfSize);
-#        juce::Font symbolFont (juce::FontOptions{}.withTypeface (symbolTypeface));
-#        symbolFont.setHeight (20.0f);
-#        g.setFont (symbolFont);
-#        g.drawText (u8"\U0001F78E", bounds, juce::Justification::centred);
-#
-# This approach is fully sandboxed (no filesystem access) and therefore safe
-# inside an AUv3 XPC extension on iOS.
-#
-# juce_add_binary_data(DrawnCurveAssets SOURCES
-#     Assets/SymbolFont.ttf
-# )
-# target_link_libraries(DrawnCurve PRIVATE DrawnCurveAssets)
-#
+# Sandboxed access — safe inside the AUv3 XPC extension on iOS.
 # ─────────────────────────────────────────────────────────────────────────────
+juce_add_binary_data(DrawnCurveFonts SOURCES
+    Assets/Fonts/Domine.ttf
+    Assets/Fonts/InterTight.ttf
+    Assets/Fonts/InterTight-Italic.ttf
+    Assets/Fonts/Caveat.ttf
+)
+target_link_libraries(DrawnCurve PRIVATE DrawnCurveFonts)
 
 # ── Sources ───────────────────────────────────────────────────────────────────
 target_sources(DrawnCurve PRIVATE
@@ -163,6 +156,7 @@ target_sources(DrawnCurve PRIVATE
     Source/ScaleData.h
     Source/UI/PCSPreview.h
     Source/UI/IconFactory.h
+    Source/UI/ChromaticWheel.h
     Source/ScaleLattice.h
 )
 
@@ -171,6 +165,31 @@ target_include_directories(DrawnCurve PRIVATE Source/Engine Source Source/UI)
 # ── iOS code signing ──────────────────────────────────────────────────────────
 # Embed signing identity so cmake regeneration preserves it.
 # These settings match the provisioning profiles on the build machine.
+#
+# ⚠ MANUAL STEP REQUIRED AFTER EVERY `cmake -B build-ios -G Xcode` ⚠
+# -----------------------------------------------------------------------------
+# Even with the XCODE_ATTRIBUTE_* properties below, Xcode still needs the
+# provisioning profile selected by hand after every regeneration of the
+# .xcodeproj.  After every iOS cmake run you MUST open Xcode and, for BOTH
+# targets (DrawnCurve_Standalone and DrawnCurve_AUv3):
+#
+#   1. Open build-ios/DrawnCurve.xcodeproj
+#   2. Select the target → Signing & Capabilities tab
+#   3. Confirm Team = "Alexandre Enkerli (P8W7XXJN6C)"
+#   4. Confirm "Automatically manage signing" is checked
+#   5. If Xcode shows "Failed to register bundle identifier" or a stale
+#      provisioning-profile warning, click "Try Again" / let Xcode refresh
+#   6. Repeat for the *other* target (Standalone embeds the AUv3 .appex,
+#      so both must sign cleanly before installation works on a device)
+#
+# This is a known Xcode + CMake interaction — the generator writes signing
+# attributes into the pbxproj but the IDE re-evaluates provisioning lazily
+# the first time a target is selected after generation.  Building from the
+# command line with CODE_SIGNING_ALLOWED=YES will also fail until step 1–5
+# is performed once per regeneration.  Running with CODE_SIGNING_ALLOWED=NO
+# (used in CI/build-only checks) sidesteps it but produces an unsigned
+# binary that cannot be installed.
+# -----------------------------------------------------------------------------
 if(IS_IOS)
     if(TARGET DrawnCurve_AUv3)
         set_target_properties (DrawnCurve_AUv3 PROPERTIES

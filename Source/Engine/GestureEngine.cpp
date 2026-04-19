@@ -16,7 +16,14 @@ GestureEngine::GestureEngine()
         _laneEnabled[static_cast<size_t>(i)].store  (true,    std::memory_order_relaxed);
         _lanePaused[static_cast<size_t>(i)].store   (false,   std::memory_order_relaxed);
         _lanePhases[static_cast<size_t>(i)].store   (0.0f,    std::memory_order_relaxed);
+        _lastSentMirror[static_cast<size_t>(i)].store (-1,    std::memory_order_relaxed);
     }
+}
+
+int GestureEngine::getLastSentValue (int lane) const noexcept
+{
+    if (lane < 0 || lane >= kMaxLanes) return -1;
+    return _lastSentMirror[static_cast<size_t>(lane)].load (std::memory_order_acquire);
 }
 
 // ---------------------------------------------------------------------------
@@ -64,6 +71,7 @@ void GestureEngine::reset()
         if (! _noteOffNeeded[static_cast<size_t>(i)].load (std::memory_order_acquire))
         {
             _runtimes[static_cast<size_t>(i)].lastSentValue = -1;
+            _lastSentMirror[static_cast<size_t>(i)].store (-1, std::memory_order_release);
         }
         _runtimes[static_cast<size_t>(i)].playheadSeconds = 0.0;
         _runtimes[static_cast<size_t>(i)].smoothedValue   = 0.0f;
@@ -85,7 +93,10 @@ void GestureEngine::resetForDirection (PlaybackDirection dir)
     {
         // Preserve any pending Note Off — same policy as reset().
         if (! _noteOffNeeded[static_cast<size_t>(i)].load (std::memory_order_acquire))
+        {
             _runtimes[static_cast<size_t>(i)].lastSentValue = -1;
+            _lastSentMirror[static_cast<size_t>(i)].store (-1, std::memory_order_release);
+        }
 
         _runtimes[static_cast<size_t>(i)].playheadSeconds = 0.0;
 
@@ -273,6 +284,7 @@ void GestureEngine::processLane (int lane, uint32_t frameCount, double sampleRat
                      static_cast<uint8_t> (rt.lastSentValue), 0u);
         }
         rt.lastSentValue = -1;
+        _lastSentMirror[static_cast<size_t>(lane)].store (-1, std::memory_order_release);
     }
 
     if (! snap || ! snap->valid) return;
@@ -430,6 +442,7 @@ void GestureEngine::processLane (int lane, uint32_t frameCount, double sampleRat
                 if (midiOut) midiOut (0xB0u | (snap->midiChannel & 0x0Fu),
                                       snap->ccNumber, static_cast<uint8_t> (v));
                 rt.lastSentValue = v;
+                _lastSentMirror[static_cast<size_t>(lane)].store (v, std::memory_order_release);
             }
             break;
         }
@@ -441,6 +454,7 @@ void GestureEngine::processLane (int lane, uint32_t frameCount, double sampleRat
                 if (midiOut) midiOut (0xD0u | (snap->midiChannel & 0x0Fu),
                                       static_cast<uint8_t> (v), 0u);
                 rt.lastSentValue = v;
+                _lastSentMirror[static_cast<size_t>(lane)].store (v, std::memory_order_release);
             }
             break;
         }
@@ -453,6 +467,7 @@ void GestureEngine::processLane (int lane, uint32_t frameCount, double sampleRat
                                       static_cast<uint8_t> (v & 0x7F),
                                       static_cast<uint8_t> ((v >> 7) & 0x7F));
                 rt.lastSentValue = v;
+                _lastSentMirror[static_cast<size_t>(lane)].store (v, std::memory_order_release);
             }
             break;
         }
@@ -527,6 +542,7 @@ void GestureEngine::processLane (int lane, uint32_t frameCount, double sampleRat
                 }
             }
             rt.lastSentValue = candidate;
+            _lastSentMirror[static_cast<size_t>(lane)].store (candidate, std::memory_order_release);
             break;
         }
     }

@@ -1,0 +1,302 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>DrawnCurve – Performance Instrument Prototype v2</title>
+<style>
+  :root{
+    --bg:#f5f2eb; --panel:#fcfbf7; --panel2:#f7f4ed; --field:#efebe2; --line:#ddd6ca;
+    --text:#2d2b27; --muted:#7a766d; --lane1:#7a4cff; --lane2:#2d9d74; --lane3:#d9822b;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",sans-serif;background:var(--bg);color:var(--text)}
+  .app{max-width:1460px;margin:0 auto;padding:18px}
+  .topbar{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:14px}
+  .eyebrow{font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--muted);margin-bottom:3px}
+  h1{font-size:24px;line-height:1.1;margin:0}
+  .top-actions{display:flex;gap:8px}
+  .icon-btn,.pill-btn,.chip,.family-btn,.lane-pill,.pc{
+    border:1px solid var(--line); background:#fff; border-radius:14px; padding:10px 12px; font:inherit; color:inherit; cursor:pointer;
+  }
+  .icon-btn{min-width:44px}
+  .layout{display:grid;grid-template-columns:minmax(760px,1.75fr) minmax(300px,.75fr);gap:16px;align-items:start}
+  .panel{background:var(--panel);border:1px solid #ece6db;border-radius:26px;box-shadow:0 10px 28px rgba(28,25,20,.08)}
+  .stage-wrap,.panel-inner,.musical-panel{padding:14px}
+  .stage-head,.panel-head,.musical-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;margin-bottom:12px}
+  .scope{font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--muted)}
+  .hero-line{font-size:22px;font-weight:700;letter-spacing:-.01em}
+  .lane-pills{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+  .lane-pill{border-radius:999px;background:transparent;padding:9px 13px;display:flex;align-items:center;gap:8px}
+  .lane-pill.active{background:#f3eeff;border-color:#baa6ff}
+  .dot,.mark{width:10px;height:10px;border-radius:50%}
+  .stage{
+    position:relative;height:620px;border-radius:22px;overflow:hidden;border:1px solid #e3ddd2;
+    background:
+      linear-gradient(to right, transparent 24.95%, rgba(0,0,0,.08) 25%, transparent 25.05%, transparent 49.95%, rgba(0,0,0,.08) 50%, transparent 50.05%, transparent 74.95%, rgba(0,0,0,.08) 75%, transparent 75.05%),
+      repeating-linear-gradient(to right, rgba(0,0,0,.03) 0 1px, transparent 1px 8.333%),
+      repeating-linear-gradient(to bottom, #f5f1ea 0 33px, #ece7de 33px 66px);
+  }
+  .major-ticks,.minor-ticks{position:absolute;left:0;right:0;bottom:0;height:22px;pointer-events:none}
+  .major-ticks{display:grid;grid-template-columns:repeat(5,1fr);align-items:end;padding:0 8px 4px 8px;color:#8e877b;font-size:11px}
+  .major-ticks span:last-child{text-align:right}
+  .minor-ticks{background:repeating-linear-gradient(to right, rgba(0,0,0,.14) 0 1px, transparent 1px calc(100% / 16));opacity:.45}
+  .lane-glow{position:absolute;inset:0;background:linear-gradient(180deg, rgba(122,76,255,.08), rgba(122,76,255,.02));pointer-events:none}
+  .curve-badge,.empty-hint{
+    position:absolute;padding:7px 12px;border-radius:999px;background:rgba(255,255,255,.74);backdrop-filter:blur(4px);color:var(--muted);font-size:13px
+  }
+  .curve-badge{top:14px;right:14px}
+  .empty-hint{left:50%;bottom:30px;transform:translateX(-50%)}
+  .curve-svg{position:absolute;inset:0;width:100%;height:100%}
+  .playhead{position:absolute;width:18px;height:18px;border-radius:50%;border:3px solid white;background:var(--lane1);box-shadow:0 8px 18px rgba(0,0,0,.14);left:46%;top:46%;transform:translate(-50%,-50%)}
+  .right-rail{display:flex;flex-direction:column;gap:14px}
+  .title-strong{font-weight:700}
+  .global-strip,.summary-row,.family-row{display:flex;gap:8px;flex-wrap:wrap}
+  .global-chip{background:#f4f7fb;border-color:#d6dfea}
+  .focus-head{display:flex;align-items:center;gap:10px}
+  .focus-badge{padding:6px 10px;border-radius:999px;background:#f3eeff;color:#5e40bf;font-weight:700}
+  .dir-seg{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;padding:6px;border-radius:18px;background:#efe7ff;border:1px solid #ddd2ff}
+  .dir-seg button{border:none;background:transparent;border-radius:12px;padding:12px 8px;font:inherit;font-size:20px;cursor:pointer;display:flex;align-items:center;justify-content:center}
+  .dir-seg button.active{background:white;color:#6746d9;box-shadow:0 2px 10px rgba(0,0,0,.05)}
+  .dir-seg button.paused{opacity:.5}
+  .control{margin-top:12px}
+  .row{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:6px}
+  .label{font-size:13px;color:var(--muted)}
+  .value{font-size:13px;font-weight:700}
+  input[type=range]{width:100%;accent-color:var(--lane1)}
+  .range-object{margin-top:4px;padding:10px 10px 8px 10px;border-radius:16px;background:var(--panel2);border:1px solid #e8e1d5}
+  .range-track-wrap{position:relative;height:34px;margin:4px 0 2px 0}
+  .range-track{position:absolute;left:0;right:0;top:14px;height:6px;border-radius:999px;background:#ddd7cb}
+  .range-active{position:absolute;top:11px;height:12px;border-radius:999px;background:linear-gradient(90deg, rgba(122,76,255,.22), rgba(122,76,255,.34));border:1px solid rgba(122,76,255,.24)}
+  .range-slider{position:absolute;left:0;right:0;top:0;width:100%;appearance:none;background:transparent;pointer-events:none}
+  .range-slider::-webkit-slider-thumb{appearance:none;width:18px;height:18px;border-radius:50%;background:#fff;border:2px solid var(--lane1);pointer-events:auto;box-shadow:0 2px 10px rgba(0,0,0,.12)}
+  .range-slider::-moz-range-thumb{width:18px;height:18px;border-radius:50%;background:#fff;border:2px solid var(--lane1);pointer-events:auto}
+  .range-notes{display:flex;justify-content:space-between;align-items:center;font-size:13px;font-weight:700}
+  .quiet-note,.sub,.foot-mini{color:var(--muted);font-size:12px}
+  .lane-summary{display:grid;grid-template-columns:auto 1fr auto;gap:10px;align-items:center;padding:10px 0;border-top:1px solid #eee7db}
+  .lane-summary:first-of-type{border-top:none}
+  .main{display:flex;flex-direction:column;gap:4px}
+  .add-card{border:1px dashed #d6cfc1;border-radius:14px;padding:8px 10px;background:#faf8f3}
+  .summary-chip{border:1px solid var(--line);background:#fff;border-radius:14px;padding:10px 12px;font-size:14px}
+  .summary-chip.hero{background:#f3eeff;border-color:#ccbfff}
+  .musical-expanded{display:none}
+  .musical-panel.open .musical-expanded{display:block}
+  .family-btn.active{background:#eef3ff;border-color:#cbd7f0}
+  .mode-grid{display:grid;grid-template-columns:repeat(6,1fr);gap:10px;margin-bottom:14px}
+  .mode-card{min-height:86px;border:1px solid #e2ddd2;background:#f7f4ed;border-radius:18px;padding:12px}
+  .mode-card.active{background:#eef3ff;border-color:#bfd0f7}
+  .mini-pattern{display:flex;gap:4px;flex-wrap:wrap;margin-top:10px}
+  .mini-pattern span{width:12px;height:12px;border-radius:50%;border:1px solid #c1cdef;background:#d8e0fb}
+  .mini-pattern span.on{background:#5779e7}
+  .lattice-wrap{border:1px solid #e8e1d4;border-radius:20px;background:#fbf9f4;padding:12px}
+  .lattice{display:flex;flex-direction:column;gap:8px}
+  .lattice-row{display:flex;gap:10px;align-items:center;justify-content:center;flex-wrap:nowrap}
+  .lattice-row.upper{padding-left:44px}
+  .pc{width:50px;height:50px;border-radius:999px;display:flex;align-items:center;justify-content:center;font-size:14px}
+  .pc.active{border-color:var(--lane1);box-shadow:inset 0 0 0 3px #fff, 0 0 0 2px rgba(122,76,255,.24);color:#5c3dc6;font-weight:700}
+  .pc.root{border-color:#e9b868;box-shadow:inset 0 0 0 3px #fff, 0 0 0 2px rgba(217,130,43,.28);color:#a66615;font-weight:700}
+  @media (max-width:1200px){.layout{grid-template-columns:1fr}.mode-grid{grid-template-columns:repeat(3,1fr)}}
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="topbar">
+    <div><div class="eyebrow">Performance Instrument · v2</div><h1>DrawnCurve</h1></div>
+    <div class="top-actions"><button class="icon-btn">?</button><button class="icon-btn">◐</button><button class="icon-btn">!</button></div>
+  </div>
+
+  <div class="layout">
+    <div class="panel stage-wrap">
+      <div class="stage-head">
+        <div><div class="scope">Stage</div><div class="hero-line">Draw → Constrain → Perform → Layer</div></div>
+        <div class="lane-pills">
+          <button class="lane-pill active" data-lane="1"><span class="dot" style="background:var(--lane1)"></span><span>1</span></button>
+          <button class="lane-pill" data-lane="2"><span class="dot" style="background:var(--lane2)"></span><span>+ CC</span></button>
+          <button class="lane-pill" data-lane="3"><span class="dot" style="background:var(--lane3)"></span><span>+ Note</span></button>
+        </div>
+      </div>
+
+      <div class="stage" id="stage">
+        <div class="lane-glow" id="laneGlow"></div>
+        <div class="curve-badge" id="curveBadge">♪ · C Dorian · C3–D4</div>
+        <svg class="curve-svg" viewBox="0 0 1000 620" preserveAspectRatio="none">
+          <path id="curve1" d="M0,390 C80,190 180,220 260,300 C340,380 430,140 510,160 C590,180 650,360 740,320 C820,280 900,170 1000,230" fill="none" stroke="var(--lane1)" stroke-width="6" stroke-linecap="round"/>
+          <path id="curve2" d="M0,450 C120,420 220,460 300,380 C410,290 520,300 630,390 C720,470 830,440 1000,360" fill="none" stroke="var(--lane2)" stroke-width="4" stroke-linecap="round" opacity=".18" stroke-dasharray="10 10"/>
+          <path id="curve3" d="M0,240 C100,210 220,170 340,250 C480,345 600,200 740,220 C860,240 920,150 1000,170" fill="none" stroke="var(--lane3)" stroke-width="4" stroke-linecap="round" opacity=".14" stroke-dasharray="12 10"/>
+        </svg>
+        <div class="playhead" id="playhead"></div>
+        <div class="empty-hint">Draw a curve. Narrow the range. Change the lattice. Then add motion.</div>
+        <div class="major-ticks"><span>0%</span><span>25%</span><span>50%</span><span>75%</span><span>100%</span></div>
+        <div class="minor-ticks"></div>
+      </div>
+    </div>
+
+    <div class="right-rail">
+      <div class="panel panel-inner">
+        <div class="panel-head"><div><div class="scope">Global</div><div class="title-strong">Timeline</div></div></div>
+        <div class="global-strip"><button class="chip global-chip">SYNC</button><button class="chip global-chip">4 Bars</button><button class="chip global-chip">Host</button></div>
+      </div>
+
+      <div class="panel panel-inner">
+        <div class="panel-head">
+          <div><div class="scope">Focused Lane</div><div class="focus-head"><div class="focus-badge" id="focusBadge">1</div><div class="title-strong" id="focusTitle">Note</div></div></div>
+        </div>
+
+        <div class="control">
+          <div class="row"><div class="label">Direction</div><div class="value" id="dirValue">Forward</div></div>
+          <div class="dir-seg" id="dirSeg">
+            <button data-dir="reverse">◀</button>
+            <button data-dir="pingpong">◀▶</button>
+            <button class="active" data-dir="forward">▶</button>
+          </div>
+          <div class="quiet-note" id="pauseHint">Tap the active segment to pause this lane.</div>
+        </div>
+
+        <div class="control">
+          <div class="row"><div class="label">Range</div><div class="value" id="rangeSummary">C3–D4</div></div>
+          <div class="range-object">
+            <div class="range-track-wrap">
+              <div class="range-track"></div>
+              <div class="range-active" id="rangeActive"></div>
+              <input class="range-slider" id="rangeLow" type="range" min="36" max="84" value="48">
+              <input class="range-slider" id="rangeHigh" type="range" min="36" max="84" value="62">
+            </div>
+            <div class="range-notes"><span id="rangeLowTxt">C3</span><span id="rangeHighTxt">D4</span></div>
+          </div>
+        </div>
+
+        <div class="control"><div class="row"><div class="label">Speed</div><div class="value" id="speedValue">1.00×</div></div><input id="speed" type="range" min="25" max="400" value="100"></div>
+        <div class="control"><div class="row"><div class="label">Phase</div><div class="value" id="phaseValue">0%</div></div><input id="phase" type="range" min="0" max="100" value="0"></div>
+        <div class="control"><div class="row"><div class="label">Smooth</div><div class="value" id="smoothValue">0.08</div></div><input id="smooth" type="range" min="0" max="100" value="8"></div>
+      </div>
+
+      <div class="panel panel-inner">
+        <div class="panel-head"><div><div class="scope">Lanes</div><div class="title-strong">Summary</div></div><button class="pill-btn">Expand</button></div>
+        <div class="lane-summary"><div class="mark" style="background:var(--lane1)"></div><div class="main"><strong>1 · ♪</strong><div class="sub">C Dorian · Ch 1 · On</div></div><button class="pill-btn">On</button></div>
+        <div class="lane-summary"><div class="mark" style="background:var(--lane2)"></div><div class="main add-card"><strong>+ CC</strong><div class="sub">expression / motion / accent</div></div><button class="pill-btn">Add</button></div>
+        <div class="lane-summary"><div class="mark" style="background:var(--lane3)"></div><div class="main add-card"><strong>+ Note</strong><div class="sub">counterline / arp / harmony</div></div><button class="pill-btn">Add</button></div>
+      </div>
+    </div>
+  </div>
+
+  <div style="margin-top:16px">
+    <div class="panel musical-panel open" id="musicalPanel">
+      <div class="musical-head">
+        <div><div class="scope">Musical</div><div class="title-strong">Constraint is part of the instrument.</div></div>
+        <div class="summary-row"><div class="summary-chip hero">C Dorian</div><div class="summary-chip" id="rangeChip">C3–D4</div><button class="summary-chip" id="musicalToggle">Collapse</button></div>
+      </div>
+
+      <div class="musical-expanded">
+        <div class="family-row">
+          <button class="family-btn active">Diatonic</button><button class="family-btn">Pentatonic</button><button class="family-btn">Jazz Minor</button><button class="family-btn">Harm. Minor</button><button class="family-btn">Symmetric</button><button class="family-btn">Chordal</button>
+        </div>
+
+        <div class="mode-grid">
+          <div class="mode-card"><strong>Ionian</strong><div class="mini-pattern"><span class="on"></span><span></span><span class="on"></span><span></span><span class="on"></span><span class="on"></span><span></span></div></div>
+          <div class="mode-card active"><strong>Dorian</strong><div class="mini-pattern"><span class="on"></span><span></span><span class="on"></span><span class="on"></span><span></span><span class="on"></span><span></span></div></div>
+          <div class="mode-card"><strong>Phrygian</strong><div class="mini-pattern"><span class="on"></span><span class="on"></span><span></span><span class="on"></span><span></span><span class="on"></span><span></span></div></div>
+          <div class="mode-card"><strong>Lydian</strong><div class="mini-pattern"><span class="on"></span><span></span><span class="on"></span><span></span><span class="on"></span><span></span><span class="on"></span></div></div>
+          <div class="mode-card"><strong>Mixolydian</strong><div class="mini-pattern"><span class="on"></span><span></span><span class="on"></span><span></span><span class="on"></span><span class="on"></span><span class="on"></span></div></div>
+          <div class="mode-card"><strong>Aeolian</strong><div class="mini-pattern"><span class="on"></span><span class="on"></span><span></span><span class="on"></span><span></span><span class="on"></span><span class="on"></span></div></div>
+        </div>
+
+        <div class="lattice-wrap">
+          <div class="lattice">
+            <div class="lattice-row upper">
+              <button class="pc">D♭</button><button class="pc">E♭</button><button class="pc">G♭</button><button class="pc">A♭</button><button class="pc">B♭</button>
+            </div>
+            <div class="lattice-row lower">
+              <button class="pc root">C</button><button class="pc">D</button><button class="pc active">E</button><button class="pc">F</button><button class="pc active">G</button><button class="pc">A</button><button class="pc active">B</button>
+            </div>
+          </div>
+          <div class="foot-mini">Two-row pitch lattice retained as a signature musical object.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const noteNames=['C','C♯','D','E♭','E','F','F♯','G','A♭','A','B♭','B'];
+const laneConfig={
+  1:{color:'#7a4cff',glow:'linear-gradient(180deg, rgba(122,76,255,.08), rgba(122,76,255,.02))',title:'Note',badge:'1',prefix:'♪ · C Dorian · ',range:[48,62]},
+  2:{color:'#2d9d74',glow:'linear-gradient(180deg, rgba(45,157,116,.08), rgba(45,157,116,.02))',title:'CC',badge:'2',prefix:'CC11 · Motion · ',range:[36,84]},
+  3:{color:'#d9822b',glow:'linear-gradient(180deg, rgba(217,130,43,.08), rgba(217,130,43,.02))',title:'Note',badge:'3',prefix:'♪ · Counterline · ',range:[55,72]}
+};
+const playhead=document.getElementById('playhead'), dirSeg=document.getElementById('dirSeg'), dirValue=document.getElementById('dirValue'), pauseHint=document.getElementById('pauseHint');
+const speed=document.getElementById('speed'), phase=document.getElementById('phase'), smooth=document.getElementById('smooth');
+const speedValue=document.getElementById('speedValue'), phaseValue=document.getElementById('phaseValue'), smoothValue=document.getElementById('smoothValue');
+const rangeLow=document.getElementById('rangeLow'), rangeHigh=document.getElementById('rangeHigh');
+const rangeLowTxt=document.getElementById('rangeLowTxt'), rangeHighTxt=document.getElementById('rangeHighTxt'), rangeSummary=document.getElementById('rangeSummary'), rangeChip=document.getElementById('rangeChip'), rangeActive=document.getElementById('rangeActive');
+const curveBadge=document.getElementById('curveBadge'), focusBadge=document.getElementById('focusBadge'), focusTitle=document.getElementById('focusTitle'), laneGlow=document.getElementById('laneGlow');
+const lanePills=document.querySelectorAll('.lane-pill'), curve1=document.getElementById('curve1'), stage=document.getElementById('stage'), musicalPanel=document.getElementById('musicalPanel'), musicalToggle=document.getElementById('musicalToggle');
+let focusedLane=1, paused=false, direction='forward', t=0;
+
+function noteName(n){ return noteNames[n%12] + (Math.floor(n/12)-1); }
+function updateRangeUI(){
+  let low=parseInt(rangeLow.value,10), high=parseInt(rangeHigh.value,10);
+  if(low>high){ [low,high]=[high,low]; rangeLow.value=low; rangeHigh.value=high; }
+  const min=parseInt(rangeLow.min,10), max=parseInt(rangeLow.max,10);
+  const leftPct=((low-min)/(max-min))*100, rightPct=((high-min)/(max-min))*100;
+  rangeActive.style.left=leftPct+'%'; rangeActive.style.width=(rightPct-leftPct)+'%';
+  const lo=noteName(low), hi=noteName(high);
+  rangeLowTxt.textContent=lo; rangeHighTxt.textContent=hi; rangeSummary.textContent=lo+'–'+hi; rangeChip.textContent=lo+'–'+hi;
+  curveBadge.textContent=laneConfig[focusedLane].prefix + lo + '–' + hi;
+}
+speed.oninput=()=>speedValue.textContent=(speed.value/100).toFixed(2)+'×';
+phase.oninput=()=>phaseValue.textContent=phase.value+'%';
+smooth.oninput=()=>smoothValue.textContent=(smooth.value/100).toFixed(2);
+rangeLow.oninput=updateRangeUI; rangeHigh.oninput=updateRangeUI;
+
+dirSeg.onclick=e=>{
+  const btn=e.target.closest('button'); if(!btn) return; const next=btn.dataset.dir;
+  if(direction===next){
+    paused=!paused; btn.classList.toggle('paused', paused);
+    pauseHint.textContent=paused?'Paused · tap the active segment to resume.':'Tap the active segment to pause this lane.';
+    playhead.style.opacity=paused?'.35':'1'; return;
+  }
+  paused=false; playhead.style.opacity='1'; direction=next;
+  [...dirSeg.querySelectorAll('button')].forEach(b=>b.classList.remove('active','paused'));
+  btn.classList.add('active');
+  dirValue.textContent=next==='reverse'?'Reverse':next==='pingpong'?'Ping-pong':'Forward';
+  pauseHint.textContent='Tap the active segment to pause this lane.';
+};
+
+lanePills.forEach(btn=>btn.onclick=()=>{
+  lanePills.forEach(b=>b.classList.remove('active')); btn.classList.add('active');
+  focusedLane=parseInt(btn.dataset.lane,10); const cfg=laneConfig[focusedLane];
+  document.documentElement.style.setProperty('--lane1', cfg.color);
+  curve1.setAttribute('stroke', cfg.color); playhead.style.background=cfg.color; laneGlow.style.background=cfg.glow;
+  focusBadge.textContent=cfg.badge; focusTitle.textContent=cfg.title;
+  rangeLow.value=cfg.range[0]; rangeHigh.value=cfg.range[1]; updateRangeUI();
+});
+
+musicalToggle.onclick=()=>{ musicalPanel.classList.toggle('open'); musicalToggle.textContent=musicalPanel.classList.contains('open')?'Collapse':'Expand'; };
+
+function animate(){
+  if(!paused){
+    t += 0.004 * (speed.value/100);
+    let x=((t%1)*100);
+    if(direction==='reverse') x=100-x;
+    if(direction==='pingpong'){ const r=t%2; x=(r<=1?r:2-r)*100; }
+    const y=50 + Math.sin(t*6.2 + (phase.value/100)*3.14)*16 + Math.sin(t*17)*7;
+    playhead.style.left=x+'%'; playhead.style.top=y+'%';
+  }
+  requestAnimationFrame(animate);
+}
+animate();
+
+let drawing=false, points=[];
+stage.onpointerdown=e=>{ drawing=true; points=[]; stage.setPointerCapture(e.pointerId); };
+stage.onpointermove=e=>{
+  if(!drawing) return;
+  const rect=stage.getBoundingClientRect();
+  const x=((e.clientX-rect.left)/rect.width)*1000, y=((e.clientY-rect.top)/rect.height)*620;
+  points.push([Math.max(0,Math.min(1000,x)), Math.max(0,Math.min(620,y))]);
+  if(points.length>1) curve1.setAttribute('d','M'+points.map(p=>p[0].toFixed(1)+','+p[1].toFixed(1)).join(' L'));
+};
+stage.onpointerup=()=>drawing=false; stage.onpointercancel=()=>drawing=false;
+updateRangeUI();
+</script>
+</body>
+</html>
