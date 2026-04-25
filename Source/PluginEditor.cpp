@@ -2815,14 +2815,19 @@ DrawnCurveEditor::DrawnCurveEditor (DrawnCurveProcessor& p)
     addAndMakeVisible (wordmarkLabel);
 
     // Shape-well toggle handle
-    shapeWellHandle.setButtonText (_shapeWellOpen ? "◂" : "▸");   // ◂ / ▸
+    // U+25C2 ◂  U+25B8 ▸ — use fromUTF8() to avoid the juce_String.cpp
+    // const-char* assertion that fires for raw literals with bytes > 127.
+    static const juce::String kArrowClose = juce::String::fromUTF8 ("\xe2\x97\x82");  // ◂
+    static const juce::String kArrowOpen  = juce::String::fromUTF8 ("\xe2\x96\xb8");  // ▸
+    shapeWellHandle.setButtonText (_shapeWellOpen ? kArrowClose : kArrowOpen);
     shapeWellHandle.setLookAndFeel (&_symbolLF);
     addAndMakeVisible (shapeWellHandle);
-    shapeWellHandle.onClick = [this]
+    shapeWellHandle.onClick = [this, kArrowClose, kArrowOpen]
     {
         _shapeWellOpen = ! _shapeWellOpen;
-        shapeWellHandle.setButtonText (_shapeWellOpen ? "◂" : "▸");
-        configureBtn.setButtonText (_shapeWellOpen ? "◂ less" : "configure ▸");
+        shapeWellHandle.setButtonText (_shapeWellOpen ? kArrowClose : kArrowOpen);
+        configureBtn.setButtonText (_shapeWellOpen ? kArrowClose + " less"
+                                                   : "configure " + kArrowOpen);
         resized();
     };
 
@@ -2832,14 +2837,15 @@ DrawnCurveEditor::DrawnCurveEditor (DrawnCurveProcessor& p)
     addAndMakeVisible (bottomContextLabel);
 
     // Configure button (mirrors shape-well handle)
-    configureBtn.setButtonText ("configure ▸");
+    configureBtn.setButtonText ("configure " + kArrowOpen);
     configureBtn.setLookAndFeel (&_symbolLF);
     addAndMakeVisible (configureBtn);
-    configureBtn.onClick = [this]
+    configureBtn.onClick = [this, kArrowClose, kArrowOpen]
     {
         _shapeWellOpen = ! _shapeWellOpen;
-        shapeWellHandle.setButtonText (_shapeWellOpen ? "◂" : "▸");
-        configureBtn.setButtonText (_shapeWellOpen ? "◂ less" : "configure ▸");
+        shapeWellHandle.setButtonText (_shapeWellOpen ? kArrowClose : kArrowOpen);
+        configureBtn.setButtonText (_shapeWellOpen ? kArrowClose + " less"
+                                                   : "configure " + kArrowOpen);
         resized();
     };
 
