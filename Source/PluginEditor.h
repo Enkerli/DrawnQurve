@@ -81,6 +81,7 @@ struct Theme
     juce::Colour famInactive;    ///< Other family tabs
     juce::Colour famTextOff;     ///< Inactive family-tab text
     juce::Colour lockColour;     ///< X/Y lock + #-combo accent
+    juce::Colour amberInk;       ///< Dark amber — active borders, discovery chip, badges
 };
 
 //==============================================================================
@@ -339,9 +340,9 @@ private:
 /// adds a muted plum that sits naturally in the same paper aesthetic.
 static const juce::Colour kLaneColourLight[kMaxLanes] =
 {
-    juce::Colour (0xff3A4866),   // Lane 0 — ink-blue
-    juce::Colour (0xffC45F43),   // Lane 1 — terracotta
-    juce::Colour (0xff5B8A64),   // Lane 2 — moss
+    juce::Colour (0xff3A4060),   // Lane 0 — ink-blue  (spec laneInk  #3A4060)
+    juce::Colour (0xffC4624A),   // Lane 1 — terracotta (spec laneRose #C4624A)
+    juce::Colour (0xff4A7A55),   // Lane 2 — moss       (spec laneMoss #4A7A55)
     juce::Colour (0xff6B4F7C),   // Lane 3 — plum (JUCE-only 4th lane)
 };
 
@@ -979,8 +980,19 @@ private:
     /// Removes the focused lane. Shown only when more than one lane is active.
     juce::TextButton eyebrowDeleteLaneBtn;
 
+    // ── V2 Studio layout components ───────────────────────────────────────────
+    /// "DrawnQurve" wordmark in Domine italic — top bar, left edge.
+    juce::Label      wordmarkLabel;
+    /// 22-px tab handle at the left edge of the canvas.  Click toggles the shape well.
+    juce::TextButton shapeWellHandle;
+    /// Contextual summary in the bottom bar (lane, target, channel, range, smooth).
+    juce::Label      bottomContextLabel;
+    /// "configure ▸" / "◂ less" toggle in the bottom bar right corner.
+    juce::TextButton configureBtn;
+
     // ── Editor state ──────────────────────────────────────────────────────────
     bool _lightMode         { true  };
+    bool _shapeWellOpen     { false };   ///< V2: left shape well is expanded
     bool _useFlats          { false };   ///< Chromatic notation: false = ♯ names, true = ♭ names
     int  _focusedLane       { 0     };   ///< Which lane's shaping / notes are shown
     bool _scaleOverlayOpen  { false };   ///< true while the scale browser overlay is visible

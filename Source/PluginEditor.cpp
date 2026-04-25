@@ -49,39 +49,41 @@ static const Theme kDark
     /* famInactive */ juce::Colour { 0xff333355 },
     /* famTextOff  */ juce::Colours::lightgrey,
     /* lockColour  */ juce::Colour { 0xff8B5CF6 },   // violet accent
+    /* amberInk    */ juce::Colour { 0xff7A4A10 },   // dark amber (dark-mode tinted)
 };
 
 static const Theme kLight
 {
-    /* background  */ juce::Colour { 0xffF3EEE3 },   // --paper-bg
-    /* stageBg     */ juce::Colour { 0xffE8E1D1 },   // --paper-bg-deep
-    /* gridLine    */ juce::Colour { 0x18000000 },   // soft ink rule
-    /* curve       */ juce::Colour { 0xff3A4866 },   // matches kLaneColourLight[0]
-    /* capture     */ juce::Colour { 0xffCB9839 },   // --paper-amber (capture accent)
-    /* playhead    */ juce::Colour { 0xff2C2723 },   // --paper-ink
-    /* playheadDot */ juce::Colour { 0xff3A4866 },
-    /* hint        */ juce::Colour { 0xff837B6F },   // --paper-ink50 (no alpha — keep readable)
-    /* border      */ juce::Colour { 0xffD4CDB7 },   // --paper-rule
-    /* panelBg     */ juce::Colour { 0xffFAF6EB },   // --paper-card
-    /* panelBorder */ juce::Colour { 0xffD4CDB7 },   // --paper-rule
+    /* background  */ juce::Colour { 0xffF5F0E8 },   // spec bg
+    /* stageBg     */ juce::Colour { 0xffEDE6D8 },   // spec bgDeep
+    /* gridLine    */ juce::Colour { 0x22000000 },   // soft ink rule (slightly denser than before)
+    /* curve       */ juce::Colour { 0xff3A4060 },   // matches kLaneColourLight[0]
+    /* capture     */ juce::Colour { 0xffC4873A },   // spec amber
+    /* playhead    */ juce::Colour { 0xff2D2620 },   // spec ink
+    /* playheadDot */ juce::Colour { 0xff3A4060 },
+    /* hint        */ juce::Colour { 0xff857870 },   // spec ink50
+    /* border      */ juce::Colour { 0xffD4CAB8 },   // spec rule
+    /* panelBg     */ juce::Colour { 0xffFAF8F4 },   // spec card
+    /* panelBorder */ juce::Colour { 0xffD4CAB8 },   // spec rule
 
     // UI chrome tokens
-    /* textCol     */ juce::Colour { 0xff2d2b27 },
-    /* dimText     */ juce::Colour { 0xff7a766d },
-    /* btnBg       */ juce::Colour { 0xffF0EDE5 },
-    /* btnText     */ juce::Colour { 0xff2d2b27 },
-    /* tbBg        */ juce::Colour { 0xffFCFBF7 },
-    /* tbLine      */ juce::Colour { 0xffDDD6CA },
-    /* accent      */ juce::Colour { 0xff3A4866 },   // = kLaneColourLight[0]
-    /* chipOn      */ juce::Colour { 0xff1D4ED8 },
-    /* chipOff     */ juce::Colour { 0xffE5E7EB },
-    /* chipTextOn  */ juce::Colours::white,
-    /* chipTextOff */ juce::Colour { 0xff374151 },
-    /* famActive   */ juce::Colour { 0xff0B6E4F },
-    /* famBrowsed  */ juce::Colour { 0xffA7C4A0 },
-    /* famInactive */ juce::Colour { 0xffF0EFE7 },
-    /* famTextOff  */ juce::Colour { 0xff706D64 },
-    /* lockColour  */ juce::Colour { 0xff7C3AED },   // violet accent (light)
+    /* textCol     */ juce::Colour { 0xff2D2620 },   // spec ink
+    /* dimText     */ juce::Colour { 0xff857870 },   // spec ink50
+    /* btnBg       */ juce::Colour { 0xffF5F0E8 },   // spec bg (flat, chrome-free feel)
+    /* btnText     */ juce::Colour { 0xff2D2620 },   // spec ink
+    /* tbBg        */ juce::Colour { 0xffFAF8F4 },   // spec card
+    /* tbLine      */ juce::Colour { 0xffD4CAB8 },   // spec rule
+    /* accent      */ juce::Colour { 0xffC4873A },   // spec amber (sliders, active states)
+    /* chipOn      */ juce::Colour { 0xff2D2620 },   // spec ink — selected chip
+    /* chipOff     */ juce::Colour { 0xffF5F0E8 },   // spec bg
+    /* chipTextOn  */ juce::Colour { 0xffFAF8F4 },   // spec card (off-white on ink)
+    /* chipTextOff */ juce::Colour { 0xff574E44 },   // spec ink70
+    /* famActive   */ juce::Colour { 0xff2D2620 },   // spec ink — active family = solid ink
+    /* famBrowsed  */ juce::Colour { 0xffD4CAB8 },   // spec rule
+    /* famInactive */ juce::Colour { 0xffF5F0E8 },   // spec bg
+    /* famTextOff  */ juce::Colour { 0xff857870 },   // spec ink50
+    /* lockColour  */ juce::Colour { 0xffC4873A },   // spec amber (replaces violet)
+    /* amberInk    */ juce::Colour { 0xff8A5520 },   // spec amberInk — dark amber badges
 };
 
 const Theme& DrawnCurveLookAndFeel::theme (bool light) noexcept
@@ -142,6 +144,13 @@ namespace Layout
     static constexpr int matTeachW   = 40;
     static constexpr int matMuteW    = 28;
     static constexpr int matInnerGap = 4;
+
+    // V2 Studio layout zones
+    static constexpr int kTopBarH          = 52;    ///< Top bar: wordmark + playback controls
+    static constexpr int kBottomBarH       = 38;    ///< Bottom bar: context summary + configure btn
+    static constexpr int kLanePanelW       = 148;   ///< Right lane panel (always visible)
+    static constexpr int kShapeWellHandleW = 22;    ///< Collapsed shape well tab width
+    static constexpr int kShapeWellOpenW   = 256;   ///< Expanded shape well width
 }
 
 // ---------------------------------------------------------------------------
@@ -2798,6 +2807,42 @@ DrawnCurveEditor::DrawnCurveEditor (DrawnCurveProcessor& p)
     curveDisplay.onBadgeTap    = [this] { openScaleOverlay(); };
     curveDisplay.onCurveDrawn  = [this] { refreshTickLabels(); };
 
+    // ── V2 Studio chrome ─────────────────────────────────────────────────────
+    // Wordmark
+    wordmarkLabel.setText ("DrawnQurve", juce::dontSendNotification);
+    wordmarkLabel.setFont (DrawnCurveLookAndFeel::makeSerifFont (19.0f));
+    wordmarkLabel.setJustificationType (juce::Justification::centredLeft);
+    addAndMakeVisible (wordmarkLabel);
+
+    // Shape-well toggle handle
+    shapeWellHandle.setButtonText (_shapeWellOpen ? "◂" : "▸");   // ◂ / ▸
+    shapeWellHandle.setLookAndFeel (&_symbolLF);
+    addAndMakeVisible (shapeWellHandle);
+    shapeWellHandle.onClick = [this]
+    {
+        _shapeWellOpen = ! _shapeWellOpen;
+        shapeWellHandle.setButtonText (_shapeWellOpen ? "◂" : "▸");
+        configureBtn.setButtonText (_shapeWellOpen ? "◂ less" : "configure ▸");
+        resized();
+    };
+
+    // Bottom context label
+    bottomContextLabel.setFont (DrawnCurveLookAndFeel::makeFont (11.0f));
+    bottomContextLabel.setJustificationType (juce::Justification::centredLeft);
+    addAndMakeVisible (bottomContextLabel);
+
+    // Configure button (mirrors shape-well handle)
+    configureBtn.setButtonText ("configure ▸");
+    configureBtn.setLookAndFeel (&_symbolLF);
+    addAndMakeVisible (configureBtn);
+    configureBtn.onClick = [this]
+    {
+        _shapeWellOpen = ! _shapeWellOpen;
+        shapeWellHandle.setButtonText (_shapeWellOpen ? "◂" : "▸");
+        configureBtn.setButtonText (_shapeWellOpen ? "◂ less" : "configure ▸");
+        resized();
+    };
+
     // Register global param listeners
     proc.apvts.addParameterListener (ParamID::playbackDirection, this);
     proc.apvts.addParameterListener (ParamID::syncEnabled,       this);
@@ -4511,6 +4556,19 @@ void DrawnCurveEditor::applyTheme()
     // T2.7: re-theme the always-visible palette chip strip.
     updatePaletteChips();
 
+    // V2 Studio chrome
+    wordmarkLabel.setColour (juce::Label::textColourId,       textCol);
+    wordmarkLabel.setColour (juce::Label::backgroundColourId, juce::Colours::transparentBlack);
+
+    bottomContextLabel.setColour (juce::Label::textColourId,       dimText);
+    bottomContextLabel.setColour (juce::Label::backgroundColourId, juce::Colours::transparentBlack);
+
+    shapeWellHandle.setColour (juce::TextButton::buttonColourId,  btnBg);
+    shapeWellHandle.setColour (juce::TextButton::textColourOffId, dimText);
+
+    configureBtn.setColour (juce::TextButton::buttonColourId,  btnBg);
+    configureBtn.setColour (juce::TextButton::textColourOffId, dimText);
+
     repaint();
 }
 
@@ -4766,586 +4824,167 @@ void DrawnCurveEditor::resized()
    #endif
 
     area = area.reduced (pad);
-    // "singleLane" now means the rail is hidden, regardless of lane count.
-    // This drives the layout branch: full-width canvas + eyebrow controls vs. two-column.
-    const bool singleLane = !_railExpanded;
 
-    // ── Settings shelf (top-right) ────────────────────────────────────────────
-    // T2.6 (visual-audit-2026-04 §3 P5, §4): session-stable controls live in
-    // their own shelf above the eyebrow so they're scope-separated from the
-    // performance-hot + deliberate-tier controls.
-    //   shelf = [palette chips ──────── | midiOutBtn (standalone only) | helpButton | themeButton]
-    // T2.7 (visual-audit-2026-04 §4): the left half holds the always-visible
-    // palette chip strip — recently-used scale palettes (root + mask) the user
-    // can recall mid-musicking with a single tap.
+    // ── V2 Studio layout ────────────────────────────────────────────────────────
+    // Top bar (52 px) → bottom bar (38 px) → main row [shape well | canvas | lane panel]
+
+    // ── Top bar (kTopBarH = 52 px) ───────────────────────────────────────────────
+    // [wordmark] [palette chips …] [dirControl] [sync] [speed …] [♯♭] [☾] [?] [MIDI Out] [Clear] [!]
     {
-        auto shelf = area.removeFromTop (28);
-        themeButton.setBounds (shelf.removeFromRight (32).withSizeKeepingCentre (32, 28));
-        shelf.removeFromRight (4);
-        helpButton .setBounds (shelf.removeFromRight (28).withSizeKeepingCentre (28, 28));
+        auto bar = area.removeFromTop (kTopBarH);
+
+        // Right cluster: panic, clear, [MIDI out], help, theme
+        panicButton.setBounds (bar.removeFromRight (28).withSizeKeepingCentre (28, 28));
+        bar.removeFromRight (4);
+        clearButton.setBounds (bar.removeFromRight (44).withSizeKeepingCentre (44, 28));
+        bar.removeFromRight (8);
 
         if (juce::JUCEApplicationBase::isStandaloneApp())
         {
-            shelf.removeFromRight (8);
-            midiOutBtn.setBounds (shelf.removeFromRight (72).withSizeKeepingCentre (72, 28));
+            midiOutBtn.setBounds (bar.removeFromRight (72).withSizeKeepingCentre (72, 28));
+            bar.removeFromRight (4);
         }
+        helpButton .setBounds (bar.removeFromRight (28).withSizeKeepingCentre (28, 28));
+        bar.removeFromRight (4);
+        themeButton.setBounds (bar.removeFromRight (28).withSizeKeepingCentre (28, 28));
+        bar.removeFromRight (4);
+        scaleNotationBtn.setBounds (bar.removeFromRight (28).withSizeKeepingCentre (28, 28));
+        bar.removeFromRight (12);
 
-        // T2.7: palette chip strip (left side).  Each visible chip gets equal
-        // share of the available width up to a comfortable cap; the reservation
-        // shrinks with each filled palette so the strip never feels stretched
-        // when the user has only picked two or three scales.
-        constexpr int kPaletteChipW   = 80;
-        constexpr int kPaletteChipGap = 4;
-        const int visibleChips = juce::jmin (kMaxPaletteChips,
-                                             static_cast<int> (_palettes.size()));
-        if (visibleChips > 0)
+        // Left: wordmark
+        wordmarkLabel.setBounds (bar.removeFromLeft (150).withSizeKeepingCentre (150, 38));
+        bar.removeFromLeft (12);
+
+        // Palette chip strip (left of centre controls)
         {
-            shelf.removeFromLeft (4);   // breathing room from window edge
-            const int availW = shelf.getWidth();
-            const int wantedW = visibleChips * kPaletteChipW
-                              + (visibleChips - 1) * kPaletteChipGap;
-            const int stripW  = juce::jmin (availW, wantedW);
-            auto strip = shelf.removeFromLeft (stripW);
-            const int chipW = (stripW - (visibleChips - 1) * kPaletteChipGap) / visibleChips;
-            for (int i = 0; i < kMaxPaletteChips; ++i)
+            constexpr int kChipW = 72, kChipGap = 4;
+            const int visible = juce::jmin (kMaxPaletteChips,
+                                            static_cast<int> (_palettes.size()));
+            if (visible > 0)
             {
-                auto& chip = paletteChips[static_cast<size_t> (i)];
-                if (i < visibleChips)
+                const int stripW  = visible * kChipW + (visible - 1) * kChipGap;
+                const int allocW  = juce::jmin (bar.getWidth() / 2, stripW + 4);
+                auto strip = bar.removeFromLeft (allocW);
+                const int cw = (strip.getWidth() - (visible - 1) * kChipGap) / visible;
+                for (int i = 0; i < kMaxPaletteChips; ++i)
                 {
-                    chip.setBounds (strip.removeFromLeft (chipW).withSizeKeepingCentre (chipW, 24));
-                    if (i < visibleChips - 1) strip.removeFromLeft (kPaletteChipGap);
-                }
-            }
-        }
-    }
-    area.removeFromTop (4);
-
-    // ── Eyebrow / utility bar ─────────────────────────────────────────────────
-    // Single-lane mode: one expanded 60px bar with performance controls + utilities.
-    // Multi-lane mode:  36px bar with sync/speed on the left, utilities on the right.
-    //
-    // T1.2 (visual-audit-2026-04 §3 P6): single-lane eyebrow grew from 52 to
-    // 60 px so the range / speed / smooth sliders fit a 32 px tall section
-    // (was 24) — gives the enlarged 16 px thumb radius the room it needs
-    // for a comfortable performance-hot touch target on iPad.
-    {
-        const int eyebrowH = singleLane ? 60 : utilityRowH;
-        auto row = area.removeFromTop (eyebrowH);
-
-        // ── Right side: operational + lane-context buttons ───────────────────
-        // T2.6: session-stable controls (☾ theme, ? help, MIDI Out) moved up
-        // to the settings shelf above. Eyebrow right side is now a single
-        // operational cluster — no need for the T1.3 grouping gap.
-        panicButton     .setBounds (row.removeFromRight (28).withSizeKeepingCentre (28, 28));
-        row.removeFromRight (4);
-        clearButton     .setBounds (row.removeFromRight (44).withSizeKeepingCentre (44, 28));
-        row.removeFromRight (6);
-        scaleNotationBtn.setBounds (row.removeFromRight (28).withSizeKeepingCentre (28, 28));
-        row.removeFromRight (8);   // breathing room before the lane-context cluster begins
-
-        if (singleLane)
-        {
-            // ── Single-lane eyebrow: proportional slider layout ───────────────
-            // Layout order (left → right): [dir] [sync] [range+label] [speed] [smooth] [routing]
-            // All fixed elements are placed first; remaining space is split proportionally
-            // among the three sliders.
-            //
-            // Responsive breakpoints (based on remaining space after fixed elements):
-            //   sliderSpace >= 220px → all 3 sliders visible  (~800px+ window)
-            //   sliderSpace >= 100px → range + speed only      (~680px+ window)
-            //   sliderSpace <  100px → range only              (< ~680px window)
-
-            // Hide legacy right-rail buttons.
-            addLaneBtn.setBounds ({});
-            addLaneBtn.setVisible (false);
-            deleteLaneBtn.setBounds ({});
-            deleteLaneBtn.setVisible (false);
-
-            // ── Fixed: routing button (right edge) ───────────────────────────
-            // All-lanes tab: show laneTypeBtn[0] with ✤ text.
-            // Individual lane tab: show laneTypeBtn[focusedLane] with its type symbol.
-            const int focL = _focusedLane;
-            laneTypeBtn[static_cast<size_t>(focL)].setBounds (
-                row.removeFromRight (56).withSizeKeepingCentre (56, 28));
-            laneTypeBtn[static_cast<size_t>(focL)].setVisible (true);
-            // When in all-lanes mode, override label to ✤
-            if (_showingAllLanes)
-                laneTypeBtn[static_cast<size_t>(focL)].setButtonText (
-                    juce::String::fromUTF8 ("\xe2\x9c\xa4"));  // ✤
-            // else: text is set by updateLaneRow() to the lane's msg type symbol
-            // Hide routing buttons for other lanes
-            for (int L = 0; L < kMaxLanes; ++L)
-                if (L != focL)
-                    laneTypeBtn[static_cast<size_t>(L)].setBounds ({});
-            row.removeFromRight (6);
-
-            // ── Fixed: direction + sync (left edge) ───────────────────────────
-            // T2.3: dirControl shrunk 40 → 32 px tall to match the eyebrow's
-            // general control floor (was overweighted for a deliberate-tier
-            // control — set per piece, not touched mid-musicking).
-            dirControl.setBounds (row.removeFromLeft (100).withSizeKeepingCentre (100, 32));
-            row.removeFromLeft (8);
-
-            // ── Lane selector — always visible: ✤ + lane numbers ─────────────
-            {
-                const int nSegs    = proc.activeLaneCount + 1;   // +1 for ✤
-                const int selectorW = 28 * nSegs + (nSegs - 1);
-                laneFocusCtrl.setBounds (row.removeFromLeft (selectorW)
-                                             .withSizeKeepingCentre (selectorW, 26));
-                laneFocusCtrl.setVisible (true);
-                row.removeFromLeft (4);
-
-                if (proc.activeLaneCount < kMaxLanes)
-                {
-                    eyebrowAddLaneBtn.setBounds (row.removeFromLeft (24).withSizeKeepingCentre (24, 22));
-                    eyebrowAddLaneBtn.setVisible (true);
-                    row.removeFromLeft (2);
-                }
-                else
-                {
-                    eyebrowAddLaneBtn.setBounds ({});
-                    eyebrowAddLaneBtn.setVisible (false);
-                }
-
-                if (proc.activeLaneCount > 1)
-                {
-                    eyebrowDeleteLaneBtn.setBounds (row.removeFromLeft (24).withSizeKeepingCentre (24, 22));
-                    eyebrowDeleteLaneBtn.setVisible (true);
-                    row.removeFromLeft (6);
-                }
-                else
-                {
-                    eyebrowDeleteLaneBtn.setBounds ({});
-                    eyebrowDeleteLaneBtn.setVisible (false);
-                }
-            }
-
-            syncButton .setBounds (row.removeFromLeft (38).withSizeKeepingCentre (38, 28));
-            row.removeFromLeft (4);
-            laneSyncBtn.setBounds (row.removeFromLeft (32).withSizeKeepingCentre (32, 28));
-            row.removeFromLeft (6);
-
-            // ── Proportional slider allocation ────────────────────────────────
-            const int sliderSpace = juce::jmax (0, row.getWidth());
-            constexpr int kSliderGap = 6;
-
-            const bool showSpeed  = sliderSpace >= 100;
-            const bool showSmooth = sliderSpace >= 220;
-            const int  numGaps    = showSmooth ? 2 : (showSpeed ? 1 : 0);
-            const int  availW     = juce::jmax (0, sliderSpace - numGaps * kSliderGap);
-
-            const int rangeW = showSpeed
-                ? juce::roundToInt (availW * (showSmooth ? 0.38f : 0.52f))
-                : availW;
-            const int speedW = showSpeed
-                ? (showSmooth ? juce::roundToInt (availW * 0.37f) : availW - rangeW)
-                : 0;
-            const int smoothW = showSmooth ? (availW - rangeW - speedW) : 0;
-
-            // Range / Speed / Smooth — label on top, slider below.
-            // Labels get a 22 px strip (full width, full height) so the touch
-            // target is reliably tappable; slider gets a 32 px section
-            // (T1.2, visual-audit-2026-04 §3 P6) so the 16 px thumb radius
-            // from DrawnCurveLookAndFeel::getSliderThumbRadius isn't clipped.
-            constexpr int kLblH = 22;
-            constexpr int kSldH = 32;
-
-            if (rangeW > 0)
-            {
-                auto rangeSection = row.removeFromLeft (rangeW);
-                rangeLabel .setBounds (rangeSection.removeFromTop (kLblH));
-                rangeSlider.setBounds (rangeSection.withSizeKeepingCentre (rangeW, kSldH));
-            }
-            else
-            {
-                rangeLabel .setBounds ({});
-                rangeSlider.setBounds ({});
-            }
-
-            if (showSpeed && speedW > 0)
-            {
-                row.removeFromLeft (kSliderGap);
-                auto speedSection = row.removeFromLeft (speedW);
-                speedLabel .setBounds (speedSection.removeFromTop (kLblH));
-                speedSlider.setBounds (speedSection.withSizeKeepingCentre (speedW, kSldH));
-            }
-            else
-            {
-                speedLabel .setBounds ({});
-                speedSlider.setBounds ({});
-            }
-
-            if (showSmooth && smoothW > 0)
-            {
-                row.removeFromLeft (kSliderGap);
-                auto smoothSection = row.removeFromLeft (smoothW);
-                smoothingLabel .setBounds (smoothSection.removeFromTop (kLblH));
-                smoothingSlider.setBounds (smoothSection.withSizeKeepingCentre (smoothW, kSldH));
-            }
-            else
-            {
-                smoothingLabel .setBounds ({});
-                smoothingSlider.setBounds ({});
-            }
-        }
-        else
-        {
-            // ── Left side (multi-lane): [sync] [lane-sync] [speed label] [speed slider] ──
-            syncButton .setBounds (row.removeFromLeft (38).withSizeKeepingCentre (38, 28));
-            row.removeFromLeft (4);
-            laneSyncBtn.setBounds (row.removeFromLeft (38).withSizeKeepingCentre (38, 28));
-            row.removeFromLeft (8);
-            speedLabel .setBounds (row.removeFromLeft (36).withSizeKeepingCentre (36, 14));
-            speedSlider.setBounds (row.removeFromLeft (180));
-        }
-    }
-    area.removeFromTop (pad);
-
-    // ── Determine musical zone height ─────────────────────────────────────────
-    bool anyNoteMode = false;
-    for (int L = 0; L < kMaxLanes; ++L)
-        anyNoteMode |= (static_cast<int> (
-            proc.apvts.getRawParameterValue (laneParam (L, "msgType"))->load()) == 3);
-
-    // Always reserve at least musicalCollapsedH so the stage height stays stable
-    // regardless of whether a note lane is active.
-    const int musicalH = anyNoteMode
-        ? (_musicalExpanded ? musicalExpandedH : musicalCollapsedH)
-        : musicalCollapsedH;
-
-    // ── Musical zone (bottom, full width) ─────────────────────────────────────
-    if (musicalH > 0)
-    {
-        area.removeFromBottom (pad);
-        _musicalPanel = area.removeFromBottom (musicalH);
-        area.removeFromBottom (pad);
-    }
-    else
-    {
-        _musicalPanel = {};
-    }
-
-    // ── Musical toggle button + zone detail ──────────────────────────────────
-    if (! _musicalPanel.isEmpty())
-    {
-        if (anyNoteMode)
-        {
-            // Collapsed strip: small triangle button at far right of the panel strip
-            const auto toggleRect = _musicalPanel
-                                        .withHeight (musicalCollapsedH)
-                                        .withTrimmedLeft (_musicalPanel.getWidth() - 32)
-                                        .reduced (4, 8);
-            musicalToggleBtn.setBounds (toggleRect);
-            musicalToggleBtn.setVisible (true);
-        }
-        else
-        {
-            // No note lanes — hide toggle, leave strip as quiet empty panel
-            musicalToggleBtn.setBounds ({});
-        }
-
-        if (anyNoteMode && _musicalExpanded && ! _scaleOverlayOpen)
-        {
-            // Inset by panelPad horizontally so children clear the rounded panel border.
-            // Top pad is small — the unified header sits flush against it.
-            auto ne = _musicalPanel.reduced (panelPad, 0);
-            ne.removeFromTop (6);
-
-            // ── Unified header (28 px) ────────────────────────────────────────
-            // Layout (right → left):
-            //   [collapse ▴] [selector Rows|Wheel|Both]
-            // remaining width on the LEFT goes to family tabs + recent.
-            //
-            // Mask buttons (↻ ● ○ ◑ ◆) live in a vertical column on the LEFT
-            // of the picker row (see below) — moved out of the header to give
-            // family tabs more breathing room.
-            {
-                auto hdr = ne.removeFromTop (kFamilyBarH);
-
-                // Collapse arrow — far right.
-                musicalToggleBtn.setBounds (hdr.removeFromRight (28));
-                hdr.removeFromRight (8);
-
-                // Rows / Wheel / Both selector — sized between 90 and 120 px wide
-                // based on available space.  Uses the full row height for comfortable
-                // touch on iPad (Apple HIG: 44 pt minimum is impractical here, but
-                // 28 pt is the floor for the surrounding action chrome).
-                {
-                    const int selW = juce::jlimit (90, 120, hdr.getWidth() - 100);
-                    scaleViewCtrl.setBounds (hdr.removeFromRight (selW));
-                    hdr.removeFromRight (8);
-                }
-
-                // Family tabs (+ recent) fill the remaining left space.
-                const int N    = dcScale::kNumFamilies + 1;
-                const int btnW = juce::jmax (16, (hdr.getWidth() - (N - 1)) / N);
-                for (int f = 0; f < dcScale::kNumFamilies; ++f)
-                {
-                    familyBtns[static_cast<size_t>(f)].setBounds (hdr.removeFromLeft (btnW));
-                    hdr.removeFromLeft (1);
-                }
-                recentFamilyBtn.setBounds (hdr.removeFromLeft (btnW));
-            }
-            ne.removeFromTop (4);
-
-            // ── Subfamily chip row (28 px, text-only) ────────────────────────
-            {
-                auto sRow = ne.removeFromTop (kSubfamilyRowH);
-                const int N = _numSubfamilyChips;
-                if (N > 0)
-                {
-                    const int chipW = (sRow.getWidth() - (N - 1) * 2) / N;
-                    for (int i = 0; i < kMaxModes; ++i)
+                    auto& chip = paletteChips[static_cast<size_t> (i)];
+                    if (i < visible)
                     {
-                        if (i < N)
-                        {
-                            subfamilyBtns[static_cast<size_t>(i)].setBounds (sRow.removeFromLeft (chipW));
-                            if (i < N - 1) sRow.removeFromLeft (2);
-                        }
-                        else { subfamilyBtns[static_cast<size_t>(i)].setBounds ({}); }
+                        chip.setBounds (strip.removeFromLeft (cw).withSizeKeepingCentre (cw, 24));
+                        if (i < visible - 1) strip.removeFromLeft (kChipGap);
                     }
+                    else { chip.setBounds ({}); }
                 }
+                bar.removeFromLeft (8);
             }
-            ne.removeFromTop (4);
-
-            // ── Scale picker row (184 px) — layout switches on _scaleViewMode.
-            //   Rows  → lattice fills width; wheel hidden.
-            //   Wheel → centred square sized to the row height; lattice hidden.
-            //   Both  → rows on the left, square wheel on the right.
-            //
-            // Left sidebar (left → right):
-            //   28 px button column (↻ ● ○ ◑ ◆)
-            //   4 px gap
-            //   80 px label column (scale name top, bitmask bottom, both centred)
-            //   8 px gap
-            //   picker fills remainder
-            //
-            // Labels are in the sidebar so they never overlap the wheel.
-            {
-                const auto pickerBand = ne.removeFromTop (kScaleLatticeH);
-                auto       pickerRow  = pickerBand;   // working copy — mutated below
-
-                // ── Button column ─────────────────────────────────────────────
-                {
-                    const int colW   = 28;
-                    const int btnH   = 32;
-                    const int btnGap = 4;
-                    const int totalH = 5 * btnH + 4 * btnGap;   // 176
-                    auto col = pickerRow.removeFromLeft (colW);
-                    pickerRow.removeFromLeft (4);                // gap → label column
-
-                    auto stack = col.withSizeKeepingCentre (colW, totalH);
-                    scaleRotateBtn.setBounds (stack.removeFromTop (btnH)); stack.removeFromTop (btnGap);
-                    scaleAllBtn   .setBounds (stack.removeFromTop (btnH)); stack.removeFromTop (btnGap);
-                    scaleNoneBtn  .setBounds (stack.removeFromTop (btnH)); stack.removeFromTop (btnGap);
-                    scaleInvBtn   .setBounds (stack.removeFromTop (btnH)); stack.removeFromTop (btnGap);
-                    scaleRootBtn  .setBounds (stack.removeFromTop (btnH));
-                }
-
-                // ── Label column: scale name (top) + bitmask (bottom) ─────────
-                {
-                    const int lblColW  = 80;
-                    const int lblH     = 16;
-                    const int lblGap   = 6;
-                    const int lblTotal = 2 * lblH + lblGap;
-                    auto lblCol = pickerRow.removeFromLeft (lblColW);
-                    pickerRow.removeFromLeft (8);                // gap → picker
-
-                    const int lblTop = lblCol.getY() + (lblCol.getHeight() - lblTotal) / 2;
-                    scaleLabel.setBounds (lblCol.getX(), lblTop,              lblColW, lblH);
-                    maskLabel .setBounds (lblCol.getX(), lblTop + lblH + lblGap, lblColW, lblH);
-                }
-
-                // ── Picker (fills remaining width) ────────────────────────────
-                if (_scaleViewMode == ViewRows)
-                {
-                    scaleLattice  .setBounds (pickerRow);
-                    chromaticWheel.setBounds ({});
-                }
-                else if (_scaleViewMode == ViewWheel)
-                {
-                    const int side = juce::jmin (pickerRow.getHeight(), pickerRow.getWidth());
-                    auto wheelBox = juce::Rectangle<int> (0, 0, side, side)
-                                       .withCentre (pickerRow.getCentre());
-                    chromaticWheel.setBounds (wheelBox);
-                    scaleLattice  .setBounds ({});
-                }
-                else  // ViewBoth
-                {
-                    const int gutter    = 8;
-                    const int wheelSide = juce::jmin (pickerRow.getHeight(),
-                                                      pickerRow.getWidth() / 4);
-                    auto wheelBox = pickerRow.removeFromRight (wheelSide);
-                    pickerRow.removeFromRight (gutter);
-                    scaleLattice  .setBounds (pickerRow);
-                    chromaticWheel.setBounds (wheelBox);
-                }
-            }
-            _secNotes = _musicalPanel;
         }
-        else
+
+        // Centre: dirControl, sync, speed, lane-sync, lane selector + add/delete
+        dirControl .setBounds (bar.removeFromLeft (100).withSizeKeepingCentre (100, 32));
+        bar.removeFromLeft (8);
+        syncButton .setBounds (bar.removeFromLeft (44).withSizeKeepingCentre (44, 28));
+        bar.removeFromLeft (6);
         {
-            // Zone is collapsed (or no note lanes): explicitly clear component bounds
-            // so previously-expanded components don't paint over the stage canvas.
-            scaleLattice  .setBounds ({});
-            chromaticWheel.setBounds ({});
-            scaleViewCtrl .setBounds ({});
-            for (auto& b : familyBtns)    b.setBounds ({});
-            recentFamilyBtn.setBounds ({});
-            for (auto& b : subfamilyBtns) b.setBounds ({});
-            scaleRotateBtn.setBounds ({});
-            scaleAllBtn   .setBounds ({});
-            scaleNoneBtn  .setBounds ({});
-            scaleInvBtn   .setBounds ({});
-            scaleRootBtn  .setBounds ({});
-            scaleLabel    .setBounds ({});
-            maskLabel     .setBounds ({});
+            const int sLblH = 16;
+            auto speedSection = bar.removeFromLeft (juce::jmin (160, bar.getWidth()));
+            speedLabel .setBounds (speedSection.removeFromTop (sLblH));
+            speedSlider.setBounds (speedSection.withSizeKeepingCentre (speedSection.getWidth(), 28));
         }
+        bar.removeFromLeft (6);
+        laneSyncBtn.setBounds (bar.removeFromLeft (32).withSizeKeepingCentre (32, 28));
+        bar.removeFromLeft (8);
+
+        // Lane focus selector (still drives _focusedLane; right panel is primary affordance)
+        {
+            const int nSegs    = proc.activeLaneCount + 1;
+            const int selectorW = 28 * nSegs + (nSegs - 1);
+            laneFocusCtrl.setBounds (bar.removeFromLeft (selectorW)
+                                         .withSizeKeepingCentre (selectorW, 24));
+            laneFocusCtrl.setVisible (true);
+            bar.removeFromLeft (2);
+
+            if (proc.activeLaneCount < kMaxLanes)
+            {
+                eyebrowAddLaneBtn.setBounds (bar.removeFromLeft (22).withSizeKeepingCentre (22, 20));
+                eyebrowAddLaneBtn.setVisible (true);
+                bar.removeFromLeft (2);
+            }
+            else
+            {
+                eyebrowAddLaneBtn.setBounds ({});
+                eyebrowAddLaneBtn.setVisible (false);
+            }
+
+            if (proc.activeLaneCount > 1)
+            {
+                eyebrowDeleteLaneBtn.setBounds (bar.removeFromLeft (22).withSizeKeepingCentre (22, 20));
+                eyebrowDeleteLaneBtn.setVisible (true);
+            }
+            else
+            {
+                eyebrowDeleteLaneBtn.setBounds ({});
+                eyebrowDeleteLaneBtn.setVisible (false);
+            }
+        }
+
+        // Hide components that no longer live in the top bar
+        addLaneBtn   .setBounds ({});  addLaneBtn   .setVisible (false);
+        deleteLaneBtn.setBounds ({});  deleteLaneBtn.setVisible (false);
     }
 
-    // ── Column layout: single-lane = full width; multi-lane = two columns ────
-    juce::Rectangle<int> stageCol;
-
-    if (singleLane)
+    // ── Bottom bar (kBottomBarH = 38 px) ─────────────────────────────────────────
+    // [context summary ──────────────────── | configure ▸]
     {
-        // ── Single-lane: no right rail — stage takes the full width ──────────
-        stageCol = area;
+        auto bar = area.removeFromBottom (kBottomBarH);
+        configureBtn.setBounds (bar.removeFromRight (110).withSizeKeepingCentre (110, 28));
+        bar.removeFromRight (14);
+        bottomContextLabel.setBounds (bar.withTrimmedLeft (14));
+    }
+
+    // ── Right lane panel (kLanePanelW = 148 px, always visible) ─────────────────
+    // Each active lane gets an ≥80 pt touch-target row (spec §LanePanelComponent).
+    {
+        auto lp = area.removeFromRight (kLanePanelW);
+        _focusedLanePanel = lp;
+        _lanesPanel       = lp;
         _globalPanel      = {};
-        _lanesPanel       = {};
-        _focusedLanePanel = {};
-        _matrixRowOrigin  = {};
+        _matrixRowOrigin  = lp.getTopLeft();
+        _matrixRowStride  = matRowH + 3;
 
-        // Hide right-rail-only components.
-        // Note: laneFocusCtrl bounds are managed in the eyebrow section above —
-        // it may be visible there as a mini lane selector; don't zero it here.
-        phaseOffsetLabel .setBounds ({});
-        phaseOffsetSlider.setBounds ({});
-        oneShotBtn.setBounds ({});
-        oneShotBtn.setVisible (false);
-        // Hide deleteLaneBtn — only visible inside the matrix rail
-        deleteLaneBtn.setBounds ({});
-        deleteLaneBtn.setVisible (false);
-#if defined(DC_HAVE_PER_LANE_PLAYBACK_PARAMS)
-        laneSpeedLabel .setBounds ({});
-        laneSpeedSlider.setBounds ({});
-#endif
-
-        // Hide inactive lane matrix rows (lanes 1-3 not visible in single-lane mode).
-        // Exception: laneTypeBtn[_focusedLane] was already positioned in the eyebrow above;
-        // don't zero it out here or the routing button disappears for lanes 2+.
-        for (int L = 0; L < kMaxLanes; ++L)
-        {
-            const bool isEyebrowBtn = (L == _focusedLane);
-            laneTypeBtn    [static_cast<size_t>(L)].setVisible (isEyebrowBtn);
-            laneDetailLabel[static_cast<size_t>(L)].setVisible (false);
-            laneChannelLabel[static_cast<size_t>(L)].setVisible (false);
-            laneTeachBtn   [static_cast<size_t>(L)].setVisible (false);
-            laneMuteBtn    [static_cast<size_t>(L)].setVisible (false);
-            laneSelectBtn  [static_cast<size_t>(L)].setVisible (false);
-
-            if (! isEyebrowBtn)
-            {
-                laneTypeBtn    [static_cast<size_t>(L)].setBounds ({});
-                laneDetailLabel[static_cast<size_t>(L)].setBounds ({});
-                laneChannelLabel[static_cast<size_t>(L)].setBounds ({});
-                laneTeachBtn   [static_cast<size_t>(L)].setBounds ({});
-                laneMuteBtn    [static_cast<size_t>(L)].setBounds ({});
-                laneSelectBtn  [static_cast<size_t>(L)].setBounds ({});
-            }
-        }
-    }
-    else
-    {
-        // ── Multi-lane: two-column split ─────────────────────────────────────
-        auto rightCol = area.removeFromRight (rightColW);
-        area.removeFromRight (colGap);
-        stageCol = area;
-
-        // Re-show controls that may have been hidden in single-lane mode
-        oneShotBtn.setVisible (true);
-
-        // ══════════════════════════════════════════════════════════════════════
-        // RIGHT RAIL
-        // ══════════════════════════════════════════════════════════════════════
-        _globalPanel = {};
-        _lanesPanel  = {};
-
-        _focusedLanePanel = rightCol;
-        {
-            auto fp = _focusedLanePanel.reduced (panelPad);
-            fp.removeFromTop (8);
-
-            // Lane focus selector (1 / 2 / 3)
-            laneFocusCtrl.setBounds (fp.removeFromTop (28));
-            fp.removeFromTop (6);
-
-            // Direction segmented control (full width)
-            // T2.3: 40 → 32 px to match deliberate-tier sizing.
-            dirControl.setBounds (fp.removeFromTop (32));
-            fp.removeFromTop (6);
-
-#if defined(DC_HAVE_PER_LANE_PLAYBACK_PARAMS)
-            laneSpeedLabel .setBounds (fp.removeFromTop (paramLabelH));
-            laneSpeedSlider.setBounds (fp.removeFromTop (paramSliderH));
-            fp.removeFromTop (4);
-#endif
-
-            // Range
-            rangeLabel .setBounds (fp.removeFromTop (paramLabelH));
-            rangeSlider.setBounds (fp.removeFromTop (paramSliderH + 4));
-            fp.removeFromTop (4);
-
-            // Smooth
-            smoothingLabel .setBounds (fp.removeFromTop (paramLabelH));
-            smoothingSlider.setBounds (fp.removeFromTop (paramSliderH));
-            fp.removeFromTop (4);
-
-            // Phase offset
-            phaseOffsetLabel .setBounds (fp.removeFromTop (paramLabelH));
-            phaseOffsetSlider.setBounds (fp.removeFromTop (paramSliderH));
-            fp.removeFromTop (8);
-
-            // ── Routing matrix ────────────────────────────────────────────────
-            fp.removeFromTop (8);
-
-        // Matrix rows — record origin for paint() dot positions.
-        // Only lay out active lanes; hide / zero-bound inactive ones.
-        _matrixRowOrigin = fp.getTopLeft();
-        _matrixRowStride = matRowH + 3;
+        const int rowH = juce::jmax (80, lp.getHeight() / juce::jmax (1, proc.activeLaneCount));
+        int laneY = lp.getY();
 
         for (int L = 0; L < kMaxLanes; ++L)
         {
             const bool active = (L < proc.activeLaneCount);
 
-            laneTypeBtn    [static_cast<size_t>(L)].setVisible (active);
-            laneDetailLabel[static_cast<size_t>(L)].setVisible (active);
-            laneChannelLabel[static_cast<size_t>(L)].setVisible (active);
-            laneTeachBtn   [static_cast<size_t>(L)].setVisible (active);
-            laneMuteBtn    [static_cast<size_t>(L)].setVisible (active);
             laneSelectBtn  [static_cast<size_t>(L)].setVisible (active);
+            laneDetailLabel[static_cast<size_t>(L)].setVisible (active);
+            laneMuteBtn    [static_cast<size_t>(L)].setVisible (active);
+            // These live in the shape well when open, so hide from the lane panel
+            laneTypeBtn    [static_cast<size_t>(L)].setVisible (false);
+            laneChannelLabel[static_cast<size_t>(L)].setVisible (false);
+            laneTeachBtn   [static_cast<size_t>(L)].setVisible (false);
 
             if (active)
             {
-                auto row = fp.removeFromTop (matRowH);
-                fp.removeFromTop (3);
+                const auto row = juce::Rectangle<int> (lp.getX(), laneY, kLanePanelW, rowH);
+                laneSelectBtn[static_cast<size_t>(L)].setBounds (row);
 
-                // Dot column: space for painted dot + transparent focus button
-                auto dotCol = row.removeFromLeft (matDotW + matInnerGap);
-                laneSelectBtn[static_cast<size_t> (L)].setBounds (
-                    dotCol.removeFromLeft (matDotW).withSizeKeepingCentre (matDotW, matDotW));
+                // Target type label — bottom strip of the row
+                laneDetailLabel[static_cast<size_t>(L)].setBounds (
+                    lp.getX() + 8, laneY + rowH - 22, kLanePanelW - 48, 18);
 
-                laneTypeBtn    [static_cast<size_t>(L)].setBounds (row.removeFromLeft (matTargetW));
-                row.removeFromLeft (matInnerGap);
-                laneDetailLabel[static_cast<size_t>(L)].setBounds (row.removeFromLeft (matDetailW));
-                row.removeFromLeft (matInnerGap);
-                laneChannelLabel[static_cast<size_t>(L)].setBounds (row.removeFromLeft (matChanW));
-                row.removeFromLeft (matInnerGap);
-                laneTeachBtn   [static_cast<size_t>(L)].setBounds (row.removeFromLeft (matTeachW));
-                row.removeFromLeft (matInnerGap);
-                laneMuteBtn    [static_cast<size_t>(L)].setBounds (row.removeFromLeft (matMuteW));
+                // Mute chip — bottom-right of the row
+                laneMuteBtn[static_cast<size_t>(L)].setBounds (
+                    lp.getRight() - 38, laneY + rowH - 22, 34, 18);
+
+                laneY += rowH;
             }
             else
             {
+                laneSelectBtn  [static_cast<size_t>(L)].setBounds ({});
                 laneTypeBtn    [static_cast<size_t>(L)].setBounds ({});
                 laneDetailLabel[static_cast<size_t>(L)].setBounds ({});
                 laneChannelLabel[static_cast<size_t>(L)].setBounds ({});
@@ -5354,53 +4993,248 @@ void DrawnCurveEditor::resized()
                 laneSelectBtn  [static_cast<size_t>(L)].setBounds ({});
             }
         }
+    }
 
-            // ── + / − buttons below the last active row ──────────────────────
-            // "+" adds a lane (hidden at max capacity); "−" removes the last lane
-            // (hidden when only one lane remains).  Both sit on the same row.
-            if (fp.getHeight() >= 24)
+    // ── Left shape well (kShapeWellHandleW=22 px collapsed / kShapeWellOpenW=256 px open) ──
+    {
+        const int wellW = _shapeWellOpen ? kShapeWellOpenW : kShapeWellHandleW;
+        auto well = area.removeFromLeft (wellW);
+
+        // Handle — always at the right edge of the well
+        shapeWellHandle.setBounds (well.removeFromRight (kShapeWellHandleW));
+
+        if (_shapeWellOpen)
+        {
+            auto wp = well.reduced (12, 8);
+
+            // Output-type button for the focused lane (opens routing overlay)
+            const int focL = _focusedLane;
+            laneTypeBtn[static_cast<size_t>(focL)].setBounds (wp.removeFromTop (32));
+            laneTypeBtn[static_cast<size_t>(focL)].setVisible (true);
+            wp.removeFromTop (8);
+
+            // Range remap
+            rangeLabel .setBounds (wp.removeFromTop (paramLabelH));
+            rangeSlider.setBounds (wp.removeFromTop (paramSliderH + 4));
+            wp.removeFromTop (8);
+
+            // Smoothing
+            smoothingLabel .setBounds (wp.removeFromTop (paramLabelH));
+            smoothingSlider.setBounds (wp.removeFromTop (paramSliderH));
+            wp.removeFromTop (8);
+
+            // Phase offset
+            phaseOffsetLabel .setBounds (wp.removeFromTop (paramLabelH));
+            phaseOffsetSlider.setBounds (wp.removeFromTop (paramSliderH));
+            wp.removeFromTop (8);
+
+#if defined(DC_HAVE_PER_LANE_PLAYBACK_PARAMS)
+            laneSpeedLabel .setBounds (wp.removeFromTop (paramLabelH));
+            laneSpeedSlider.setBounds (wp.removeFromTop (paramSliderH));
+            wp.removeFromTop (8);
+#endif
+
+            oneShotBtn.setBounds (wp.removeFromTop (28));
+            oneShotBtn.setVisible (true);
+            wp.removeFromTop (6);
+
+            laneTeachBtn[static_cast<size_t>(focL)].setBounds (wp.removeFromTop (28));
+            laneTeachBtn[static_cast<size_t>(focL)].setVisible (true);
+        }
+        else
+        {
+            // Collapsed — clear all shaping controls
+            rangeLabel .setBounds ({});        rangeSlider.setBounds ({});
+            smoothingLabel .setBounds ({});    smoothingSlider.setBounds ({});
+            phaseOffsetLabel .setBounds ({});  phaseOffsetSlider.setBounds ({});
+#if defined(DC_HAVE_PER_LANE_PLAYBACK_PARAMS)
+            laneSpeedLabel .setBounds ({});    laneSpeedSlider.setBounds ({});
+#endif
+            oneShotBtn.setBounds ({});  oneShotBtn.setVisible (false);
+            for (int L = 0; L < kMaxLanes; ++L)
             {
-                fp.removeFromTop (4);
-                auto btnRow = fp.removeFromTop (24);
+                laneTeachBtn[static_cast<size_t>(L)].setBounds ({});
+                laneTeachBtn[static_cast<size_t>(L)].setVisible (false);
+                if (L != _focusedLane)
+                {
+                    laneTypeBtn[static_cast<size_t>(L)].setBounds ({});
+                    laneTypeBtn[static_cast<size_t>(L)].setVisible (false);
+                }
+            }
+            // focused lane's type btn also hidden when well is closed
+            laneTypeBtn[static_cast<size_t>(_focusedLane)].setBounds ({});
+            laneTypeBtn[static_cast<size_t>(_focusedLane)].setVisible (false);
+        }
+    }
 
-                if (proc.activeLaneCount < kMaxLanes)
-                {
-                    addLaneBtn.setBounds (btnRow.removeFromLeft (24));
-                    addLaneBtn.setVisible (true);
-                    btnRow.removeFromLeft (4);
-                }
-                else
-                {
-                    addLaneBtn.setBounds ({});
-                    addLaneBtn.setVisible (false);
-                }
+    // area is now the canvas strip: [well handle | canvas | (nothing — lane panel removed)]
+    // ── Musical zone height ─────────────────────────────────────────────────────
+    {
+        bool anyNoteMode = false;
+        for (int L = 0; L < kMaxLanes; ++L)
+            anyNoteMode |= (static_cast<int> (
+                proc.apvts.getRawParameterValue (laneParam (L, "msgType"))->load()) == 3);
 
-                if (proc.activeLaneCount > 1)
-                {
-                    deleteLaneBtn.setBounds (btnRow.removeFromLeft (24));
-                    deleteLaneBtn.setVisible (true);
-                }
-                else
-                {
-                    deleteLaneBtn.setBounds ({});
-                    deleteLaneBtn.setVisible (false);
-                }
+        const int musicalH = anyNoteMode
+            ? (_musicalExpanded ? musicalExpandedH : musicalCollapsedH)
+            : musicalCollapsedH;
+
+        if (musicalH > 0)
+        {
+            _musicalPanel = area.removeFromBottom (musicalH);
+        }
+        else
+        {
+            _musicalPanel = {};
+        }
+
+        // ── Musical toggle + zone detail ──────────────────────────────────────
+        if (! _musicalPanel.isEmpty())
+        {
+            if (anyNoteMode)
+            {
+                const auto toggleRect = _musicalPanel
+                                            .withHeight (musicalCollapsedH)
+                                            .withTrimmedLeft (_musicalPanel.getWidth() - 32)
+                                            .reduced (4, 8);
+                musicalToggleBtn.setBounds (toggleRect);
+                musicalToggleBtn.setVisible (true);
             }
             else
             {
-                addLaneBtn   .setBounds ({});   addLaneBtn   .setVisible (false);
-                deleteLaneBtn.setBounds ({});   deleteLaneBtn.setVisible (false);
+                musicalToggleBtn.setBounds ({});
+            }
+
+            if (anyNoteMode && _musicalExpanded && ! _scaleOverlayOpen)
+            {
+                auto ne = _musicalPanel.reduced (panelPad, 0);
+                ne.removeFromTop (6);
+
+                // ── Unified header ─────────────────────────────────────────────
+                {
+                    auto hdr = ne.removeFromTop (kFamilyBarH);
+                    musicalToggleBtn.setBounds (hdr.removeFromRight (28));
+                    hdr.removeFromRight (8);
+                    {
+                        const int selW = juce::jlimit (90, 120, hdr.getWidth() - 100);
+                        scaleViewCtrl.setBounds (hdr.removeFromRight (selW));
+                        hdr.removeFromRight (8);
+                    }
+                    const int N    = dcScale::kNumFamilies + 1;
+                    const int btnW = juce::jmax (16, (hdr.getWidth() - (N - 1)) / N);
+                    for (int f = 0; f < dcScale::kNumFamilies; ++f)
+                    {
+                        familyBtns[static_cast<size_t>(f)].setBounds (hdr.removeFromLeft (btnW));
+                        hdr.removeFromLeft (1);
+                    }
+                    recentFamilyBtn.setBounds (hdr.removeFromLeft (btnW));
+                }
+                ne.removeFromTop (4);
+
+                // ── Subfamily chip row ─────────────────────────────────────────
+                {
+                    auto sRow = ne.removeFromTop (kSubfamilyRowH);
+                    const int N = _numSubfamilyChips;
+                    if (N > 0)
+                    {
+                        const int chipW = (sRow.getWidth() - (N - 1) * 2) / N;
+                        for (int i = 0; i < kMaxModes; ++i)
+                        {
+                            if (i < N)
+                            {
+                                subfamilyBtns[static_cast<size_t>(i)].setBounds (sRow.removeFromLeft (chipW));
+                                if (i < N - 1) sRow.removeFromLeft (2);
+                            }
+                            else { subfamilyBtns[static_cast<size_t>(i)].setBounds ({}); }
+                        }
+                    }
+                }
+                ne.removeFromTop (4);
+
+                // ── Scale picker row ───────────────────────────────────────────
+                {
+                    const auto pickerBand = ne.removeFromTop (kScaleLatticeH);
+                    auto       pickerRow  = pickerBand;
+
+                    // Button column
+                    {
+                        const int colW   = 28;
+                        const int btnH   = 32;
+                        const int btnGap = 4;
+                        const int totalH = 5 * btnH + 4 * btnGap;
+                        auto col = pickerRow.removeFromLeft (colW);
+                        pickerRow.removeFromLeft (4);
+                        auto stack = col.withSizeKeepingCentre (colW, totalH);
+                        scaleRotateBtn.setBounds (stack.removeFromTop (btnH)); stack.removeFromTop (btnGap);
+                        scaleAllBtn   .setBounds (stack.removeFromTop (btnH)); stack.removeFromTop (btnGap);
+                        scaleNoneBtn  .setBounds (stack.removeFromTop (btnH)); stack.removeFromTop (btnGap);
+                        scaleInvBtn   .setBounds (stack.removeFromTop (btnH)); stack.removeFromTop (btnGap);
+                        scaleRootBtn  .setBounds (stack.removeFromTop (btnH));
+                    }
+
+                    // Label column
+                    {
+                        const int lblColW  = 80;
+                        const int lblH     = 16;
+                        const int lblGap   = 6;
+                        const int lblTotal = 2 * lblH + lblGap;
+                        auto lblCol = pickerRow.removeFromLeft (lblColW);
+                        pickerRow.removeFromLeft (8);
+                        const int lblTop = lblCol.getY() + (lblCol.getHeight() - lblTotal) / 2;
+                        scaleLabel.setBounds (lblCol.getX(), lblTop,                 lblColW, lblH);
+                        maskLabel .setBounds (lblCol.getX(), lblTop + lblH + lblGap, lblColW, lblH);
+                    }
+
+                    // Picker
+                    if (_scaleViewMode == ViewRows)
+                    {
+                        scaleLattice  .setBounds (pickerRow);
+                        chromaticWheel.setBounds ({});
+                    }
+                    else if (_scaleViewMode == ViewWheel)
+                    {
+                        const int side = juce::jmin (pickerRow.getHeight(), pickerRow.getWidth());
+                        auto wheelBox = juce::Rectangle<int> (0, 0, side, side)
+                                           .withCentre (pickerRow.getCentre());
+                        chromaticWheel.setBounds (wheelBox);
+                        scaleLattice  .setBounds ({});
+                    }
+                    else  // ViewBoth
+                    {
+                        const int gutter    = 8;
+                        const int wheelSide = juce::jmin (pickerRow.getHeight(),
+                                                          pickerRow.getWidth() / 4);
+                        auto wheelBox = pickerRow.removeFromRight (wheelSide);
+                        pickerRow.removeFromRight (gutter);
+                        scaleLattice  .setBounds (pickerRow);
+                        chromaticWheel.setBounds (wheelBox);
+                    }
+                }
+                _secNotes = _musicalPanel;
+            }
+            else
+            {
+                scaleLattice  .setBounds ({});   chromaticWheel.setBounds ({});
+                scaleViewCtrl .setBounds ({});
+                for (auto& b : familyBtns)    b.setBounds ({});
+                recentFamilyBtn.setBounds ({});
+                for (auto& b : subfamilyBtns) b.setBounds ({});
+                scaleRotateBtn.setBounds ({});   scaleAllBtn.setBounds ({});
+                scaleNoneBtn  .setBounds ({});   scaleInvBtn.setBounds ({});
+                scaleRootBtn  .setBounds ({});
+                scaleLabel    .setBounds ({});   maskLabel  .setBounds ({});
             }
         }
-    }   // end else (multi-lane right rail)
+    }   // end musical zone
+
 
     // ══════════════════════════════════════════════════════════════════════════
     // STAGE COLUMN
     // ══════════════════════════════════════════════════════════════════════════
 
-    _stagePanel = stageCol;
+    _stagePanel = area;
     {
-        auto sc = stageCol.reduced (6);   // inner padding
+        auto sc = area.reduced (6);   // inner padding
 
         // laneFocusCtrl is placed in the FOCUSED LANE panel (right rail); no placement here.
 
