@@ -54,5 +54,14 @@ private:
     // Last known phase sent to JS — avoid redundant emits
     float lastSentPhase { -1.0f };
 
+    // ── Standalone MIDI output ────────────────────────────────────────────────
+    // The native PluginEditor used to create a virtual MIDI source so other
+    // apps see "DrawnQurve" as a MIDI input.  Without this in standalone, the
+    // engine generates MIDI but has nowhere to send it (proc._virtualMidiOut
+    // and _directMidiOut both stay null) — every lock/quantize change reaches
+    // the engine but the output is silently discarded.  We mirror the same
+    // setup here when running as a standalone app.
+    std::unique_ptr<juce::MidiOutput> virtualMidiPort;
+
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (WebCurveEditor)
 };

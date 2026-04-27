@@ -13,7 +13,7 @@ import './design/scale-editor.jsx';
 
 // ── JUCE bridge ───────────────────────────────────────────────────────────────
 import { initJuceBridge, sendCurve, sendParam, sendFocus,
-         sendPlaying, sendDirection, sendEnabled,
+         sendPlaying, sendDirection, sendEnabled, sendGlobalActual,
          globalFieldForParamId,
          sendClearLane, sendAddLane, sendRemoveLane } from './juce-bridge.js';
 
@@ -137,14 +137,46 @@ import { initJuceBridge, sendCurve, sendParam, sendFocus,
     const setDirection = React.useCallback((d) => {
       demo.setDirection(d);
       sendDirection(d);
+      // Mirror the UI choice ('fwd'/'rev'/'pp') into the global APVTS param.
+      const idx = Math.max (0, ['fwd', 'rev', 'pp'].indexOf(d));
+      sendGlobalActual('playbackDirection', idx);
     }, [demo.setDirection]);
 
+    // ── Global transport setters wired to APVTS ──────────────────────────────
+    // The demo RAF used to drive the playhead from `beats`/`speed`; now JUCE
+    // does, and we need these sliders to actually move the engine.  All four
+    // dispatch through sendGlobalActual which lets C++ apply the parameter's
+    // own NormalisableRange (so e.g. playbackSpeed's skew=0.5 is honoured).
+    const setSyncOn = React.useCallback((v) => {
+      demo.setSyncOn(v);
+      sendGlobalActual('syncEnabled', v ? 1.0 : 0.0);
+    }, [demo.setSyncOn]);
+    const setBeats = React.useCallback((v) => {
+      const next = typeof v === 'function' ? v(demo.beats) : v;
+      demo.setBeats(next);
+      sendGlobalActual('syncBeats', next);
+    }, [demo.setBeats, demo.beats]);
+    const setSpeed = React.useCallback((v) => {
+      const next = typeof v === 'function' ? v(demo.speed) : v;
+      demo.setSpeed(next);
+      sendGlobalActual('playbackSpeed', next);
+    }, [demo.setSpeed, demo.speed]);
+
     const updateLane = React.useCallback((id, patch) => {
+      // Diagnostic — log only quantize-related patches so the live MIDI test
+      // can confirm whether clicks reach the bridge during playback.
+      const keys = Object.keys(patch);
+      if (keys.some(k => k === 'quantizeX' || k === 'quantizeY'
+                       || k === 'xDivisions' || k === 'yDivisions')) {
+        console.log('[click→updateLane]',
+          'lane=' + id,
+          'patch=' + JSON.stringify(patch),
+          'playing=' + (demo.playing ? '1' : '0'));
+      }
       demo.updateLane(id, patch);
-      // 'enabled' is not in LANE_MAP — send it through the dedicated helper.
       if ('enabled' in patch) sendEnabled(id, patch.enabled);
       Object.entries(patch).forEach(([field, value]) => sendParam(id, field, value));
-    }, [demo.updateLane]);
+    }, [demo.updateLane, demo.playing]);
 
     const clearLane = React.useCallback((id) => {
       demo.clearLane(id);
@@ -163,6 +195,9 @@ import { initJuceBridge, sendCurve, sendParam, sendFocus,
       setFocus,
       setPlaying,
       setDirection,
+      setSyncOn,
+      setBeats,
+      setSpeed,
       updateLane,
       clearLane,
       clearAll,

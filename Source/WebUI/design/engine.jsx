@@ -133,6 +133,30 @@ function sampleCurve(curve, phase) {
   return a + (b - a) * f;
 }
 
+// Sample a lane's curve with the lane's quantization applied — mirrors the
+// C++ engine's processLane() so the JS display matches what the audio path
+// actually emits.  Use this for any UI that wants to show "current playback
+// value" (TypoReadout, lane-panel readouts, future staircase overlay).
+//
+//   xQuantize: snap phase to ⌊phase / tickWidth⌋ × tickWidth (S&H in time)
+//   yQuantize: snap output value to nearest 1/yDivisions step
+//
+// Both are interval-based 0..1 — same convention as the engine.
+function sampleLaneQuantized(lane, phase) {
+  if (!lane?.curve) return 0.5;
+  let p = phase;
+  if (lane.quantizeX && lane.xDivisions >= 2) {
+    const tickWidth = 1 / lane.xDivisions;
+    p = Math.floor(p / tickWidth) * tickWidth;
+  }
+  let v = sampleCurve(lane.curve, p);
+  if (lane.quantizeY && lane.yDivisions >= 2) {
+    const step = 1 / lane.yDivisions;
+    v = Math.round(v / step) * step;
+  }
+  return v;
+}
+
 // Apply lane's range + scale quantization. Returns { value, semitone }
 function applyLane(lane, raw) {
   const { rangeMin, rangeMax, target, scaleMask, scaleRoot } = lane;
@@ -200,6 +224,6 @@ function smoothCurvePoints(points, n = 256) {
 }
 
 Object.assign(window, {
-  useDrawnQurveEngine, sampleCurve, applyLane, snapSemitone,
+  useDrawnQurveEngine, sampleCurve, sampleLaneQuantized, applyLane, snapSemitone,
   makeSineCurve, smoothCurvePoints,
 });

@@ -23749,7 +23749,7 @@
       setMode
     };
   }
-  function sampleCurve2(curve, phase) {
+  function sampleCurve(curve, phase) {
     if (!curve) return 0.5;
     const n = curve.length;
     const idx = phase * (n - 1);
@@ -23758,6 +23758,20 @@
     const a = curve[i];
     const b = curve[Math.min(n - 1, i + 1)];
     return a + (b - a) * f;
+  }
+  function sampleLaneQuantized2(lane, phase) {
+    if (!lane?.curve) return 0.5;
+    let p = phase;
+    if (lane.quantizeX && lane.xDivisions >= 2) {
+      const tickWidth = 1 / lane.xDivisions;
+      p = Math.floor(p / tickWidth) * tickWidth;
+    }
+    let v = sampleCurve(lane.curve, p);
+    if (lane.quantizeY && lane.yDivisions >= 2) {
+      const step = 1 / lane.yDivisions;
+      v = Math.round(v / step) * step;
+    }
+    return v;
   }
   function applyLane2(lane, raw) {
     const { rangeMin, rangeMax, target, scaleMask, scaleRoot } = lane;
@@ -23816,7 +23830,8 @@
   }
   Object.assign(window, {
     useDrawnQurveEngine: useDrawnQurveEngine2,
-    sampleCurve: sampleCurve2,
+    sampleCurve,
+    sampleLaneQuantized: sampleLaneQuantized2,
     applyLane: applyLane2,
     snapSemitone,
     makeSineCurve: makeSineCurve2,
@@ -24203,8 +24218,6 @@
       let y = 1 - (e.clientY - r.top) / r.height;
       x = Math.max(0, Math.min(1, x));
       y = Math.max(0, Math.min(1, y));
-      if (quantizeX && gridX > 0) x = Math.round(x * gridX) / gridX;
-      if (quantizeY && gridY > 0) y = Math.round(y * gridY) / gridY;
       return { x, y };
     };
     const onPointerDown = (e) => {
@@ -24380,8 +24393,13 @@
         ),
         lanes.map((l) => {
           if (!l.curve || !l.enabled) return null;
-          const x = phase * width;
-          const v = sampleCurve(l.curve, phase);
+          let xPhase = phase;
+          if (l.quantizeX && l.xDivisions >= 2) {
+            const tickWidth = 1 / l.xDivisions;
+            xPhase = Math.floor(xPhase / tickWidth) * tickWidth;
+          }
+          const x = xPhase * width;
+          const v = sampleLaneQuantized(l, phase);
           const y = (1 - v) * height;
           const isFocus = l.id === focus;
           return /* @__PURE__ */ React.createElement("g", { key: "p" + l.id }, isFocus && /* @__PURE__ */ React.createElement("line", { x1: x, x2: x, y1: 0, y2: height, stroke: l.color, strokeWidth: 1, strokeDasharray: "3 3", opacity: 0.5 }), /* @__PURE__ */ React.createElement("circle", { cx: x, cy: y, r: isFocus ? 6 : 4, fill: l.color, stroke: paper.bg, strokeWidth: 2 }));
@@ -24820,6 +24838,9 @@
     juceOn("paramChange", ({ id, value }) => onEvent({ type: "paramChange", id, value }));
     juceOn("curveData", ({ lane, data }) => onEvent({ type: "curveData", lane, curve: data ? arrayToF32(data) : null }));
     juceEmit("uiReady", {});
+  }
+  function sendGlobalActual(paramId, actualValue) {
+    juceEmit("setParamActual", { id: paramId, value: actualValue });
   }
   function sendParam(lane, field, value) {
     const g = findGlobal(field);
@@ -25372,7 +25393,7 @@
       padding: "10px",
       borderTop: `1px solid ${paper.rule}`
     } }, eng.lanes.filter((l) => l.curve && l.enabled).map((l) => {
-      const raw = sampleCurve(l.curve, eng.phase);
+      const raw = sampleLaneQuantized(l, eng.phase);
       const { value, semitone } = applyLane(l, raw);
       let val;
       if (l.target === "Note" && semitone != null) {
@@ -25603,7 +25624,7 @@
   }
   function TypoReadout({ focusLane, phase, canvasW, canvasH, paper }) {
     if (!focusLane?.curve || !focusLane.enabled) return null;
-    const raw = sampleCurve(focusLane.curve, phase);
+    const raw = sampleLaneQuantized(focusLane, phase);
     const { value, semitone } = applyLane(focusLane, raw);
     const x = phase * canvasW;
     const y = (1 - value) * canvasH;
@@ -25899,12 +25920,37 @@
       const setDirection = React.useCallback((d) => {
         demo.setDirection(d);
         sendDirection(d);
+        const idx = Math.max(0, ["fwd", "rev", "pp"].indexOf(d));
+        sendGlobalActual("playbackDirection", idx);
       }, [demo.setDirection]);
+      const setSyncOn = React.useCallback((v) => {
+        demo.setSyncOn(v);
+        sendGlobalActual("syncEnabled", v ? 1 : 0);
+      }, [demo.setSyncOn]);
+      const setBeats = React.useCallback((v) => {
+        const next = typeof v === "function" ? v(demo.beats) : v;
+        demo.setBeats(next);
+        sendGlobalActual("syncBeats", next);
+      }, [demo.setBeats, demo.beats]);
+      const setSpeed = React.useCallback((v) => {
+        const next = typeof v === "function" ? v(demo.speed) : v;
+        demo.setSpeed(next);
+        sendGlobalActual("playbackSpeed", next);
+      }, [demo.setSpeed, demo.speed]);
       const updateLane = React.useCallback((id, patch) => {
+        const keys = Object.keys(patch);
+        if (keys.some((k) => k === "quantizeX" || k === "quantizeY" || k === "xDivisions" || k === "yDivisions")) {
+          console.log(
+            "[click\u2192updateLane]",
+            "lane=" + id,
+            "patch=" + JSON.stringify(patch),
+            "playing=" + (demo.playing ? "1" : "0")
+          );
+        }
         demo.updateLane(id, patch);
         if ("enabled" in patch) sendEnabled(id, patch.enabled);
         Object.entries(patch).forEach(([field, value]) => sendParam(id, field, value));
-      }, [demo.updateLane]);
+      }, [demo.updateLane, demo.playing]);
       const clearLane = React.useCallback((id) => {
         demo.clearLane(id);
         sendClearLane(id);
@@ -25920,6 +25966,9 @@
         setFocus,
         setPlaying,
         setDirection,
+        setSyncOn,
+        setBeats,
+        setSpeed,
         updateLane,
         clearLane,
         clearAll

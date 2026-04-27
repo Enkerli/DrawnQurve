@@ -80,10 +80,21 @@ juce::WebBrowserComponent::Options WebCurveEditor::buildOptions (WebCurveEditor*
         .withEventListener ("uiReady", [owner] (const Array<var>&)
         {
             owner->pageReady = true;
-            juce::MessageManager::callAsync ([owner] { owner->sendStateSnapshot(); });
+            juce::MessageManager::callAsync ([owner]
+            {
+                owner->sendStateSnapshot();
+                // Start the engine playing.  Without this, a fresh plugin
+                // instance has _isPlaying=false → processLane returns early
+                // → no MIDI output, no quantization, despite a valid
+                // snapshot being in place.  The user can still toggle via
+                // the transport; this is just a sane default for the
+                // standalone & for hosts that don't drive the param.
+                owner->proc.setPlaying (true);
+            });
         })
 
-        // "setParam" — { id: "lane0_ccNumber", value: 0.5 }
+        // "setParam" — { id: "l0_ccNumber", value: 0..1 (host-normalised) }
+        // Use this when the JS side already pre-normalises (LANE_MAP + GLOBAL_PARAM_MAP).
         .withEventListener ("setParam", [owner] (const Array<var>& args)
         {
             if (args.isEmpty()) return;
@@ -92,6 +103,22 @@ juce::WebBrowserComponent::Options WebCurveEditor::buildOptions (WebCurveEditor*
             const float val  = static_cast<float> (static_cast<double> (obj["value"]));
             if (auto* p = owner->proc.apvts.getParameter (id))
                 p->setValueNotifyingHost (val);
+        })
+
+        // "setParamActual" — { id, value: actual-domain value }
+        // The C++ side does the 0..1 conversion through the parameter's own
+        // NormalisableRange — so JS doesn't need to know about skew factors
+        // (e.g. playbackSpeed has skew=0.5 — a log curve we don't want to
+        // duplicate on the JS side).
+        .withEventListener ("setParamActual", [owner] (const Array<var>& args)
+        {
+            if (args.isEmpty()) return;
+            const auto& obj = args[0];
+            const auto  id  = obj["id"].toString();
+            const float val = static_cast<float> (static_cast<double> (obj["value"]));
+            if (auto* p = dynamic_cast<juce::RangedAudioParameter*> (
+                              owner->proc.apvts.getParameter (id)))
+                p->setValueNotifyingHost (p->convertTo0to1 (val));
         })
 
         // "setCurve" — { lane: 0, data: [0.0, …, 1.0] (256 floats or null) }
@@ -124,13 +151,17 @@ juce::WebBrowserComponent::Options WebCurveEditor::buildOptions (WebCurveEditor*
         })
 
         // "setPlaying" — { playing: true/false }
+        // No APVTS param called "playing" exists; the engine's _isPlaying flag
+        // is set directly by DrawnCurveProcessor::setPlaying().  The previous
+        // code looked up a non-existent parameter, so getParameter() returned
+        // null and the engine stayed at its default _isPlaying=false — which
+        // caused processLane() to early-out and swallow every per-lane render
+        // (no audio out, no quantization, no Note-Ons).
         .withEventListener ("setPlaying", [owner] (const Array<var>& args)
         {
             if (args.isEmpty()) return;
             const bool playing = static_cast<bool> (args[0]["playing"]);
-            if (auto* p = dynamic_cast<juce::AudioParameterBool*> (
-                              owner->proc.apvts.getParameter ("playing")))
-                *p = playing;
+            owner->proc.setPlaying (playing);
         })
 
         // "clearLane" — { lane: N }
@@ -183,6 +214,20 @@ WebCurveEditor::WebCurveEditor (DrawnCurveProcessor& p)
         }
     }
 
+    // ── Standalone MIDI output ────────────────────────────────────────────────
+    // Mirror the native editor's behaviour: when running as a standalone app,
+    // create a virtual MIDI source called "DrawnQurve" and register it with
+    // the processor.  Without this the engine's MIDI emission has nowhere to
+    // go (both _virtualMidiOut and _directMidiOut stay null in the timer
+    // path), which silently discards every Note On / CC / PB the engine
+    // generates — that's what "no quantization" looked like from the outside.
+    if (juce::JUCEApplicationBase::isStandaloneApp())
+    {
+        virtualMidiPort = juce::MidiOutput::createNewDevice ("DrawnQurve");
+        if (virtualMidiPort != nullptr)
+            proc.setVirtualMidiOutput (virtualMidiPort.get());
+    }
+
     // Navigate to the resource provider root — triggers "uiReady" from JS
     // once the page has loaded and the bridge is initialised.
     webView.goToURL (juce::WebBrowserComponent::getResourceProviderRoot());
@@ -196,6 +241,11 @@ WebCurveEditor::~WebCurveEditor()
     stopTimer();
     for (const auto& id : listenedParams)
         proc.apvts.removeParameterListener (id, this);
+
+    // Detach the virtual MIDI port from the processor BEFORE the unique_ptr
+    // resets, so the audio/timer thread never reads a dangling pointer.
+    proc.setVirtualMidiOutput (nullptr);
+    proc.setDirectMidiOutput  (nullptr);
 }
 
 // ── Layout ────────────────────────────────────────────────────────────────────
@@ -239,19 +289,18 @@ void WebCurveEditor::parameterChanged (const juce::String& paramID, float newVal
         webView.emitEventIfBrowserIsVisible ("paramChange",
             makeObj ({ { "id", paramID }, { "value", newValue } }));
 
-        // Rebuild the engine snapshot for the affected lane.  setValueNotifyingHost
-        // updates the APVTS atomic but the audio thread reads from a separate
-        // LaneSnapshot struct that's only refreshed when updateLaneSnapshot()
-        // is called explicitly.  Without this hop, every per-lane parameter
-        // change (quantize, divisions, range, smoothing, msgType, etc.)
-        // updates the UI and the APVTS, but the actual MIDI output keeps
-        // using the previous snapshot — which is exactly the symptom the
-        // user reported with the quantization buttons.
-        //
-        // The native editor (PluginEditor.cpp) called updateLaneSnapshot()
-        // from its slider attachments; the WebUI editor needs the equivalent
-        // here, since its only parameter-change pipeline is the bridge.
-        if (paramID.startsWith ("l"))
+        // Rebuild the engine snapshot(s) for the affected lane(s).  APVTS
+        // atomics update on setValueNotifyingHost, but the audio thread reads
+        // from a separate LaneSnapshot struct that's only refreshed by
+        // updateLaneSnapshot().  Per-lane params hit one lane; global sync
+        // params (syncEnabled / syncBeats) change loop length, so every lane
+        // needs a refresh.
+        if (paramID == ParamID::syncEnabled || paramID == ParamID::syncBeats)
+        {
+            for (int L = 0; L < proc.activeLaneCount; ++L)
+                proc.updateLaneSnapshot (L);
+        }
+        else if (paramID.startsWith ("l"))
         {
             const int sep = paramID.indexOfChar ('_');
             if (sep > 1)
@@ -340,15 +389,27 @@ void WebCurveEditor::sendStateSnapshot()
         lanesArrRef.add (juce::var (lane.release()));
     }
 
+    // Pull global transport state from APVTS so the JS UI starts in sync with
+    // what the engine actually believes.  Hard-coding these created a silent
+    // mismatch: the UI thought sync was on while APVTS::syncEnabled was off,
+    // so the beats slider wrote to syncBeats but the engine kept using the
+    // free-running 1 s loop length until the user toggled sync off→on.
+    const bool   apvtsSyncOn   = proc.apvts.getRawParameterValue (ParamID::syncEnabled)->load() > 0.5f;
+    const float  apvtsBeats    = proc.apvts.getRawParameterValue (ParamID::syncBeats)->load();
+    const float  apvtsSpeed    = proc.apvts.getRawParameterValue (ParamID::playbackSpeed)->load();
+    const int    apvtsDirIdx   = juce::jlimit (0, 2, static_cast<int> (
+                                     proc.apvts.getRawParameterValue (ParamID::playbackDirection)->load()));
+    static const char* const kDirNames[] = { "fwd", "rev", "pp" };
+
     const auto snap = makeObj ({
         { "lanes",           lanesArr },
         { "activeLaneCount", proc.activeLaneCount },
         { "phase",           proc.currentPhase() },
         { "playing",         true },
-        { "direction",       "fwd" },
-        { "syncOn",          true },
-        { "beats",           4 },
-        { "speed",           1.0 },
+        { "direction",       kDirNames[apvtsDirIdx] },
+        { "syncOn",          apvtsSyncOn },
+        { "beats",           apvtsBeats },
+        { "speed",           apvtsSpeed },
         { "focus",           0 },
     });
 

@@ -535,7 +535,9 @@ function JuceLanePanel({ eng, paper, width, height }) {
         borderTop: `1px solid ${paper.rule}`,
       }}>
         {eng.lanes.filter(l => l.curve && l.enabled).map(l => {
-          const raw = sampleCurve(l.curve, eng.phase);
+          // Display the quantized output value (what MIDI actually emits),
+          // not the smooth curve underneath.
+          const raw = sampleLaneQuantized(l, eng.phase);
           const { value, semitone } = applyLane(l, raw);
           let val;
           if (l.target === 'Note' && semitone != null) {
@@ -740,7 +742,9 @@ function DiscoveryChip({ paper, onOpen }) {
 // ── Typographic readout ──────────────────────────────────────
 function TypoReadout({ focusLane, phase, canvasW, canvasH, paper }) {
   if (!focusLane?.curve || !focusLane.enabled) return null;
-  const raw = sampleCurve(focusLane.curve, phase);
+  // Mirror the C++ engine's quantization so the on-canvas readout shows the
+  // value that's actually being emitted via MIDI, not the un-quantized curve.
+  const raw = sampleLaneQuantized(focusLane, phase);
   const { value, semitone } = applyLane(focusLane, raw);
   const x = phase * canvasW;
   const y = (1 - value) * canvasH;

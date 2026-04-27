@@ -411,7 +411,11 @@ void GestureEngine::processLane (int lane, uint32_t frameCount, double sampleRat
     const float target = sampleCurve (*snap, sampledPhase);
 
     // ── One-pole smoother ─────────────────────────────────────────────────────
-    const float alpha = (snap->smoothing <= 0.0f)
+    // When xQuantize is on we want true sample-and-hold: the snapped phase
+    // alone produces a piecewise-constant target between ticks, but the
+    // smoother would slew between adjacent tick values and turn the
+    // staircase into a ramp.  Bypass it (alpha=1) so the output snaps cleanly.
+    const float alpha = (snap->smoothing <= 0.0f || snap->xQuantize)
         ? 1.0f
         : 1.0f - std::exp (- static_cast<float> (frameCount)
                            / (snap->smoothing * 2.0f * static_cast<float> (sampleRate)));

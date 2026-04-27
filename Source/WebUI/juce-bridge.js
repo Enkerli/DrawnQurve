@@ -171,6 +171,14 @@ export function initJuceBridge(onEvent) {
 
 // ── JS → C++ senders (call from UI event handlers) ───────────────────────────
 
+// Send an actual-domain value for a global APVTS parameter and let the C++
+// side normalise via the parameter's own range (handles skew factors that
+// would otherwise need to be duplicated on the JS side — playbackSpeed in
+// particular has skew=0.5 which is awkward to invert in JavaScript).
+export function sendGlobalActual(paramId, actualValue) {
+  juceEmit('setParamActual', { id: paramId, value: actualValue });
+}
+
 export function sendParam(lane, field, value) {
   // Global APVTS params (scaleRoot/scaleMask) — ignore lane index, write once.
   const g = findGlobal(field);

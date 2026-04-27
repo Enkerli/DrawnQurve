@@ -31,8 +31,12 @@ function CurveCanvas({
     let y = 1 - (e.clientY - r.top) / r.height;
     x = Math.max(0, Math.min(1, x));
     y = Math.max(0, Math.min(1, y));
-    if (quantizeX && gridX > 0) x = Math.round(x * gridX) / gridX;
-    if (quantizeY && gridY > 0) y = Math.round(y * gridY) / gridY;
+    // Drawing is always free-flowing.  Quantization is a PLAYBACK property —
+    // the C++ engine snaps phase / output to ticks at sample time.  Snapping
+    // the captured curve here would bake quantization into the data and lose
+    // the underlying smooth curve, which is the opposite of what we want
+    // (e.g. "draw smooth, play quantized" is the whole point).  A future
+    // "quantize-this-segment" tool can opt-in to snapping drawn points.
     return { x, y };
   };
 
@@ -187,8 +191,15 @@ function CurveCanvas({
         {/* Per-lane playheads */}
         {lanes.map(l => {
           if (!l.curve || !l.enabled) return null;
-          const x = phase * width;
-          const v = sampleCurve(l.curve, phase);
+          // Show the playhead at the actual playback X (snapped if quantizeX)
+          // and the quantized Y, so the dot tracks what's emitted via MIDI.
+          let xPhase = phase;
+          if (l.quantizeX && l.xDivisions >= 2) {
+            const tickWidth = 1 / l.xDivisions;
+            xPhase = Math.floor(xPhase / tickWidth) * tickWidth;
+          }
+          const x = xPhase * width;
+          const v = sampleLaneQuantized(l, phase);
           const y = (1 - v) * height;
           const isFocus = l.id === focus;
           return (

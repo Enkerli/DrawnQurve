@@ -735,6 +735,21 @@ void DrawnCurveProcessor::updateLaneSnapshot (int lane)
     snap->xDivisions     = xDiv;
     snap->yDivisions     = yDiv;
 
+    // Recompute loop length from sync settings (mirror of setSnapshotFromArray).
+    {
+        const bool  syncOn = apvts.getRawParameterValue (ParamID::syncEnabled)->load() > 0.5f;
+        const float beats  = apvts.getRawParameterValue (ParamID::syncBeats)->load();
+        constexpr float fakeBpm = 100.0f;
+        snap->durationSeconds = syncOn ? juce::jmax (0.05f, beats * 60.0f / fakeBpm) : 1.0f;
+    }
+
+    // Diagnostic — trace the message-thread snapshot rebuild so we can correlate
+    // a JS click with the moment the audio thread sees the new state.
+    std::fprintf (stderr, "[updateLaneSnapshot] lane=%d xQ=%d yQ=%d xDiv=%d yDiv=%d engine_playing=%d\n",
+                  lane, (int) xQuant, (int) yQuant, (int) xDiv, (int) yDiv,
+                  _engine.getPlaying() ? 1 : 0);
+    std::fflush (stderr);
+
 #if JUCE_DEBUG
     ++gSnapshotReplacements;
 #endif
@@ -783,7 +798,28 @@ void DrawnCurveProcessor::setSnapshotFromArray (int lane, const float* data, int
     snap->maxOut          = raw (ParamID::maxOutput);
     snap->messageType     = static_cast<MessageType> (juce::jlimit (0, 3, static_cast<int> (raw (ParamID::msgType))));
     snap->noteVelocity    = static_cast<uint8_t> (juce::jlimit (1, 127, static_cast<int> (raw (ParamID::noteVelocity))));
-    snap->durationSeconds = 1.0f;   // JS curves don't carry duration; default to 1 bar at 1× speed
+
+    // Loop length — pulls from the global sync settings so the UI's beats /
+    // speed sliders actually drive playback in standalone (no host playhead).
+    // syncOn  → loop length = beats × 60 / fakeBpm (matches the JS demo's BPM)
+    // syncOff → loop length = 1.0 s; speed multiplier scales it via effectiveDur
+    {
+        const bool  syncOn = apvts.getRawParameterValue (ParamID::syncEnabled)->load() > 0.5f;
+        const float beats  = apvts.getRawParameterValue (ParamID::syncBeats)->load();
+        constexpr float fakeBpm = 100.0f;   // matches the JS-side demo for parity
+        snap->durationSeconds = syncOn ? juce::jmax (0.05f, beats * 60.0f / fakeBpm) : 1.0f;
+    }
+
+    // Per-lane quantization / playback settings — must come from APVTS, not
+    // the LaneSnapshot defaults, or a fresh draw resets the engine to
+    // "no quantization" regardless of what the user has already toggled.
+    snap->xQuantize       = raw (ParamID::xQuantize)  > 0.5f;
+    snap->yQuantize       = raw (ParamID::yQuantize)  > 0.5f;
+    snap->legatoMode      = raw (ParamID::legatoMode) > 0.5f;
+    snap->oneShot         = raw (ParamID::loopMode)   > 0.5f;
+    snap->xDivisions      = static_cast<uint8_t> (juce::jlimit (2, 32, static_cast<int> (raw (ParamID::xDivisions))));
+    snap->yDivisions      = static_cast<uint8_t> (juce::jlimit (2, 24, static_cast<int> (raw (ParamID::yDivisions))));
+    snap->phaseOffset     = raw (ParamID::phaseOffset) / 100.0f;
 
     const int n = juce::jmin (size, 256);
     for (int i = 0; i < n; ++i)
